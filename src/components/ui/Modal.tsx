@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface ModalProps {
   isOpen: boolean;
@@ -24,10 +24,15 @@ export function Modal({
   children,
   size = "md",
 }: ModalProps) {
+  const [visible, setVisible] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
+      // 延迟一帧触发动画
+      requestAnimationFrame(() => setVisible(true));
       document.body.style.overflow = "hidden";
     } else {
+      setVisible(false);
       document.body.style.overflow = "";
     }
     return () => {
@@ -46,28 +51,36 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 lg:p-4">
       {/* 遮罩 */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${
+          visible ? "opacity-100" : "opacity-0"
+        }`}
         onClick={onClose}
       />
       {/* 内容 */}
       <div
-        className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-2xl animate-slide-up max-h-[85vh] flex flex-col`}
+        className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12),0_2px_6px_rgba(0,0,0,0.06)] max-h-[90vh] lg:max-h-[85vh] flex flex-col transition-all duration-300 ${
+          visible
+            ? "opacity-100 translate-y-0 scale-100"
+            : "opacity-0 translate-y-4 scale-95"
+        }`}
       >
-        {/* 标题 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e6eb]">
-          <h2 className="text-lg font-bold text-[#1d2129]">{title}</h2>
+        {/* 标题栏 */}
+        <div className="flex items-center justify-between px-4 lg:px-5 py-3 lg:py-3.5 border-b border-[#e5e6eb] bg-[#fafbfc] rounded-t-xl flex-shrink-0">
+          <h2 className="text-sm lg:text-base font-semibold text-[#1d2129]">{title}</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#86909c] hover:bg-[#f7f8fa] hover:text-[#1d2129] transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded text-[#86909c] hover:bg-[#e5e6eb] hover:text-[#1d2129] transition-colors flex-shrink-0"
           >
-            ✕
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
           </button>
         </div>
         {/* 内容区 */}
-        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        <div className="px-4 lg:px-5 py-3 lg:py-4 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

@@ -6,14 +6,14 @@ import { formatFileSize } from "@/lib/utils";
 interface FileUploaderProps {
   onFileSelect: (file: File) => void;
   accept?: string;
-  maxSize?: number; // bytes
+  maxSize?: number;
   disabled?: boolean;
 }
 
 export function FileUploader({
   onFileSelect,
   accept = ".xlsx,.xls,.docx,.pdf",
-  maxSize = 50 * 1024 * 1024, // 50MB
+  maxSize = 50 * 1024 * 1024,
   disabled = false,
 }: FileUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -23,13 +23,11 @@ export function FileUploader({
   const validateFile = (file: File): boolean => {
     setError(null);
 
-    // 检查文件大小
     if (file.size > maxSize) {
       setError(`文件大小超过限制（最大 ${formatFileSize(maxSize)}）`);
       return false;
     }
 
-    // 检查文件类型
     const allowedTypes = accept
       .split(",")
       .map((t) => t.trim().replace(".", ""));
@@ -96,12 +94,12 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         className={`
-          relative border-2 border-dashed rounded-xl p-10 text-center cursor-pointer
+          relative border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
           transition-all duration-200
           ${
             isDragOver
-              ? "border-[#0fc6c2] bg-[#e8fafa] scale-[1.02]"
-              : "border-[#e5e6eb] bg-[#fafbfc] hover:border-[#0fc6c2] hover:bg-[#f7f8fa]"
+              ? "border-[#0fc6c2] bg-[#e8fafa] scale-[1.01]"
+              : "border-[#d0d7de] bg-white hover:border-[#0fc6c2] hover:bg-[#f8fafb]"
           }
           ${disabled ? "opacity-50 cursor-not-allowed" : ""}
         `}
@@ -118,13 +116,13 @@ export function FileUploader({
         <div className="flex flex-col items-center gap-3">
           {/* 上传图标 */}
           <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${
+            className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
               isDragOver ? "bg-[#0fc6c2] text-white" : "bg-[#e8fafa] text-[#0fc6c2]"
             }`}
           >
             <svg
-              width="28"
-              height="28"
+              width="26"
+              height="26"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -143,10 +141,10 @@ export function FileUploader({
             <p className="text-[#1d2129] font-medium text-sm">
               {isDragOver ? "释放文件以上传" : "拖拽文件到此处，或点击上传"}
             </p>
-            <p className="text-[#86909c] text-xs mt-1">
+            <p className="text-[#86909c] text-xs mt-1.5">
               支持 Excel (.xlsx/.xls)、Word (.docx)、PDF 格式
             </p>
-            <p className="text-[#86909c] text-xs">
+            <p className="text-[#b5bbc3] text-xs mt-0.5">
               最大文件大小: {formatFileSize(maxSize)}
             </p>
           </div>
@@ -155,8 +153,12 @@ export function FileUploader({
 
       {/* 错误提示 */}
       {error && (
-        <div className="mt-3 p-3 bg-[#fff1f0] border border-[#ffccc7] rounded-lg text-sm text-[#cf1322] animate-fade-in">
-          ⚠️ {error}
+        <div className="mt-3 p-3 bg-[#fff1f0] border border-[#ffccc7] rounded text-sm text-[#cf1322] animate-fade-in">
+          <svg className="inline-block w-4 h-4 mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {error}
         </div>
       )}
     </div>

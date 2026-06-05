@@ -33,6 +33,7 @@ export function RuleEditor({
   fileType = "excel",
   fileName = "",
 }: RuleEditorProps) {
+  const [saving, setSaving] = useState(false);
   const [name, setName] = useState(rule?.name || "");
   const [description, setDescription] = useState(rule?.description || "");
   const [skipRows, setSkipRows] = useState(rule?.dataRegion?.skipRows || 0);
@@ -61,32 +62,37 @@ export function RuleEditor({
   };
 
   const handleSave = () => {
-    const now = new Date().toISOString();
-    const fullRule: ParseRule = {
-      id: (rule as ParseRule)?.id || uuidv4(),
-      name: name || `${fileName || "未命名"} 解析规则`,
-      description,
-      fileType: rule?.fileType || fileType,
-      globalConfig: {
-        groupByExternalCode,
-        externalCodeField: "externalCode",
-      },
-      fieldMappings: mappings,
-      dataRegion: {
-        skipRows,
-        headerRow,
-      },
-      postProcessing: {
-        skipTotalRow,
-        totalRowPattern,
-      },
-      createdAt: (rule as ParseRule)?.createdAt || now,
-      updatedAt: now,
-      aiGenerated: rule?.aiGenerated || false,
-      aiConfidence: rule?.aiConfidence,
-      aiNotes: rule?.aiNotes,
-    };
-    onSave(fullRule);
+    setSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const fullRule: ParseRule = {
+        id: (rule as ParseRule)?.id || uuidv4(),
+        name: name || `${fileName || "未命名"} 解析规则`,
+        description,
+        fileType: rule?.fileType || fileType,
+        globalConfig: {
+          groupByExternalCode,
+          externalCodeField: "externalCode",
+        },
+        fieldMappings: mappings,
+        dataRegion: {
+          skipRows,
+          headerRow,
+        },
+        postProcessing: {
+          skipTotalRow,
+          totalRowPattern,
+        },
+        createdAt: (rule as ParseRule)?.createdAt || now,
+        updatedAt: now,
+        aiGenerated: rule?.aiGenerated || false,
+        aiConfidence: rule?.aiConfidence,
+        aiNotes: rule?.aiNotes,
+      };
+      onSave(fullRule);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -94,7 +100,7 @@ export function RuleEditor({
       {/* 基本信息 */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-[#1d2129]">基本信息</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-[#4e5969] mb-1">规则名称</label>
             <input
@@ -102,7 +108,7 @@ export function RuleEditor({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="输入规则名称"
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
             />
           </div>
           <div>
@@ -111,7 +117,7 @@ export function RuleEditor({
               type="text"
               value={fileType.toUpperCase()}
               disabled
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg bg-[#f7f8fa] text-[#86909c]"
+              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl bg-[#f7f8fa] text-[#86909c]"
             />
           </div>
         </div>
@@ -122,7 +128,7 @@ export function RuleEditor({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="规则描述..."
             rows={2}
-            className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none resize-none"
+            className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none resize-none"
           />
         </div>
       </div>
@@ -130,7 +136,7 @@ export function RuleEditor({
       {/* 数据区配置 */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-[#1d2129]">数据区配置</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs text-[#4e5969] mb-1">
               跳过干扰头部行数
@@ -140,7 +146,7 @@ export function RuleEditor({
               value={skipRows}
               onChange={(e) => setSkipRows(Number(e.target.value))}
               min={0}
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
             />
           </div>
           <div>
@@ -152,7 +158,7 @@ export function RuleEditor({
               value={headerRow}
               onChange={(e) => setHeaderRow(Number(e.target.value))}
               min={0}
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
             />
           </div>
           <div className="flex items-end">
@@ -188,7 +194,7 @@ export function RuleEditor({
               value={totalRowPattern}
               onChange={(e) => setTotalRowPattern(e.target.value)}
               placeholder="合计行匹配模式"
-              className="px-3 py-1.5 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] outline-none w-40"
+              className="px-3 py-1.5 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] outline-none w-40"
             />
           )}
         </div>
@@ -204,20 +210,21 @@ export function RuleEditor({
             </span>
           )}
         </div>
-        <div className="border border-[#e5e6eb] rounded-lg overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-[#f7f8fa] border-b border-[#e5e6eb] text-xs font-semibold text-[#4e5969]">
-            <div className="col-span-3">目标字段</div>
-            <div className="col-span-3">映射模式</div>
-            <div className="col-span-4">列名/值</div>
-            <div className="col-span-2">必填</div>
+        <div className="border border-[#e5e6eb] rounded-xl overflow-hidden">
+          <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 bg-[#f7f8fa] border-b border-[#e5e6eb] text-xs font-semibold text-[#4e5969]">
+            <div className="col-span-4 lg:col-span-3">目标字段</div>
+            <div className="col-span-4 lg:col-span-3">映射模式</div>
+            <div className="col-span-3 lg:col-span-4">列名/值</div>
+            <div className="col-span-1 lg:col-span-2">必填</div>
           </div>
           <div className="max-h-64 overflow-y-auto">
             {mappings.map((mapping, index) => (
               <div
                 key={index}
-                className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-[#f2f3f5] text-sm"
+                className="grid grid-cols-1 sm:grid-cols-12 gap-2 px-3 lg:px-4 py-2.5 sm:py-2 border-b border-[#f2f3f5] text-sm"
               >
-                <div className="col-span-3 flex items-center">
+                <div className="sm:col-span-4 lg:col-span-3 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">目标字段：</span>
                   <span className="text-[#1d2129] font-medium">
                     {mapping.targetField}
                   </span>
@@ -225,7 +232,8 @@ export function RuleEditor({
                     <span className="text-[#cf1322] ml-1">*</span>
                   )}
                 </div>
-                <div className="col-span-3">
+                <div className="sm:col-span-4 lg:col-span-3">
+                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">映射模式：</span>
                   <select
                     value={mapping.mode}
                     onChange={(e) =>
@@ -240,7 +248,8 @@ export function RuleEditor({
                     <option value="ai_infer">AI 推断</option>
                   </select>
                 </div>
-                <div className="col-span-4">
+                <div className="sm:col-span-3 lg:col-span-4">
+                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">列名/值：</span>
                   {mapping.mode === "column_index" ? (
                     <input
                       type="number"
@@ -277,7 +286,8 @@ export function RuleEditor({
                     />
                   )}
                 </div>
-                <div className="col-span-2 flex items-center">
+                <div className="sm:col-span-1 lg:col-span-2 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">必填：</span>
                   <input
                     type="checkbox"
                     checked={mapping.required || false}
@@ -295,7 +305,7 @@ export function RuleEditor({
 
       {/* AI 分析说明 */}
       {rule?.aiNotes && (
-        <div className="p-3 bg-[#e8fafa] border border-[#b5e8e8] rounded-lg">
+        <div className="p-3 bg-[#e8fafa] border border-[#b5e8e8] rounded-xl">
           <p className="text-sm font-semibold text-[#0b6e6e] mb-1">
             🤖 AI 分析说明
           </p>
@@ -310,11 +320,11 @@ export function RuleEditor({
 
       {/* 操作按钮 */}
       <div className="flex justify-end gap-3 pt-4 border-t border-[#e5e6eb]">
-        <Button variant="secondary" onClick={onCancel}>
+        <Button variant="secondary" onClick={onCancel} disabled={saving}>
           取消
         </Button>
-        <Button onClick={handleSave}>
-          💾 保存规则
+        <Button onClick={handleSave} loading={saving}>
+          保存规则
         </Button>
       </div>
     </div>

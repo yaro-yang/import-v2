@@ -60,9 +60,19 @@ export default function RulesPage() {
   };
 
   // 删除规则
-  const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除此规则吗？")) return;
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
+  const handleDelete = async (id: string) => {
+    setShowDeleteConfirm(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!showDeleteConfirm) return;
+    const id = showDeleteConfirm;
+
+    setDeletingId(id);
+    setShowDeleteConfirm(null);
     try {
       const res = await fetch(`/api/rules?id=${id}`, { method: "DELETE" });
       const data = await res.json();
@@ -75,6 +85,8 @@ export default function RulesPage() {
     } catch (err) {
       console.error("Delete rule error:", err);
       toast.error("删除失败");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -86,6 +98,7 @@ export default function RulesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(rule),
       });
+
       const data = await res.json();
 
       if (data.success) {
@@ -102,117 +115,132 @@ export default function RulesPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-5 page-container">
+      {/* 页面标题与操作栏 - 卡片式 */}
+      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#1d2129]">解析规则管理</h1>
-          <p className="text-sm text-[#86909c] mt-1">
-            管理文件解析规则，支持手动配置和 AI 辅助生成
+          <h1 className="text-base font-semibold text-[#1d2129]">解析规则管理</h1>
+          <p className="text-xs text-[#86909c] mt-0.5 hidden sm:block">
+            管理用于解析不同格式出库单文件的规则配置
           </p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button size="sm" onClick={handleCreate}>
           + 新建规则
         </Button>
       </div>
 
       {loading ? (
-        <div className="text-center py-16">
-          <div className="w-8 h-8 border-2 border-[#e5e6eb] border-t-[#0fc6c2] rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-[#86909c] mt-3">加载中...</p>
+        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead>
+                <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
+                  {["规则名称", "文件类型", "字段映射", "描述", "来源", "更新时间", "操作"].map((h) => (
+                    <th key={h} className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b border-[#f2f3f5]">
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <td key={j} className="px-3 lg:px-4 py-3">
+                        <div className="skeleton h-4 rounded" style={{ width: `${50 + Math.random() * 40}%` }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : rules.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-[#e5e6eb] p-6">
+        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
           <EmptyState
-            icon="⚙️"
             title="暂无解析规则"
             description="创建解析规则后，可以用于解析各种格式的出库单文件"
-            action={<Button onClick={handleCreate}>+ 新建规则</Button>}
+            action={<Button size="sm" onClick={handleCreate}>+ 新建规则</Button>}
           />
         </div>
       ) : (
-        <div className="grid gap-4">
-          {rules.map((rule) => (
-            <div
-              key={rule.id}
-              className="bg-white rounded-xl shadow-sm border border-[#e5e6eb] p-5 hover:border-[#0fc6c2] transition-colors"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-base font-semibold text-[#1d2129] truncate">
-                      {rule.name}
-                    </h3>
-                    {rule.aiGenerated && (
-                      <span className="flex-shrink-0 text-xs bg-[#e8fafa] text-[#0b6e6e] px-2 py-0.5 rounded-full">
-                        🤖 AI 生成
-                      </span>
-                    )}
-                    <span className="flex-shrink-0 text-xs bg-[#f7f8fa] text-[#4e5969] px-2 py-0.5 rounded-full">
-                      {rule.fileType.toUpperCase()}
-                    </span>
-                  </div>
-                  {rule.description && (
-                    <p className="text-sm text-[#4e5969] mb-2">
-                      {rule.description}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-4 text-xs text-[#86909c]">
-                    <span>
-                      {rule.fieldMappings?.length || 0} 个字段映射
-                    </span>
-                    <span>
-                      跳过头部: {rule.dataRegion?.skipRows || 0} 行
-                    </span>
-                    {rule.globalConfig?.groupByExternalCode && (
-                      <span>按外部编码聚合</span>
-                    )}
-                    <span>更新于 {formatDate(rule.updatedAt)}</span>
-                  </div>
-                  {rule.aiConfidence !== undefined && (
-                    <div className="mt-2">
+        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead>
+                <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
+                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">规则名称</th>
+                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">文件类型</th>
+                  <th className="px-3 lg:px-4 py-3 text-center text-xs font-semibold text-[#4e5969] hidden sm:table-cell">字段映射</th>
+                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden md:table-cell">描述</th>
+                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden sm:table-cell">来源</th>
+                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden md:table-cell">更新时间</th>
+                  <th className="px-3 lg:px-4 py-3 text-right text-xs font-semibold text-[#4e5969] sticky-action-col">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((rule, index) => (
+                  <tr
+                    key={rule.id}
+                    className={`border-b border-[#f2f3f5] hover:bg-[#fafbfc] transition-colors ${
+                      index % 2 === 1 ? "bg-[#fafbfc]" : "bg-white"
+                    }`}
+                  >
+                    <td className="px-3 lg:px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-[#86909c]">AI 置信度</span>
-                        <div className="flex-1 max-w-[120px] h-1.5 bg-[#f2f3f5] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#0fc6c2] rounded-full"
-                            style={{
-                              width: `${(rule.aiConfidence * 100).toFixed(0)}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs text-[#0fc6c2] font-medium">
-                          {(rule.aiConfidence * 100).toFixed(0)}%
-                        </span>
+                        <span className="font-medium text-[#1d2129] whitespace-nowrap">{rule.name}</span>
+                        {rule.aiGenerated && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e8fafa] text-[#0fc6c2] font-medium whitespace-nowrap">AI</span>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(rule)}
-                  >
-                    编辑
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopy(rule)}
-                  >
-                    复制
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(rule.id)}
-                  >
-                    <span className="text-[#cf1322]">删除</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+                    </td>
+                    <td className="px-3 lg:px-4 py-3 text-[#4e5969] uppercase text-xs whitespace-nowrap">{rule.fileType}</td>
+                    <td className="px-3 lg:px-4 py-3 text-center text-[#4e5969] hidden sm:table-cell">
+                      {rule.fieldMappings?.length || 0}
+                    </td>
+                    <td className="px-3 lg:px-4 py-3 text-[#86909c] max-w-[150px] lg:max-w-[200px] truncate hidden md:table-cell">
+                      {rule.description || "—"}
+                    </td>
+                    <td className="px-3 lg:px-4 py-3 text-[#86909c] text-xs hidden sm:table-cell">
+                      {rule.aiGenerated ? "AI生成" : "手动创建"}
+                    </td>
+                    <td className="px-3 lg:px-4 py-3 text-[#86909c] text-xs whitespace-nowrap hidden md:table-cell">
+                      {formatDate(rule.updatedAt)}
+                    </td>
+                    <td className="px-3 lg:px-4 py-3 text-right sticky-action-col">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleEdit(rule)}
+                          className="px-2 py-1 text-xs text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap"
+                        >
+                          编辑
+                        </button>
+                        <button
+                          onClick={() => handleCopy(rule)}
+                          className="px-2 py-1 text-xs text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap hidden sm:inline"
+                        >
+                          复制
+                        </button>
+                        <button
+                          onClick={() => handleDelete(rule.id)}
+                          disabled={deletingId === rule.id}
+                          className={`px-2 py-1 text-xs text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap ${
+                            deletingId === rule.id ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          {deletingId === rule.id ? "删除中..." : "删除"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 底部统计 */}
+          <div className="px-4 lg:px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc] flex items-center justify-between text-xs text-[#86909c]">
+            <span>共 {rules.length} 条规则</span>
+          </div>
         </div>
       )}
 
@@ -229,6 +257,40 @@ export default function RulesPage() {
           onCancel={() => setShowEditor(false)}
         />
       </Modal>
+
+      {/* 自定义删除确认弹窗 */}
+      {showDeleteConfirm && (
+        <div className="confirm-dialog-overlay" onClick={() => setShowDeleteConfirm(null)}>
+          <div className="confirm-dialog-content" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#fff1f0] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#cf1322" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[#1d2129] mb-1">确认删除</h3>
+                <p className="text-sm text-[#86909c] leading-relaxed">确定要删除此规则吗？删除后不可恢复。</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] transition-colors font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm rounded-lg bg-[#cf1322] text-white hover:bg-[#b0101c] transition-colors font-medium shadow-sm"
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

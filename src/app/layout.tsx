@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         <Navigation />
-        <main className="min-h-[calc(100vh-64px)]">
+        <main className="main-content ml-[200px] lg:ml-[200px] mt-[56px] min-h-[calc(100vh-56px)] bg-[#f7f8fa]">
           {children}
         </main>
         <Toaster
@@ -27,6 +27,35 @@ export default function RootLayout({
             style: {
               fontFamily: "-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif",
               fontSize: "14px",
+              borderRadius: "8px",
+              padding: "12px 16px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+            },
+            success: {
+              iconTheme: {
+                primary: "#0fc6c2",
+                secondary: "#fff",
+              },
+              style: {
+                border: "1px solid #e8fafa",
+                background: "#f0fdfd",
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: "#cf1322",
+                secondary: "#fff",
+              },
+              style: {
+                border: "1px solid #ffccc7",
+                background: "#fff1f0",
+              },
+            },
+            loading: {
+              style: {
+                border: "1px solid #e8fafa",
+                background: "#f0fdfd",
+              },
             },
           }}
         />

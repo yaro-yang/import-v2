@@ -9,9 +9,9 @@ interface ProgressBarProps {
 
 const variantColors = {
   primary: "bg-[#0fc6c2]",
-  success: "bg-green-500",
-  warning: "bg-orange-500",
-  danger: "bg-red-500",
+  success: "bg-[#28a745]",
+  warning: "bg-[#e6a23c]",
+  danger: "bg-[#cf1322]",
 };
 
 export function ProgressBar({
@@ -36,7 +36,7 @@ export function ProgressBar({
           )}
         </div>
       )}
-      <div className="w-full h-2.5 bg-[#f2f3f5] rounded-full overflow-hidden">
+      <div className="w-full h-2 bg-[#f2f3f5] rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-300 ease-out ${variantColors[variant]} ${
             clampedProgress < 100 ? "progress-striped" : ""

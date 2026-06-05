@@ -52,52 +52,55 @@ export default function HistoryPage() {
   };
 
   const handleExportAll = () => {
-    const exportData = orders.map((order) => ({
-      外部编码: order.externalCode || "",
-      收货门店: order.storeName || "",
-      收件人: order.recipientName || "",
-      电话: order.recipientPhone || "",
-      地址: order.recipientAddress || "",
-      SKU编码: order.skuCode,
-      SKU名称: order.skuName,
-      发货数量: order.skuQuantity,
-      规格型号: order.skuSpec || "",
-      备注: order.remark || "",
-      提交时间: order.submittedAt ? formatDate(order.submittedAt) : "",
-      状态: order.status === "submitted" ? "已提交" : order.status === "error" ? "有错误" : "草稿",
-    }));
-    exportToExcel(exportData, `运单列表_${new Date().toLocaleDateString()}.xlsx`);
-    toast.success("导出成功");
+    try {
+      const exportData = orders.map((order) => ({
+        外部编码: order.externalCode || "",
+        收货门店: order.storeName || "",
+        收件人: order.recipientName || "",
+        电话: order.recipientPhone || "",
+        地址: order.recipientAddress || "",
+        SKU编码: order.skuCode,
+        SKU名称: order.skuName,
+        发货数量: order.skuQuantity,
+        规格型号: order.skuSpec || "",
+        备注: order.remark || "",
+        提交时间: order.submittedAt ? formatDate(order.submittedAt) : "",
+        状态: order.status === "submitted" ? "已提交" : order.status === "error" ? "有错误" : "草稿",
+      }));
+      exportToExcel(exportData, `运单列表_${new Date().toLocaleDateString()}.xlsx`);
+      toast.success("导出成功");
+    } catch (err) {
+      console.error("Export error:", err);
+      toast.error("导出失败");
+    }
   };
 
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1d2129]">已导入运单</h1>
-          <p className="text-sm text-[#86909c] mt-1">
-            查看所有历史导入的运单记录
-          </p>
-        </div>
-        {orders.length > 0 && (
-          <Button variant="secondary" onClick={handleExportAll}>
-            📥 导出全部
-          </Button>
-        )}
-      </div>
-
-      {/* 搜索栏 */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#e5e6eb] p-4 mb-6">
-        <div className="flex items-center gap-3">
+    <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-5 page-container">
+      {/* 搜索栏 - 卡片式 */}
+      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-5">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3 search-controls-sm">
+          <div className="flex items-center gap-2 text-sm text-[#4e5969]">
+            <span className="whitespace-nowrap">申请渠道</span>
+            <select className="border border-[#d0d7de] rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+              <option>全部</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-[#4e5969]">
+            <span className="whitespace-nowrap">审核状态</span>
+            <select className="border border-[#d0d7de] rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+              <option>全部</option>
+            </select>
+          </div>
           <input
             type="text"
             placeholder="搜索外部编码..."
             value={searchExternalCode}
             onChange={(e) => setSearchExternalCode(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="flex-1 px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+            className="w-full sm:w-[160px] lg:w-[200px] px-3 py-1.5 text-sm border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
           />
           <input
             type="text"
@@ -105,58 +108,95 @@ export default function HistoryPage() {
             value={searchRecipientName}
             onChange={(e) => setSearchRecipientName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="flex-1 px-3 py-2 text-sm border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+            className="w-full sm:w-[140px] lg:w-[180px] px-3 py-1.5 text-sm border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
           />
-          <Button onClick={handleSearch}>搜索</Button>
+          <div className="flex items-center gap-2 text-sm text-[#4e5969]">
+            <span className="whitespace-nowrap">创建时间</span>
+            <input type="date" className="border border-[#d0d7de] rounded px-2 py-1.5 text-xs outline-none focus:border-[#0fc6c2] bg-white" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={handleSearch}>查询</Button>
+            {orders.length > 0 && (
+              <Button variant="secondary" size="sm" onClick={handleExportAll}>
+                导出
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-[#f2f3f5] flex items-center gap-4 lg:gap-6 text-xs text-[#86909c] flex-wrap">
+          <span>申请渠道：<span className="text-[#4e5969]">全部</span></span>
+          <span>审核状态：<span className="text-[#4e5969]">全部</span></span>
+          <span>创建时间：<span className="text-[#4e5969]">—</span></span>
         </div>
       </div>
 
-      {/* 数据列表 */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#e5e6eb] overflow-hidden">
+      {/* 数据列表 - 卡片式 */}
+      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
         {loading ? (
-          <div className="text-center py-16">
-            <div className="w-8 h-8 border-2 border-[#e5e6eb] border-t-[#0fc6c2] rounded-full animate-spin mx-auto" />
-            <p className="text-sm text-[#86909c] mt-3">加载中...</p>
+          <div className="p-4 lg:p-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[700px]">
+                <thead>
+                  <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
+                    {["外部编码", "收货门店", "收件人", "SKU编码", "SKU名称", "数量", "提交时间", "状态"].map((h) => (
+                      <th key={h} className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i} className="border-b border-[#f2f3f5]">
+                      {Array.from({ length: 8 }).map((_, j) => (
+                        <td key={j} className="px-3 lg:px-4 py-3">
+                          <div className="skeleton h-4 rounded" style={{ width: `${60 + Math.random() * 40}%` }} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : orders.length === 0 ? (
-          <EmptyState
-            icon="📋"
-            title="暂无运单记录"
-            description="导入并提交运单后，可在此查看历史记录"
-            action={
-              <Button onClick={() => (window.location.href = "/")}>
-                去导入运单
-              </Button>
-            }
-          />
+          <div className="p-6">
+            <EmptyState
+              title="暂无运单记录"
+              description="导入并提交运单后，可在此查看历史记录"
+              action={
+                <Button size="sm" onClick={() => (window.location.href = "/")}>
+                  去导入运单
+                </Button>
+              }
+            />
+          </div>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-sm min-w-[700px]">
                 <thead>
                   <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
                       外部编码
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
                       收货门店
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
                       收件人
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
                       SKU编码
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden md:table-cell">
                       SKU名称
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-right text-xs font-semibold text-[#4e5969]">
                       数量
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden sm:table-cell">
                       提交时间
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#4e5969]">
+                    <th className="px-3 lg:px-4 py-3 text-center text-xs font-semibold text-[#4e5969] sticky-action-col">
                       状态
                     </th>
                   </tr>
@@ -169,37 +209,37 @@ export default function HistoryPage() {
                         index % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"
                       }`}
                     >
-                      <td className="px-4 py-3 text-sm text-[#1d2129] font-mono">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#1d2129] font-mono whitespace-nowrap">
                         {order.externalCode || "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#4e5969] max-w-[150px] truncate">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate">
                         {order.storeName || "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#4e5969]">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] whitespace-nowrap">
                         {order.recipientName || "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#4e5969] max-w-[120px] truncate">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] max-w-[100px] lg:max-w-[120px] truncate">
                         {order.skuCode}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#4e5969] max-w-[150px] truncate">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate hidden md:table-cell">
                         {order.skuName}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#1d2129] text-right font-medium">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#1d2129] text-right font-medium whitespace-nowrap">
                         {order.skuQuantity}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#86909c]">
+                      <td className="px-3 lg:px-4 py-3 text-sm text-[#86909c] whitespace-nowrap hidden sm:table-cell">
                         {order.submittedAt
                           ? formatDate(order.submittedAt)
                           : formatDate(order.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 lg:px-4 py-3 text-center sticky-action-col">
                         <span
-                          className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                          className={`inline-block px-2 py-0.5 text-xs rounded whitespace-nowrap ${
                             order.status === "submitted"
                               ? "bg-[#e8fafa] text-[#0fc6c2]"
                               : order.status === "error"
                                 ? "bg-[#fff1f0] text-[#cf1322]"
-                                : "bg-[#f7f8fa] text-[#86909c]"
+                                : "bg-[#f2f3f5] text-[#86909c]"
                           }`}
                         >
                           {order.status === "submitted"
@@ -215,29 +255,73 @@ export default function HistoryPage() {
               </table>
             </div>
 
-            {/* 分页 */}
+            {/* 分页 - 鲸天风格 */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-[#e5e6eb]">
-                <p className="text-sm text-[#86909c]">
-                  共 {total} 条记录，第 {page}/{totalPages} 页
+              <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc]">
+                <p className="text-xs text-[#86909c]">
+                  共 {total} 条
                 </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
+                <div className="flex items-center gap-1">
+                  <button
                     disabled={page <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="px-2.5 py-1 text-xs border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    上一页
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
+                    &lt;
+                  </button>
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setPage(pageNum)}
+                        className={`min-w-[28px] h-[26px] text-xs rounded transition-colors ${
+                          page === pageNum
+                            ? "bg-[#0fc6c2] text-white"
+                            : "hover:bg-white border border-transparent"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  {totalPages > 7 && (
+                    <>
+                      <span className="text-xs text-[#86909c] px-1">...</span>
+                      <button
+                        onClick={() => setPage(totalPages)}
+                        className={`min-w-[28px] h-[26px] text-xs rounded transition-colors ${
+                          page === totalPages
+                            ? "bg-[#0fc6c2] text-white"
+                            : "hover:bg-white border border-transparent"
+                        }`}
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                  <button
                     disabled={page >= totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="px-2.5 py-1 text-xs border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    下一页
-                  </Button>
+                    &gt;
+                  </button>
+                  <span className="ml-2 text-xs text-[#86909c]">
+                    前往第{" "}
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      value={page}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        if (v >= 1 && v <= totalPages) setPage(v);
+                      }}
+                      className="w-10 h-[22px] text-xs text-center border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2]"
+                    />{" "}
+                    页
+                  </span>
                 </div>
               </div>
             )}

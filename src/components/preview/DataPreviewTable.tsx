@@ -40,11 +40,10 @@ export function DataPreviewTable({
 
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // 虚拟列表
   const rowVirtualizer = useVirtualizer({
     count: orders.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 44,
+    estimateSize: () => 42,
     overscan: 10,
   });
 
@@ -52,7 +51,6 @@ export function DataPreviewTable({
   const errorMap = useMemo(() => {
     const map = new Map<string, ValidationError[]>();
     for (const err of errors) {
-      // 用 row index 匹配 order
       const key = `row_${err.row}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(err);
@@ -103,7 +101,6 @@ export function DataPreviewTable({
       if (nextColIndex >= 0 && nextColIndex < columns.length) {
         setEditingCell({ id, field: columns[nextColIndex].key });
       } else if (e.key === "Tab" && !e.shiftKey) {
-        // 切换到下一行第一列
         const nextOrder = orders[currentIndex + 1];
         if (nextOrder) {
           setEditingCell({ id: nextOrder.id, field: columns[0].key });
@@ -121,7 +118,7 @@ export function DataPreviewTable({
   return (
     <div className="flex flex-col h-full">
       {/* 工具栏 */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="text-sm text-[#4e5969]">
           共 <span className="font-semibold text-[#1d2129]">{orders.length}</span> 条数据
           {errors.length > 0 && (
@@ -130,31 +127,29 @@ export function DataPreviewTable({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onAddRow}
-            className="px-3 py-1.5 text-xs font-medium text-[#0fc6c2] bg-[#e8fafa] rounded-lg hover:bg-[#d0f5f5] transition-colors"
-          >
-            + 新增行
-          </button>
-        </div>
+        <button
+          onClick={onAddRow}
+          className="px-3 py-1.5 text-xs font-medium text-[#0fc6c2] bg-[#e8fafa] rounded hover:bg-[#c5f0f0] transition-colors whitespace-nowrap"
+        >
+          + 新增行
+        </button>
       </div>
 
-      {/* 表格容器 */}
+      {/* 表格容器 - 鲸天风格：紧凑边框表格 */}
       <div
         ref={parentRef}
-        className="border border-[#e5e6eb] rounded-xl overflow-auto bg-white"
-        style={{ height: "500px" }}
+        className="border border-[#e5e6eb] rounded-lg overflow-auto"
+        style={{ height: "480px", maxHeight: "clamp(320px, 60vh, 480px)" }}
       >
         {/* 表头 */}
-        <div className="sticky top-0 z-10 flex bg-[#e8fafa] border-b border-[#d0e8e8] min-w-max">
-          <div className="flex-shrink-0 w-12 px-2 py-2.5 text-xs font-semibold text-[#0b6e6e] text-center border-r border-[#d0e8e8]">
+        <div className="sticky top-0 z-10 flex bg-[#f7f8fa] border-b border-[#e5e6eb] min-w-max">
+          <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#f7f8fa] z-20">
             #
           </div>
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex-shrink-0 px-3 py-2.5 text-xs font-semibold text-[#0b6e6e] border-r border-[#d0e8e8]"
+              className="flex-shrink-0 px-2 lg:px-3 py-2 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb]"
               style={{ width: col.width }}
             >
               {col.label}
@@ -163,7 +158,7 @@ export function DataPreviewTable({
               )}
             </div>
           ))}
-          <div className="flex-shrink-0 w-16 px-2 py-2.5 text-xs font-semibold text-[#0b6e6e] text-center">
+          <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#f7f8fa] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
             操作
           </div>
         </div>
@@ -186,23 +181,23 @@ export function DataPreviewTable({
                 key={order.id}
                 className={cn(
                   "absolute top-0 left-0 w-full flex min-w-max border-b border-[#f2f3f5] hover:bg-[#fafbfc] transition-colors",
-                  hasError && "bg-[#fff7e8]/50"
+                  hasError ? "bg-[#fff7e8]/50" : virtualRow.index % 2 === 1 && "bg-[#fafbfc]"
                 )}
                 style={{
                   height: `${virtualRow.size}px`,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
-                {/* 行号 */}
+                {/* 行号 - 粘性左列 */}
                 <div
                   className={cn(
-                    "flex-shrink-0 w-12 px-2 py-2.5 text-xs text-center border-r border-[#f2f3f5]",
-                    hasError ? "text-[#cf1322]" : "text-[#86909c]"
+                    "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2 text-xs text-center border-r border-[#f2f3f5] sticky left-0 z-10",
+                    hasError ? "text-[#cf1322] bg-[#fff7e8]/80" : "text-[#86909c] bg-inherit"
                   )}
                 >
                   {virtualRow.index + 1}
                   {hasError && (
-                    <span className="inline-block w-1.5 h-1.5 bg-[#cf1322] rounded-full ml-1" />
+                    <span className="inline-block w-1.5 h-1.5 bg-[#cf1322] rounded-full ml-1 align-middle" />
                   )}
                 </div>
 
@@ -220,7 +215,7 @@ export function DataPreviewTable({
                     <div
                       key={col.key}
                       className={cn(
-                        "flex-shrink-0 px-3 py-2.5 text-sm border-r border-[#f2f3f5] cursor-pointer",
+                        "flex-shrink-0 px-2 lg:px-3 py-2 text-sm border-r border-[#f2f3f5] cursor-pointer",
                         hasFieldError && "bg-[#fff1f0]"
                       )}
                       style={{ width: col.width }}
@@ -261,11 +256,11 @@ export function DataPreviewTable({
                   );
                 })}
 
-                {/* 操作列 */}
-                <div className="flex-shrink-0 w-16 px-2 py-2.5 flex items-center justify-center">
+                {/* 操作列 - 粘性右列 */}
+                <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
                   <button
                     onClick={() => onDeleteOrder(order.id)}
-                    className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors"
+                    className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
                     title="删除行"
                   >
                     删除
@@ -279,11 +274,11 @@ export function DataPreviewTable({
 
       {/* 错误汇总 */}
       {errors.length > 0 && (
-        <div className="mt-3 p-3 bg-[#fff7e8] border border-[#ffe4ba] rounded-lg">
-          <p className="text-sm font-semibold text-[#d97b00] mb-2">
-            ⚠️ 校验发现 {errors.length} 个问题：
+        <div className="mt-3 p-3 bg-[#fff7e8] border border-[#ffe4ba] rounded">
+          <p className="text-sm font-medium text-[#d97b00] mb-1.5">
+            校验发现 {errors.length} 个问题：
           </p>
-          <div className="max-h-32 overflow-y-auto space-y-1">
+          <div className="max-h-28 overflow-y-auto space-y-0.5">
             {errors.map((err, i) => (
               <p key={i} className="text-xs text-[#d97b00]">
                 第 {err.row} 行 · {err.field}: {err.message}
