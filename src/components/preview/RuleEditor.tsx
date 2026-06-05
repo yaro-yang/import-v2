@@ -11,6 +11,13 @@ interface RuleEditorProps {
   onCancel: () => void;
   fileType?: "excel" | "word" | "pdf";
   fileName?: string;
+  /** AI 分析的原始字段映射信息（用于显示推测标注） */
+  aiFieldMappings?: Array<{
+    targetField: string;
+    suggestedSource: string;
+    confidence?: number;
+    note?: string;
+  }>;
 }
 
 const defaultFieldMappings: FieldMapping[] = [
@@ -32,6 +39,7 @@ export function RuleEditor({
   onCancel,
   fileType = "excel",
   fileName = "",
+  aiFieldMappings = [],
 }: RuleEditorProps) {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(rule?.name || "");
@@ -351,24 +359,45 @@ export function RuleEditor({
           <h3 className="text-sm font-semibold text-[#1d2129]">字段映射</h3>
           {rule?.aiGenerated && (
             <span className="text-xs bg-[#e8fafa] text-[#0b6e6e] px-2 py-0.5 rounded-full">
-              🤖 AI 生成
+              🤖 AI 生成 · 置信度 {rule.aiConfidence ? `${(rule.aiConfidence * 100).toFixed(0)}%` : "未知"}
             </span>
           )}
         </div>
+        {/* AI 推测提示 */}
+        {aiFieldMappings.length > 0 && (
+          <div className="p-2.5 bg-[#fff7e6] rounded-lg border border-[#ffd591] flex items-start gap-2">
+            <span className="text-sm shrink-0">💡</span>
+            <p className="text-xs text-[#86909c] leading-relaxed">
+              以下字段中，<strong className="text-[#ff7d00]">橙色标注 ⚠️ 推测</strong>表示 AI 置信度较低（&lt;50%），<strong className="text-[#ff7d00]">黄色 💡 参考</strong>表示中等置信度（50%~75%），<strong>绿色 ✅ 确认</strong>表示高置信度（&gt;75%）。
+              请重点检查标注为推测的字段是否正确。
+            </p>
+          </div>
+        )}
         <div className="border border-[#e5e6eb] rounded-xl overflow-hidden">
           <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 bg-[#f7f8fa] border-b border-[#e5e6eb] text-xs font-semibold text-[#4e5969]">
-            <div className="col-span-4 lg:col-span-3">目标字段</div>
-            <div className="col-span-4 lg:col-span-3">映射模式</div>
-            <div className="col-span-3 lg:col-span-4">列名/值</div>
-            <div className="col-span-1 lg:col-span-2">必填</div>
+            <div className="col-span-3 lg:col-span-3">目标字段</div>
+            <div className="col-span-3 lg:col-span-3">映射模式</div>
+            <div className="col-span-3 lg:col-span-3">列名/值</div>
+            <div className="col-span-1 lg:col-span-1">必填</div>
+            <div className="col-span-2 lg:col-span-2">AI 推断</div>
           </div>
           <div className="max-h-64 overflow-y-auto">
-            {mappings.map((mapping, index) => (
+            {mappings.map((mapping, index) => {
+              // 查找对应的 AI 映射信息
+              const aiInfo = aiFieldMappings.find(
+                (fm) => fm.targetField === mapping.targetField
+              );
+              const conf = aiInfo?.confidence || 0;
+              const isLow = conf > 0 && conf < 0.5;
+              const isMedium = conf >= 0.5 && conf < 0.75;
+              const isHigh = conf >= 0.75;
+
+              return (
               <div
                 key={index}
                 className="grid grid-cols-1 sm:grid-cols-12 gap-2 px-3 lg:px-4 py-2.5 sm:py-2 border-b border-[#f2f3f5] text-sm"
               >
-                <div className="sm:col-span-4 lg:col-span-3 flex items-center gap-2">
+                <div className="sm:col-span-3 lg:col-span-3 flex items-center gap-2">
                   <span className="text-xs font-semibold text-[#4e5969] sm:hidden">目标字段：</span>
                   <span className="text-[#1d2129] font-medium">
                     {mapping.targetField}
@@ -377,7 +406,7 @@ export function RuleEditor({
                     <span className="text-[#cf1322] ml-1">*</span>
                   )}
                 </div>
-                <div className="sm:col-span-4 lg:col-span-3">
+                <div className="sm:col-span-3 lg:col-span-3">
                   <span className="text-xs font-semibold text-[#4e5969] sm:hidden">映射模式：</span>
                   <select
                     value={mapping.mode}
@@ -395,7 +424,7 @@ export function RuleEditor({
                     <option value="ai_infer">AI 推断</option>
                   </select>
                 </div>
-                <div className="sm:col-span-3 lg:col-span-4">
+                <div className="sm:col-span-3 lg:col-span-3">
                   <span className="text-xs font-semibold text-[#4e5969] sm:hidden">列名/值：</span>
                   {mapping.mode === "column_index" ? (
                     <input
@@ -433,7 +462,7 @@ export function RuleEditor({
                     />
                   )}
                 </div>
-                <div className="sm:col-span-1 lg:col-span-2 flex items-center gap-2">
+                <div className="sm:col-span-1 lg:col-span-1 flex items-center gap-2">
                   <span className="text-xs font-semibold text-[#4e5969] sm:hidden">必填：</span>
                   <input
                     type="checkbox"
@@ -444,8 +473,30 @@ export function RuleEditor({
                     className="accent-[#0fc6c2]"
                   />
                 </div>
+                {/* AI 推断标注列 */}
+                <div className="sm:col-span-2 lg:col-span-2 flex items-center gap-1">
+                  {aiInfo ? (
+                    <span
+                      className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                        isLow
+                          ? "bg-[#fff7e6] text-[#ff7d00] border border-[#ffd591]"
+                          : isMedium
+                            ? "bg-[#fffbe6] text-[#ff7d00]"
+                            : isHigh
+                              ? "bg-[#e8ffea] text-[#00b42a]"
+                              : "bg-[#f2f3f5] text-[#86909c]"
+                      }`}
+                      title={aiInfo.note || `置信度: ${(conf * 100).toFixed(0)}%`}
+                    >
+                      {isLow ? "⚠️ 推测" : isMedium ? "💡 参考" : isHigh ? "✅ 确认" : "—"}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[#c9cdd4]">—</span>
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

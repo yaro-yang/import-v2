@@ -44,15 +44,22 @@ export default function HomePage() {
   const [aiAnalysisResult, setAiAnalysisResult] =
     useState<AIAnalyzeResponse | null>(null);
 
-  // 文件选择
+  // AI 分析状态
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+
+  // 文件选择（仅加载已有规则，不做 AI 自动分析）
   const handleFileSelect = useCallback(
     async (selectedFile: File) => {
       setFile(selectedFile);
       setStep("select-rule");
       setOrders([]);
       setErrors([]);
+      setSelectedRuleId(null);
+      setShowRuleEditor(false);
+      setEditingRule(null);
+      setAiAnalysisResult(null);
 
-      // 加载已有规则
+      // 加载已有规则列表
       try {
         const res = await fetch("/api/rules");
         const data = await res.json();
@@ -66,14 +73,14 @@ export default function HomePage() {
     []
   );
 
-  // 新建规则
+  // 新建规则：触发 AI 预分析，然后打开编辑器让用户确认
   const handleCreateNewRule = useCallback(async () => {
     if (!file) return;
 
-    setLoading(true);
-    const toastId = toast.loading("AI 正在分析文件...");
+    setAiAnalyzing(true);
+    setAiAnalysisResult(null);
+    const toastId = toast.loading("🤖 DeepSeek 正在分析文件结构，生成推荐解析规则...");
     try {
-      // 调用 AI 分析
       const formData = new FormData();
       formData.append("file", file);
 
@@ -86,34 +93,33 @@ export default function HomePage() {
       if (data.success && data.data) {
         setAiAnalysisResult(data.data);
         setEditingRule(data.data.suggestedRule || {});
-        toast.success("AI 已完成分析，请确认并调整规则", { id: toastId });
+        setShowRuleEditor(true);
+        toast.success("✅ AI 分析完成，请检查并确认推荐的解析规则", { id: toastId });
       } else {
         // AI 分析失败，打开空规则编辑器
         setEditingRule({
-          fileType:
-            file.name.endsWith(".pdf")
-              ? "pdf"
-              : file.name.endsWith(".docx")
-                ? "word"
-                : "excel",
-        });
-        toast("AI 分析不可用，请手动配置规则", { id: toastId, icon: "⚠️" });
-      }
-      setShowRuleEditor(true);
-    } catch (err) {
-      console.error("AI analysis failed:", err);
-      setEditingRule({
-        fileType:
-          file.name.endsWith(".pdf")
+          fileType: file.name.endsWith(".pdf")
             ? "pdf"
             : file.name.endsWith(".docx")
               ? "word"
               : "excel",
+        });
+        setShowRuleEditor(true);
+        toast.error(data.error || "AI 分析失败，已打开手动配置界面", { id: toastId });
+      }
+    } catch (err) {
+      console.error("AI analysis failed:", err);
+      setEditingRule({
+        fileType: file.name.endsWith(".pdf")
+          ? "pdf"
+          : file.name.endsWith(".docx")
+            ? "word"
+            : "excel",
       });
       setShowRuleEditor(true);
-      toast.error("AI 分析失败，请手动配置规则", { id: toastId });
+      toast.error("AI 分析失败，已打开手动配置界面", { id: toastId });
     } finally {
-      setLoading(false);
+      setAiAnalyzing(false);
     }
   }, [file]);
 
@@ -367,7 +373,7 @@ export default function HomePage() {
                   />
                 )}
                 <div
-                  className={`flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-4 py-1.5 lg:py-2 rounded-lg text-sm lg:text-base font-medium transition-colors step-indicator-sm ${
+                  className={`flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-5 py-2 lg:py-2.5 rounded-lg text-sm lg:text-base font-medium transition-colors step-indicator-sm ${
                     isCurrent
                       ? "bg-[#0fc6c2] text-white"
                       : isActive
@@ -422,14 +428,14 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 规则选择卡片 */}
+          {/* 规则选择卡片 - 用户手动选择已有规则或点击"新建规则"触发 AI 分析 */}
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
             <RuleSelector
               rules={rules}
               selectedRuleId={selectedRuleId}
               onSelectRule={setSelectedRuleId}
               onCreateNew={handleCreateNewRule}
-              loading={loading}
+              loading={false}
             />
           </div>
 
@@ -578,6 +584,7 @@ export default function HomePage() {
           onCancel={() => setShowRuleEditor(false)}
           fileType={file?.name.endsWith(".pdf") ? "pdf" : file?.name.endsWith(".docx") ? "word" : "excel"}
           fileName={file?.name}
+          aiFieldMappings={aiAnalysisResult?.fieldMappings || []}
         />
       </Modal>
     </div>
