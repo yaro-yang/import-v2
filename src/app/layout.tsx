@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         <Navigation />
-        <main className="main-content ml-[200px] lg:ml-[200px] mt-[56px] pt-6 min-h-[calc(100vh-56px)] bg-[#f7f8fa]">
+        <main className="main-content ml-[200px] lg:ml-[200px] mt-[56px] pt-8 min-h-[calc(100vh-56px)] bg-[#f7f8fa]">
           {children}
         </main>
         <Toaster
