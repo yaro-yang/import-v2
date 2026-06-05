@@ -100,8 +100,8 @@ export default function HistoryPage() {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-base lg:text-lg font-semibold text-[#1d2129]">已导入运单</h1>
-              <p className="text-xs lg:text-sm text-[#86909c] mt-0.5 hidden sm:block">
+              <h1 className="text-lg lg:text-xl font-semibold text-[#1d2129]">已导入运单</h1>
+              <p className="text-sm lg:text-base text-[#86909c] mt-1 hidden sm:block">
                 查看已提交的历史运单，支持筛选与导出
               </p>
             </div>
@@ -121,7 +121,7 @@ export default function HistoryPage() {
         {/* 状态标签栏 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-4 lg:px-5">
           <div className="flex items-center gap-1 overflow-x-auto">
-            <span className="text-sm text-[#4e5969] whitespace-nowrap mr-2">运单状态</span>
+            <span className="text-base text-[#4e5969] whitespace-nowrap mr-2">运单状态</span>
             {[
               { key: "all", label: "全部", count: 0 },
               { key: "submitted", label: "已出库", count: 0 },
@@ -131,7 +131,7 @@ export default function HistoryPage() {
             ].map((t) => (
               <button
                 key={t.key}
-                className={`px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`px-4 py-2.5 text-base font-medium whitespace-nowrap border-b-2 transition-colors ${
                   t.key === "all"
                     ? "text-[#0fc6c2] border-[#0fc6c2]"
                     : "text-[#4e5969] border-transparent hover:text-[#0fc6c2]"
@@ -146,15 +146,15 @@ export default function HistoryPage() {
         {/* 筛选表单 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
           <div className="flex flex-wrap items-center gap-2 lg:gap-3 search-controls-sm">
-            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
+            <div className="flex items-center gap-2 text-base text-[#4e5969]">
               <span className="whitespace-nowrap">申请渠道</span>
-              <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+              <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-base outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
                 <option>全部</option>
               </select>
             </div>
-            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
+            <div className="flex items-center gap-2 text-base text-[#4e5969]">
               <span className="whitespace-nowrap">审核状态</span>
-              <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+              <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-base outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
                 <option>全部</option>
               </select>
             </div>
@@ -164,7 +164,7 @@ export default function HistoryPage() {
               value={searchExternalCode}
               onChange={(e) => setSearchExternalCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full sm:w-[180px] lg:w-[220px] px-3 py-2 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+              className="w-full sm:w-[180px] lg:w-[220px] px-3 py-2 text-base border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
             />
             <input
               type="text"
@@ -172,11 +172,11 @@ export default function HistoryPage() {
               value={searchRecipientName}
               onChange={(e) => setSearchRecipientName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full sm:w-[160px] lg:w-[200px] px-3 py-2 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+              className="w-full sm:w-[160px] lg:w-[200px] px-3 py-2 text-base border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
             />
-            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
+            <div className="flex items-center gap-2 text-base text-[#4e5969]">
               <span className="whitespace-nowrap">创建时间</span>
-              <input type="date" className="border border-[#d0d7de] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0fc6c2] bg-white" />
+              <input type="date" className="border border-[#d0d7de] rounded-lg px-3 py-2 text-base outline-none focus:border-[#0fc6c2] bg-white" />
             </div>
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={handleSearch}>查询</Button>
@@ -190,11 +190,11 @@ export default function HistoryPage() {
         {loading ? (
           <div className="p-4 lg:p-6">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[700px]">
+              <table className="w-full text-base min-w-[700px]">
                 <thead>
                   <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
                     {["外部编码", "收货门店", "收件人", "SKU编码", "SKU名称", "数量", "提交时间", "状态"].map((h) => (
-                      <th key={h} className="px-3 lg:px-4 py-3.5 text-left text-xs font-semibold text-[#4e5969]">{h}</th>
+                      <th key={h} className="px-3 lg:px-4 py-3.5 text-left text-base font-semibold text-[#4e5969]">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -227,31 +227,31 @@ export default function HistoryPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[700px]">
+              <table className="w-full text-base min-w-[700px]">
                 <thead>
                   <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
                       外部编码
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
                       收货门店
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
                       收件人
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
                       SKU编码
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden md:table-cell">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden md:table-cell">
                       SKU名称
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-right text-sm font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-right text-base font-semibold text-[#4e5969]">
                       数量
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden sm:table-cell">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden sm:table-cell">
                       提交时间
                     </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-center text-sm font-semibold text-[#4e5969] sticky-action-col">
+                    <th className="px-4 lg:px-5 py-3.5 text-center text-base font-semibold text-[#4e5969] sticky-action-col">
                       状态
                     </th>
                   </tr>

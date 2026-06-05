@@ -23,10 +23,10 @@ export default function RootLayout({
             marginLeft: 240,
             marginTop: 56,
             minHeight: "calc(100vh - 56px)",
-            paddingLeft: 80,
-            paddingRight: 32,
-            paddingTop: 24,
-            paddingBottom: 48,
+            paddingLeft: 0,
+            paddingRight: 16,
+            paddingTop: 0,
+            paddingBottom: 24,
           }}
         >
           <div className="w-full max-w-[1280px]">

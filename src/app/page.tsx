@@ -335,8 +335,8 @@ export default function HomePage() {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-base lg:text-lg font-semibold text-[#1d2129]">导入下单</h1>
-              <p className="text-xs lg:text-sm text-[#86909c] mt-0.5 hidden sm:block">
+              <h1 className="text-lg lg:text-xl font-semibold text-[#1d2129]">导入下单</h1>
+              <p className="text-sm lg:text-base text-[#86909c] mt-1 hidden sm:block">
                 上传 Excel / Word / PDF 文件，AI 自动解析并批量下单
               </p>
             </div>
@@ -367,7 +367,7 @@ export default function HomePage() {
                   />
                 )}
                 <div
-                  className={`flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-4 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-colors step-indicator-sm ${
+                  className={`flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-4 py-1.5 lg:py-2 rounded-lg text-sm lg:text-base font-medium transition-colors step-indicator-sm ${
                     isCurrent
                       ? "bg-[#0fc6c2] text-white"
                       : isActive

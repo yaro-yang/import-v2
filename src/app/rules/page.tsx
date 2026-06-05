@@ -133,8 +133,8 @@ export default function RulesPage() {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-base lg:text-lg font-semibold text-[#1d2129]">解析规则管理</h1>
-              <p className="text-xs lg:text-sm text-[#86909c] mt-0.5 hidden sm:block">
+              <h1 className="text-lg lg:text-xl font-semibold text-[#1d2129]">解析规则管理</h1>
+              <p className="text-sm lg:text-base text-[#86909c] mt-1 hidden sm:block">
                 管理用于解析不同格式出库单文件的规则配置
               </p>
             </div>
@@ -149,7 +149,7 @@ export default function RulesPage() {
         {/* 状态标签栏 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-4 lg:px-5">
           <div className="flex items-center gap-1 overflow-x-auto">
-            <span className="text-sm text-[#4e5969] whitespace-nowrap mr-2">规则类型</span>
+            <span className="text-base text-[#4e5969] whitespace-nowrap mr-2">规则类型</span>
             {[
               { key: "all", label: "全部", count: 0 },
               { key: "excel", label: "Excel", count: 0 },
@@ -159,7 +159,7 @@ export default function RulesPage() {
             ].map((t) => (
               <button
                 key={t.key}
-                className={`px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`px-4 py-2.5 text-base font-medium whitespace-nowrap border-b-2 transition-colors ${
                   t.key === "all"
                     ? "text-[#0fc6c2] border-[#0fc6c2]"
                     : "text-[#4e5969] border-transparent hover:text-[#0fc6c2]"
@@ -179,7 +179,7 @@ export default function RulesPage() {
               <thead>
                 <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
                   {["规则名称", "文件类型", "字段映射", "描述", "来源", "更新时间", "操作"].map((h) => (
-                    <th key={h} className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">{h}</th>
+                    <th key={h} className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -211,13 +211,13 @@ export default function RulesPage() {
             <table className="w-full text-sm min-w-[600px]">
               <thead>
                 <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">规则名称</th>
-                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">文件类型</th>
-                  <th className="px-4 lg:px-5 py-3.5 text-center text-sm font-semibold text-[#4e5969] hidden sm:table-cell">字段映射</th>
-                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden md:table-cell">描述</th>
-                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden sm:table-cell">来源</th>
-                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden md:table-cell">更新时间</th>
-                  <th className="px-4 lg:px-5 py-3.5 text-right text-sm font-semibold text-[#4e5969] sticky-action-col">操作</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">规则名称</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">文件类型</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-center text-base font-semibold text-[#4e5969] hidden sm:table-cell">字段映射</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden md:table-cell">描述</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden sm:table-cell">来源</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden md:table-cell">更新时间</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-right text-base font-semibold text-[#4e5969] sticky-action-col">操作</th>
                 </tr>
               </thead>
               <tbody>
