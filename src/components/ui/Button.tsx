@@ -11,7 +11,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses = {
   primary:
-    "bg-[#0fc6c2] text-white hover:bg-[#0bada9] active:bg-[#089e98] shadow-[0_2px_6px_rgba(15,198,194,0.25)]",
+    "bg-[#0fc6c2] text-white hover:bg-[#0bada9] active:bg-[#089e98] shadow-[0_2px_8px_rgba(15,198,194,0.3)]",
   secondary:
     "bg-white text-[#4e5969] hover:bg-[#f7f8fa] active:bg-[#e5e6eb] border border-[#e5e6eb]",
   danger:
@@ -23,9 +23,9 @@ const variantClasses = {
 };
 
 const sizeClasses = {
-  sm: "px-4 py-2 text-sm font-semibold rounded-xl gap-1.5",
-  md: "px-5 py-2.5 text-base font-semibold rounded-xl gap-2",
-  lg: "px-6 py-3 text-base font-semibold rounded-xl gap-2",
+  sm: "px-5 py-2.5 text-base font-semibold rounded-xl gap-2",
+  md: "px-6 py-3 text-base font-semibold rounded-xl gap-2",
+  lg: "px-7 py-3.5 text-lg font-semibold rounded-xl gap-2",
 };
 
 export function Button({
