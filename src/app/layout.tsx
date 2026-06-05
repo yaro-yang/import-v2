@@ -4,7 +4,7 @@ import { Toaster } from "react-hot-toast";
 import { Navigation } from "@/components/layout/Navigation";
 
 export const metadata: Metadata = {
-  title: "万能导入 V2 - 智能多格式批量下单系统",
+  title: "万能导入 - 智能多格式批量下单系统",
   description: "基于大模型的智能多格式批量下单系统，支持 Excel/Word/PDF 文件解析",
 };
 
