@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
   await ensureDB();
+  const parseStart = performance.now();
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -51,11 +52,13 @@ export async function POST(request: NextRequest) {
 
     // 解析文件
     if (fileType === "excel") {
-      const { result: parsed, time } = measureParseTime(() => parseExcel(buffer));
-      const { sheets } = await parsed;
+      const { sheets } = await parseExcel(buffer);
 
-      // 遍历所有 Sheet
-      const sheetNames = rule.dataRegion.sheetNames || Object.keys(sheets);
+      // 遍历所有 Sheet（支持 mergeSheets 模式）
+      const sheetNames = rule.globalConfig.mergeSheets
+        ? Object.keys(sheets)
+        : (rule.dataRegion.sheetNames || Object.keys(sheets));
+
       for (const sheetName of sheetNames) {
         const sheetData = sheets[sheetName];
         if (!sheetData) continue;
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
       }
     } else if (fileType === "word") {
       const text = await parseWord(buffer);
-      // Word 解析：将文本按行拆分，使用规则引擎
+      // Word 解析：将文本按行拆分
       const lines = text.split("\n").filter((l) => l.trim());
       const rawData = lines.map((line, i) => ({
         rowIndex: i,
@@ -81,7 +84,8 @@ export async function POST(request: NextRequest) {
       orders = result.orders;
     } else if (fileType === "pdf") {
       const { fullText } = await parsePDF(buffer);
-      const lines = fullText.split("\n").filter((l) => l.trim());
+      // PDF 解析：保持页面分隔符，支持多订单拆分
+      const lines = fullText.split("\n");
       const rawData = lines.map((line, i) => ({
         rowIndex: i,
         cells: { text: line, col_0: line },
@@ -96,13 +100,15 @@ export async function POST(request: NextRequest) {
       .filter(Boolean);
     const errorCount = orders.filter((o) => o.status === "error").length;
 
+    const parseTime = performance.now() - parseStart;
+
     const result: ParseResult = {
       orders,
       totalCount: orders.length,
       successCount: orders.length - errorCount,
       errorCount,
       errors,
-      parseTime: 0,
+      parseTime,
     };
 
     return NextResponse.json({

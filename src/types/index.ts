@@ -50,6 +50,7 @@ export interface DataRegionConfig {
   // 尾部信息区
   tailRegion?: {
     startRow?: number;          // 尾部信息起始行
+    endRow?: number;            // 尾部信息结束行
     fields: FieldMapping[];     // 从尾部提取的字段
   };
   // 卡片模式

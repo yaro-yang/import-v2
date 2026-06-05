@@ -1,5 +1,6 @@
 // 规则引擎 - 核心解析逻辑 V2
 // 支持：头部跳过、尾部提取、跨行聚合、矩阵转置、卡片拆分、复合单元格、多Sheet合并、合计行跳过
+// 支持：Word/PDF 纯文本解析、文本记录拆分、正则提取
 
 import { ParseRule, FieldMapping, OrderItem, ValidationError } from "@/types";
 import { v4 as uuidv4 } from "uuid";
@@ -22,11 +23,11 @@ export async function executeRule(
   const orders: OrderItem[] = [];
   const errors: ValidationError[] = [];
 
-  // 0. 卡片模式处理
-  if (rule.dataRegion.cardMode?.enabled) {
-    const cardGroups = splitByCards(rawData, rule);
-    for (const group of cardGroups) {
-      const order = buildOrderFromRows(group, rule, fileName, "");
+  // 0. 文本记录拆分（Word/PDF 纯文本模式）
+  if (rule.postProcessing?.textRecordMarker) {
+    const textSections = splitByTextMarker(rawData, rule);
+    for (const section of textSections) {
+      const order = buildOrderFromTextSection(section, rule, fileName);
       if (order) {
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
@@ -34,24 +35,204 @@ export async function executeRule(
       }
     }
   }
-  // 1. 复合单元格拆分
+  // 1. 卡片模式处理
+  else if (rule.dataRegion.cardMode?.enabled) {
+    const cardGroups = splitByCards(rawData, rule);
+    for (const group of cardGroups) {
+      const order = buildOrderFromCard(group, rule, fileName);
+      if (order) {
+        const errs = validateOrder(order, rawData.length);
+        if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
+        orders.push(order);
+      }
+    }
+  }
+  // 2. 复合单元格拆分
   else if (rule.dataRegion.compositeMode?.enabled) {
     const expandedRows = expandCompositeCells(rawData, rule);
     processRows(expandedRows, rule, fileName, orders, errors);
   }
-  // 2. 矩阵转置
+  // 3. 矩阵转置
   else if (rule.dataRegion.matrixMode?.enabled) {
     const transposedRows = transposeMatrix(rawData, rule);
     processRows(transposedRows, rule, fileName, orders, errors);
   }
-  // 3. 标准处理
+  // 4. 标准处理
   else {
     processRows(rawData, rule, fileName, orders, errors);
   }
 
   const endTime = performance.now();
-  console.log(`Rule execution completed in ${(endTime - startTime).toFixed(2)}ms`);
+  console.log(`Rule execution completed in ${(endTime - startTime).toFixed(2)}ms, orders: ${orders.length}`);
   return { orders, errors };
+}
+
+// ====== 文本记录拆分（Word/PDF） ======
+function splitByTextMarker(rawData: RawDataRow[], rule: ParseRule): string[][] {
+  const marker = rule.postProcessing?.textRecordMarker || "---PAGE_BREAK---";
+  const sections: string[][] = [];
+  let currentSection: string[] = [];
+
+  for (const row of rawData) {
+    const text = row.cells["text"] || row.cells["col_0"] || "";
+    if (text.includes(marker)) {
+      if (currentSection.length > 0) sections.push(currentSection);
+      currentSection = [];
+    } else {
+      currentSection.push(text);
+    }
+  }
+  if (currentSection.length > 0) sections.push(currentSection);
+  return sections.length > 0 ? sections : [rawData.map((r) => r.cells["text"] || r.cells["col_0"] || "")];
+}
+
+// ====== 从文本段构建运单（Word/PDF 纯文本模式） ======
+function buildOrderFromTextSection(
+  textLines: string[],
+  rule: ParseRule,
+  fileName: string
+): OrderItem | null {
+  const fullText = textLines.join("\n");
+  if (!fullText.trim()) return null;
+
+  const order: OrderItem = {
+    id: uuidv4(),
+    skuCode: "", skuName: "", skuQuantity: 0,
+    status: "draft",
+    sourceFile: fileName,
+    sourceRow: 0,
+    ruleId: rule.id,
+    createdAt: new Date().toISOString(),
+  };
+
+  // 使用字段映射中的正则/行模式提取
+  for (const mapping of rule.fieldMappings) {
+    let value = "";
+
+    if (mapping.mode === "regex_extract" && mapping.regexPattern) {
+      const match = fullText.match(new RegExp(mapping.regexPattern, "s"));
+      value = match ? (match[mapping.regexGroup || 1] || match[0]) : "";
+    } else if (mapping.mode === "row_field" && mapping.rowKeyPattern) {
+      for (const line of textLines) {
+        if (line.includes(mapping.rowKeyPattern)) {
+          const match = line.match(new RegExp(`${mapping.rowKeyPattern}[：:]*\\s*(.+)`));
+          if (match) { value = match[1].trim(); break; }
+        }
+      }
+    } else if (mapping.mode === "column_name") {
+      // 尝试文本行匹配
+      for (const line of textLines) {
+        if (line.includes(mapping.columnName || "")) {
+          const match = line.match(new RegExp(`${mapping.columnName}[：:]*\\s*(.+)`));
+          if (match) { value = match[1].trim(); break; }
+        }
+      }
+    } else if (mapping.staticValue) {
+      value = mapping.staticValue;
+    }
+
+    if (value) {
+      if (mapping.targetField === "skuQuantity") {
+        order.skuQuantity = parseFloat(value) || 0;
+      } else {
+        setOrderField(order, mapping.targetField, value);
+      }
+    }
+  }
+
+  // 特殊处理：从物品行提取 SKU 信息（格式：编号 类别 编码 名称 规格 单位 数量）
+  const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
+  let totalQty = 0;
+
+  for (const line of textLines) {
+    // 匹配物品行：数字开头 + 至少3个字段
+    const skuMatch = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+(.+?)\s+(\S+)\s+\S+\s+(\d+)/);
+    if (skuMatch) {
+      skuCodes.push(skuMatch[3]);
+      skuNames.push(skuMatch[4].trim());
+      skuSpecs.push(skuMatch[5]);
+      totalQty += parseInt(skuMatch[6]) || 0;
+    }
+  }
+
+  if (skuCodes.length > 0) {
+    order.skuCode = skuCodes.join("; ");
+    order.skuName = skuNames.join("; ");
+    order.skuQuantity = totalQty;
+    order.skuSpec = skuSpecs.join("; ");
+  }
+
+  return order;
+}
+
+// ====== 从卡片构建运单 ======
+function buildOrderFromCard(
+  cardRows: RawDataRow[],
+  rule: ParseRule,
+  fileName: string
+): OrderItem | null {
+  if (cardRows.length === 0) return null;
+
+  const order: OrderItem = {
+    id: uuidv4(),
+    skuCode: "", skuName: "", skuQuantity: 0,
+    status: "draft",
+    sourceFile: fileName,
+    sourceRow: cardRows[0].rowIndex,
+    ruleId: rule.id,
+    createdAt: new Date().toISOString(),
+  };
+
+  // 提取卡片头部信息（收货门店、收货人等）
+  for (const mapping of rule.fieldMappings) {
+    if (["storeName", "recipientName", "recipientPhone", "recipientAddress", "externalCode", "remark"].includes(mapping.targetField)) {
+      let value = "";
+      if (mapping.mode === "row_field" && mapping.rowKeyPattern) {
+        for (const row of cardRows) {
+          const rowText = Object.values(row.cells).join(" ");
+          if (rowText.includes(mapping.rowKeyPattern)) {
+            const match = rowText.match(new RegExp(`${mapping.rowKeyPattern}[：:]*\\s*(.+)`));
+            if (match) { value = match[1].trim(); break; }
+          }
+        }
+      } else {
+        value = extractFieldValue(cardRows[0], mapping);
+      }
+      if (value) setOrderField(order, mapping.targetField, value);
+    }
+  }
+
+  // 提取 SKU 数据（卡片内的小表）
+  const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
+  let totalQty = 0;
+
+  for (const row of cardRows) {
+    const skuCodeMapping = rule.fieldMappings.find((m) => m.targetField === "skuCode");
+    const skuNameMapping = rule.fieldMappings.find((m) => m.targetField === "skuName");
+    const skuQtyMapping = rule.fieldMappings.find((m) => m.targetField === "skuQuantity");
+    const skuSpecMapping = rule.fieldMappings.find((m) => m.targetField === "skuSpec");
+
+    const code = extractFieldValue(row, skuCodeMapping);
+    const name = extractFieldValue(row, skuNameMapping);
+    const qty = parseFloat(extractFieldValue(row, skuQtyMapping) || "0");
+    const spec = extractFieldValue(row, skuSpecMapping);
+
+    if (code || name) {
+      if (code) skuCodes.push(code);
+      if (name) skuNames.push(name);
+      totalQty += qty || 0;
+      if (spec) skuSpecs.push(spec);
+    }
+  }
+
+  if (skuCodes.length > 0) {
+    order.skuCode = skuCodes.join("; ");
+    order.skuName = skuNames.join("; ");
+    order.skuQuantity = totalQty;
+    order.skuSpec = skuSpecs.join("; ");
+  }
+
+  return order;
 }
 
 function processRows(
@@ -418,7 +599,10 @@ export function excelToRawData(
     const headerData = data[headerRow];
     if (headerData) {
       for (let col = 0; col < headerData.length; col++) {
-        headers.push(String(headerData[col] ?? `col_${col}`));
+        const rawHeader = String(headerData[col] ?? `col_${col}`);
+        // 处理合并表头：取最后一行作为实际列名
+        const parts = rawHeader.split("\n").filter((p) => p.trim());
+        headers.push(parts[parts.length - 1] || rawHeader);
       }
     }
   }
@@ -428,6 +612,10 @@ export function excelToRawData(
   for (let r = startRow; r < Math.min(endRow, data.length); r++) {
     const rowData = data[r];
     if (!rowData || rowData.length === 0) continue;
+
+    // 检查是否所有单元格都为空
+    const hasContent = rowData.some((c) => c !== null && c !== undefined && String(c).trim() !== "");
+    if (!hasContent) continue;
 
     // 检查合计行
     if (rule.postProcessing?.skipTotalRow) {
@@ -454,23 +642,26 @@ export function excelToRawData(
       const rowData = data[r];
       if (!rowData) continue;
 
+      const rowText = rowData.map((c) => String(c ?? "")).join(" ");
+
       for (const field of config.tailRegion.fields) {
         if (field.mode === "tail_extract" && field.regexPattern) {
-          const rowText = rowData.map((c) => String(c ?? "")).join(" ");
           const match = rowText.match(new RegExp(field.regexPattern));
-          if (match) {
+          if (match && !tailFields[field.targetField]) {
             tailFields[field.targetField] = match[field.regexGroup || 1] || match[0];
           }
         } else if (field.mode === "row_field" && field.rowKeyPattern) {
-          const rowText = rowData.map((c) => String(c ?? "")).join(" ");
           if (rowText.includes(field.rowKeyPattern)) {
             const valueMatch = rowText.match(new RegExp(`${field.rowKeyPattern}[：:]*\\s*(.+)`));
-            if (valueMatch) tailFields[field.targetField] = valueMatch[1].trim();
+            if (valueMatch && !tailFields[field.targetField]) {
+              tailFields[field.targetField] = valueMatch[1].trim();
+            }
           }
         }
       }
     }
 
+    // 将尾部字段应用到所有行
     for (const row of rows) {
       row.tailFields = { ...tailFields };
     }

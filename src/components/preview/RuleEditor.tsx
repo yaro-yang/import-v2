@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ParseRule, FieldMapping, FieldMappingMode } from "@/types";
+import { useState } from "react";
+import { ParseRule, FieldMapping } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { v4 as uuidv4 } from "uuid";
 
@@ -50,6 +50,32 @@ export function RuleEditor({
   const [totalRowPattern, setTotalRowPattern] = useState(
     rule?.postProcessing?.totalRowPattern || "合计"
   );
+  // 高级解析模式
+  const [matrixMode, setMatrixMode] = useState(
+    rule?.dataRegion?.matrixMode?.enabled || false
+  );
+  const [cardMode, setCardMode] = useState(
+    rule?.dataRegion?.cardMode?.enabled || false
+  );
+  const [cardStartMarker, setCardStartMarker] = useState(
+    rule?.dataRegion?.cardMode?.startMarker || ""
+  );
+  const [compositeMode, setCompositeMode] = useState(
+    rule?.dataRegion?.compositeMode?.enabled || false
+  );
+  const [compositeSeparator, setCompositeSeparator] = useState(
+    rule?.dataRegion?.compositeMode?.separator || "\n"
+  );
+  const [mergeSheets, setMergeSheets] = useState(
+    rule?.globalConfig?.mergeSheets || false
+  );
+  // Word/PDF 文本解析
+  const [textRecordMarker, setTextRecordMarker] = useState(
+    rule?.postProcessing?.textRecordMarker || ""
+  );
+  const [textSeparator, setTextSeparator] = useState(
+    rule?.postProcessing?.textSeparator || ""
+  );
 
   const handleMappingChange = (
     index: number,
@@ -73,15 +99,27 @@ export function RuleEditor({
         globalConfig: {
           groupByExternalCode,
           externalCodeField: "externalCode",
+          mergeSheets,
         },
         fieldMappings: mappings,
         dataRegion: {
           skipRows,
           headerRow,
+          cardMode: cardMode
+            ? { enabled: true, startMarker: cardStartMarker }
+            : undefined,
+          matrixMode: matrixMode
+            ? { enabled: true }
+            : undefined,
+          compositeMode: compositeMode
+            ? { enabled: true, separator: compositeSeparator, pattern: "(.+?)x(\\d+)" }
+            : undefined,
         },
         postProcessing: {
           skipTotalRow,
           totalRowPattern,
+          textRecordMarker: textRecordMarker || undefined,
+          textSeparator: textSeparator || undefined,
         },
         createdAt: (rule as ParseRule)?.createdAt || now,
         updatedAt: now,
@@ -175,6 +213,113 @@ export function RuleEditor({
         </div>
       </div>
 
+      {/* 高级解析模式 */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-[#1d2129]">高级解析模式</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* 矩阵转置 */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={matrixMode}
+              onChange={(e) => setMatrixMode(e.target.checked)}
+              className="accent-[#0fc6c2]"
+            />
+            <span className="text-sm text-[#4e5969]">矩阵转置模式</span>
+            <span className="text-xs text-[#86909c]">（SKU×门店矩阵）</span>
+          </label>
+
+          {/* 卡片式布局 */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cardMode}
+              onChange={(e) => setCardMode(e.target.checked)}
+              className="accent-[#0fc6c2]"
+            />
+            <span className="text-sm text-[#4e5969]">卡片式布局</span>
+            <span className="text-xs text-[#86909c]">（调拨记录卡片）</span>
+          </label>
+          {cardMode && (
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-[#4e5969] mb-1">卡片起始标志</label>
+              <input
+                type="text"
+                value={cardStartMarker}
+                onChange={(e) => setCardStartMarker(e.target.value)}
+                placeholder="如：▶ 调拨记录"
+                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              />
+            </div>
+          )}
+
+          {/* 复合单元格拆分 */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={compositeMode}
+              onChange={(e) => setCompositeMode(e.target.checked)}
+              className="accent-[#0fc6c2]"
+            />
+            <span className="text-sm text-[#4e5969]">复合单元格拆分</span>
+            <span className="text-xs text-[#86909c]">（物品名x数量）</span>
+          </label>
+          {compositeMode && (
+            <div>
+              <label className="block text-xs text-[#4e5969] mb-1">分隔符</label>
+              <input
+                type="text"
+                value={compositeSeparator}
+                onChange={(e) => setCompositeSeparator(e.target.value)}
+                placeholder="默认换行符 \\n"
+                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              />
+            </div>
+          )}
+
+          {/* 合并所有Sheet */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={mergeSheets}
+              onChange={(e) => setMergeSheets(e.target.checked)}
+              className="accent-[#0fc6c2]"
+            />
+            <span className="text-sm text-[#4e5969]">合并所有Sheet</span>
+            <span className="text-xs text-[#86909c]">（多门店分Sheet）</span>
+          </label>
+        </div>
+      </div>
+
+      {/* Word/PDF 文本解析配置 */}
+      {(fileType === "word" || fileType === "pdf") && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#1d2129]">文本解析配置</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-[#4e5969] mb-1">记录分隔标志</label>
+              <input
+                type="text"
+                value={textRecordMarker}
+                onChange={(e) => setTextRecordMarker(e.target.value)}
+                placeholder="如：━━━"
+                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[#4e5969] mb-1">文本分隔符</label>
+              <input
+                type="text"
+                value={textSeparator}
+                onChange={(e) => setTextSeparator(e.target.value)}
+                placeholder="如：|"
+                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 额外处理 */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-[#1d2129]">额外处理</h3>
@@ -245,6 +390,8 @@ export function RuleEditor({
                     <option value="column_index">列索引</option>
                     <option value="static_value">静态值</option>
                     <option value="tail_extract">尾部提取</option>
+                    <option value="row_field">行字段匹配</option>
+                    <option value="regex_extract">正则提取</option>
                     <option value="ai_infer">AI 推断</option>
                   </select>
                 </div>

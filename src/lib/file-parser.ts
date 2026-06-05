@@ -95,29 +95,32 @@ export function parseTextLines(
   recordMarker?: string,
   separator?: string
 ): { sections: string[]; lines: string[] } {
-  const lines = text.split("\n").filter((l) => l.trim());
+  const lines = text.split("\n");
 
   const sections: string[] = [];
   if (recordMarker) {
     let currentSection = "";
     for (const line of lines) {
       if (line.includes(recordMarker)) {
-        if (currentSection) sections.push(currentSection.trim());
+        if (currentSection.trim()) sections.push(currentSection.trim());
         currentSection = line + "\n";
       } else {
         currentSection += line + "\n";
       }
     }
-    if (currentSection) sections.push(currentSection.trim());
+    if (currentSection.trim()) sections.push(currentSection.trim());
   }
 
-  return { sections: sections.length > 0 ? sections : [text], lines };
+  return {
+    sections: sections.length > 0 ? sections : [text],
+    lines: lines.filter((l) => l.trim()),
+  };
 }
 
 // 模拟解析时间测量
-export function measureParseTime<T>(fn: () => T): { result: T; time: number } {
+export function measureParseTime<T>(fn: () => T | Promise<T>): { result: Promise<T>; time: number } {
   const start = performance.now();
   const result = fn();
   const time = performance.now() - start;
-  return { result, time };
+  return { result: result instanceof Promise ? result : Promise.resolve(result), time };
 }

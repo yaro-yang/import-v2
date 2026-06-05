@@ -31,18 +31,30 @@ export async function POST(request: NextRequest) {
     // 解析文件为文本供 AI 分析
     if (fileType === "excel") {
       const { sheets } = await parseExcel(buffer);
-      const firstSheet = sheets[Object.keys(sheets)[0]];
+      const sheetNames = Object.keys(sheets);
+      // 发送所有 sheet 的摘要
+      const allContent: string[] = [];
+      for (const sn of sheetNames) {
+        const data = sheets[sn];
+        if (data) {
+          allContent.push(`--- Sheet: ${sn} (${data.length}行) ---`);
+          allContent.push(excelToText(data, 30));
+        }
+      }
+      fileContent = allContent.join("\n");
+      // 第一个 sheet 的前10行作为样本
+      const firstSheet = sheets[sheetNames[0]];
       if (firstSheet) {
-        fileContent = excelToText(firstSheet, 50);
         sampleRows = firstSheet.slice(0, 10).map((row) =>
           row.map((c) => String(c ?? ""))
         );
       }
     } else if (fileType === "word") {
-      fileContent = await parseWord(buffer);
+      const text = await parseWord(buffer);
+      fileContent = text.substring(0, 8000);
     } else if (fileType === "pdf") {
       const { fullText } = await parsePDF(buffer);
-      fileContent = fullText.substring(0, 5000);
+      fileContent = fullText.substring(0, 8000);
     }
 
     // 调用 AI 分析
