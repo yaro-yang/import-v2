@@ -63,9 +63,18 @@ export function RuleEditor({
   const [groupByExternalCode, setGroupByExternalCode] = useState(
     rule?.globalConfig?.groupByExternalCode || false
   );
-  const [mappings, setMappings] = useState<FieldMapping[]>(
-    rule?.fieldMappings || defaultFieldMappings
-  );
+  const [mappings, setMappings] = useState<FieldMapping[]>(() => {
+    // 如果 rule 带有 AI 分析后的 fieldMappings（含预填 columnName），直接使用
+    if (rule?.fieldMappings && rule.fieldMappings.length > 0) {
+      return defaultFieldMappings.map((def) => {
+        const aiMapping = rule.fieldMappings!.find(
+          (m) => m.targetField === def.targetField
+        );
+        return aiMapping ? { ...def, ...aiMapping } : def;
+      });
+    }
+    return defaultFieldMappings;
+  });
   const [skipTotalRow, setSkipTotalRow] = useState(
     rule?.postProcessing?.skipTotalRow || false
   );

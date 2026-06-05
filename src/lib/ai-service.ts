@@ -17,38 +17,55 @@ function getAIConfig(): AIModelConfig {
   };
 }
 
-// 构建 Prompt（简化版，提高 DeepSeek 免费模型的成功率）
+// 构建 Prompt（引导 AI 输出精确的列名匹配）
 function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
   const contentPreview = request.fileContent.substring(0, 6000);
-  return `你是出库单解析专家。分析以下${request.fileType.toUpperCase()}文件，输出JSON。
+  const fileTypeHint = request.fileType === "excel"
+    ? "这是Excel表格。第1行可能是大标题(如公司名)不是表头。真正的表头行通常在第2-4行，包含编码、名称、数量、规格、门店、收件人、电话、地址、单号、备注等列名。请找到正确的表头行，输出表头中的原始列名文字。"
+    : request.fileType === "word"
+      ? "Word纯文本段落。"
+      : "PDF文本。";
+
+  return `你是出库单解析专家。分析以下${request.fileType.toUpperCase()}文件表头，输出JSON。
+重要：columnName必须填写Excel表头行中的原始列名文字。
 
 文件名: ${request.fileName}
 
-${request.fileType === "excel" ? "Excel表格，第一行可能是标题行（非表头），表头通常在第2-4行。注意跳过公司名称、日期等干扰头部行。" : request.fileType === "word" ? "Word纯文本段落，每条记录可能用分隔线隔开。" : "PDF文本，可能有头部元信息、中间表格、底部收货信息。"}
+${fileTypeHint}
 
 内容:
 ${contentPreview}
 
-目标字段: skuCode(编码)、skuName(名称)、skuQuantity(数量)、skuSpec(规格)、storeName(门店)、recipientName(收件人)、recipientPhone(电话)、recipientAddress(地址)、externalCode(单号)、remark(备注)
+规则:
+1. headerRow: 表头所在行号(从0开始数)。如果第1行是公司名称/标题则headerRow至少为1
+2. skipRows: headerRow之前需要跳过的行数
+3. fieldMappings中每个字段的columnName必须是表头行中的原始列名文字,例如"物品编码"、"SKU名称"、"调入门店"、"收货人姓名"、"联系电话"
+4. 如果某个字段在表头中找不到对应列,columnName填null或空字符串
+5. storeName(收货门店)字段优先匹配含"调入/门店/收货店/店铺/客户"等关键词的列名，如"调入门店"
+6. recipientName/recipientPhone/recipientAddress只在表头明确存在时才映射,不要瞎猜
 
-输出JSON（不要其他内容）:
+输出纯JSON,不要markdown代码块,不要解释:
 {
-  "headerRow": 表头行号(0-based),
-  "skipRows": 表头前需跳过的行数,
+  "headerRow": 数字,
+  "skipRows": 数字,
   "fieldMappings": [
-    {"targetField": "字段名", "mode": "column_name", "columnName": "列名", "confidence": 0.8, "note": "依据"}
+    {"targetField": "skuCode", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.8},
+    {"targetField": "skuName", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.8},
+    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.8},
+    {"targetField": "skuSpec", "mode": "column_name", "columnName": null, "confidence": 0.3},
+    {"targetField": "storeName", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.6},
+    {"targetField": "externalCode", "mode": "column_name", "columnName": null, "confidence": 0.3},
+    {"targetField": "recipientName", "mode": "column_name", "columnName": null, "confidence": 0.2},
+    {"targetField": "recipientPhone", "mode": "column_name", "columnName": null, "confidence": 0.2},
+    {"targetField": "recipientAddress", "mode": "column_name", "columnName": null, "confidence": 0.2},
+    {"targetField": "remark", "mode": "column_name", "columnName": null, "confidence": 0.2}
   ],
-  "groupByExternalCode": true/false,
-  "skipTotalRow": true/false,
-  "totalRowPattern": "合计",
-  "mergeSheets": true/false,
-  "matrixMode": true/false,
-  "cardMode": true/false,
-  "cardStartMarker": "",
-  "compositeMode": true/false,
-  "compositeSeparator": "\\n",
-  "textRecordMarker": "",
-  "textSeparator": "",
+  "groupByExternalCode": false,
+  "skipTotalRow": false,
+  "mergeSheets": false,
+  "matrixMode": false,
+  "cardMode": false,
+  "compositeMode": false,
   "confidence": 0.7,
   "notes": "简要说明"
 }`;
@@ -159,7 +176,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     skuName: { keywords: ["名称", "物品名称", "品名", "产品名称", "商品名称", "SKU名称"], priority: 2 },
     skuQuantity: { keywords: ["数量", "发货数量", "件数", "出库数量", "配送数量", "订货数量", "出库数量"], priority: 3 },
     skuSpec: { keywords: ["规格", "型号", "规格型号", "单位", "库存单位"], priority: 4 },
-    storeName: { keywords: ["门店", "收货门店", "店铺", "客户名称", "收货单位", "收货机构", "调入门店"], priority: 5 },
+    storeName: { keywords: ["调入门店", "调入方", "收货门店", "门店", "店铺", "客户名称", "收货单位", "收货机构"], priority: 5 },
     recipientName: { keywords: ["收件人", "收货人", "联系人", "收件人姓名"], priority: 6 },
     recipientPhone: { keywords: ["电话", "手机", "联系方式", "收件人电话", "联系电话", "收货人手机号"], priority: 7 },
     recipientAddress: { keywords: ["地址", "收货地址", "收件人地址", "详细地址", "收货地址"], priority: 8 },
@@ -281,7 +298,7 @@ function fixCommonJSON(json: string): string {
   return result;
 }
 
-// 转换 AI 响应
+// 转换 AI 响应 — columnName 直接作为输入框预填值
 function convertAIResponse(
   parsed: Record<string, unknown>,
   request: AIAnalyzeRequest
@@ -290,30 +307,26 @@ function convertAIResponse(
   const rawMappings = (parsed.fieldMappings as Array<Record<string, unknown>>) || [];
 
   for (const m of rawMappings) {
+    const colName = (m.columnName as string) || null;
+    const colIdx = m.columnIndex !== null && m.columnIndex !== undefined ? Number(m.columnIndex) : null;
+    const staticVal = (m.staticValue as string) || null;
+
     fieldMappings.push({
       targetField: (m.targetField as string) || "",
-      suggestedSource: m.columnName
-        ? `列: "${m.columnName}"`
-        : m.columnIndex !== null && m.columnIndex !== undefined
-          ? `第${Number(m.columnIndex) + 1}列`
-          : m.staticValue
-            ? `静态值: "${m.staticValue}"`
-            : m.rowKeyPattern
-              ? `行匹配: "${m.rowKeyPattern}"`
-              : m.regexPattern
-                ? `正则: "${m.regexPattern}"`
-                : "未知",
-      confidence: (m.confidence as number) || 0.5,
-      note: (m.note as string) || "",
+      suggestedSource: colName
+        || (colIdx !== null ? `第${colIdx + 1}列` : "")
+        || (staticVal ? `${staticVal}` : ""),
+      confidence: (m.confidence as number) || (colName ? 0.7 : 0.3),
+      note: (m.note as string) || (colName ? `AI识别到列名"${colName}"` : "未找到明确对应，请手动填写"),
     });
   }
 
-  // 转换原始 mappings 为 FieldMapping 数组
+  // 转换原始 mappings 为 FieldMapping 数组 — columnName 直接填入 AI 推荐值
   const fieldMappingsFull: FieldMapping[] = rawMappings.map((m) => ({
     targetField: (m.targetField as string) || "",
     mode: (m.mode as FieldMapping["mode"]) || "column_name",
     columnIndex: m.columnIndex as number | undefined,
-    columnName: m.columnName as string | undefined,
+    columnName: (m.columnName as string) || undefined,
     regexPattern: m.regexPattern as string | undefined,
     regexGroup: m.regexGroup as number | undefined,
     rowKeyPattern: m.rowKeyPattern as string | undefined,
