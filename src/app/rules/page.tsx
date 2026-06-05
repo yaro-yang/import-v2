@@ -325,13 +325,13 @@ export default function RulesPage() {
             <div className="flex justify-end gap-3 mt-5">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="px-5 py-2 text-base font-medium rounded-sm border border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] transition-colors"
+                className="px-6 py-2.5 text-base font-medium rounded-sm border border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-5 py-2 text-base font-medium rounded-sm bg-[#cf1322] text-white hover:bg-[#b0101c] transition-colors shadow-[0_2px_8px_rgba(207,19,34,0.3)]"
+                className="px-6 py-2.5 text-base font-medium rounded-sm bg-[#cf1322] text-white hover:bg-[#b0101c] transition-colors shadow-[0_2px_8px_rgba(207,19,34,0.3)]"
               >
                 确认删除
               </button>
