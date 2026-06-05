@@ -20,6 +20,20 @@ interface RuleEditorProps {
   }>;
 }
 
+// 字段的中文名和图标
+const FIELD_LABELS: Record<string, { label: string; icon: string; required: boolean; placeholder: string }> = {
+  externalCode: { label: "单据号", icon: "📋", required: false, placeholder: "如: 配送单号、调拨单号" },
+  storeName: { label: "收货门店", icon: "🏪", required: false, placeholder: "如: 收货门店、调入方" },
+  recipientName: { label: "收件人姓名", icon: "👤", required: false, placeholder: "如: 收货人、联系人" },
+  recipientPhone: { label: "收件人电话", icon: "📞", required: false, placeholder: "如: 电话、手机号" },
+  recipientAddress: { label: "收件人地址", icon: "📍", required: false, placeholder: "如: 收货地址" },
+  skuCode: { label: "物品编码", icon: "🔢", required: true, placeholder: "如: 物品编码、SKU" },
+  skuName: { label: "物品名称", icon: "📦", required: true, placeholder: "如: 物品名称、品名" },
+  skuQuantity: { label: "发货数量", icon: "🔢", required: true, placeholder: "如: 数量、发货数量" },
+  skuSpec: { label: "规格型号", icon: "📏", required: false, placeholder: "如: 规格、型号、单位" },
+  remark: { label: "备注", icon: "📝", required: false, placeholder: "如: 备注、说明" },
+};
+
 const defaultFieldMappings: FieldMapping[] = [
   { targetField: "externalCode", mode: "column_name", columnName: "" },
   { targetField: "storeName", mode: "column_name", columnName: "" },
@@ -42,7 +56,7 @@ export function RuleEditor({
   aiFieldMappings = [],
 }: RuleEditorProps) {
   const [saving, setSaving] = useState(false);
-  const [name, setName] = useState(rule?.name || "");
+  const [name, setName] = useState(rule?.name || fileName ? `${fileName} - 解析规则` : "");
   const [description, setDescription] = useState(rule?.description || "");
   const [skipRows, setSkipRows] = useState(rule?.dataRegion?.skipRows || 0);
   const [headerRow, setHeaderRow] = useState(rule?.dataRegion?.headerRow || 0);
@@ -58,40 +72,22 @@ export function RuleEditor({
   const [totalRowPattern, setTotalRowPattern] = useState(
     rule?.postProcessing?.totalRowPattern || "合计"
   );
-  // 高级解析模式
-  const [matrixMode, setMatrixMode] = useState(
-    rule?.dataRegion?.matrixMode?.enabled || false
-  );
-  const [cardMode, setCardMode] = useState(
-    rule?.dataRegion?.cardMode?.enabled || false
-  );
-  const [cardStartMarker, setCardStartMarker] = useState(
-    rule?.dataRegion?.cardMode?.startMarker || ""
-  );
-  const [compositeMode, setCompositeMode] = useState(
-    rule?.dataRegion?.compositeMode?.enabled || false
-  );
-  const [compositeSeparator, setCompositeSeparator] = useState(
-    rule?.dataRegion?.compositeMode?.separator || "\n"
-  );
   const [mergeSheets, setMergeSheets] = useState(
     rule?.globalConfig?.mergeSheets || false
   );
-  // Word/PDF 文本解析
-  const [textRecordMarker, setTextRecordMarker] = useState(
-    rule?.postProcessing?.textRecordMarker || ""
-  );
-  const [textSeparator, setTextSeparator] = useState(
-    rule?.postProcessing?.textSeparator || ""
-  );
+
+  // 当前焦点字段（移动端分步编辑）
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const handleMappingChange = (
-    index: number,
-    field: keyof FieldMapping,
-    value: string | number | boolean
+    targetField: string,
+    field: "columnName" | "mode" | "required",
+    value: string | boolean
   ) => {
+    const idx = mappings.findIndex((m) => m.targetField === targetField);
+    if (idx === -1) return;
     const newMappings = [...mappings];
-    newMappings[index] = { ...newMappings[index], [field]: value };
+    newMappings[idx] = { ...newMappings[idx], [field]: value };
     setMappings(newMappings);
   };
 
@@ -113,21 +109,10 @@ export function RuleEditor({
         dataRegion: {
           skipRows,
           headerRow,
-          cardMode: cardMode
-            ? { enabled: true, startMarker: cardStartMarker }
-            : undefined,
-          matrixMode: matrixMode
-            ? { enabled: true }
-            : undefined,
-          compositeMode: compositeMode
-            ? { enabled: true, separator: compositeSeparator, pattern: "(.+?)x(\\d+)" }
-            : undefined,
         },
         postProcessing: {
           skipTotalRow,
           totalRowPattern,
-          textRecordMarker: textRecordMarker || undefined,
-          textSeparator: textSeparator || undefined,
         },
         createdAt: (rule as ParseRule)?.createdAt || now,
         updatedAt: now,
@@ -141,389 +126,273 @@ export function RuleEditor({
     }
   };
 
+  // 获取 AI 对该字段的分析信息
+  const getAIInfo = (targetField: string) =>
+    aiFieldMappings.find((fm) => fm.targetField === targetField);
+
+  // 统计映射完成情况
+  const filledCount = mappings.filter(
+    (m) => m.columnName?.trim()
+  ).length;
+  const requiredFilled = mappings.filter(
+    (m) => m.required && m.columnName?.trim()
+  ).length;
+  const requiredTotal = mappings.filter((m) => m.required).length;
+
+  const isAI = rule?.aiGenerated;
+  const aiConf = rule?.aiConfidence || 0;
+
   return (
-    <div className="space-y-6">
-      {/* 基本信息 */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-[#1d2129]">基本信息</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-[#4e5969] mb-1">规则名称</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="输入规则名称"
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-[#4e5969] mb-1">文件类型</label>
-            <input
-              type="text"
-              value={fileType.toUpperCase()}
-              disabled
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl bg-[#f7f8fa] text-[#86909c]"
-            />
+    <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+      {/* AI 生成提示横幅 */}
+      {isAI && (
+        <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+          aiConf > 0.7
+            ? "bg-gradient-to-r from-[#e8ffea] to-[#e8fafa] border-[#b5e8e8]"
+            : "bg-gradient-to-r from-[#fff7e6] to-[#fffbe6] border-[#ffd591]"
+        }`}>
+          <span className="text-2xl shrink-0">🤖</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#1d2129]">
+              DeepSeek 已预填字段映射
+            </p>
+            <p className="text-xs text-[#4e5969] mt-0.5">
+              整体置信度 {Math.round(aiConf * 100)}%，已自动填入 {filledCount}/{mappings.length} 个字段。
+              {aiConf < 0.7 && " 低置信度字段已标注，请重点检查。"}
+            </p>
           </div>
         </div>
-        <div>
-          <label className="block text-xs text-[#4e5969] mb-1">描述（可选）</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="规则描述..."
-            rows={2}
-            className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none resize-none"
-          />
+      )}
+
+      {/* 规则名称 */}
+      <div>
+        <label className="block text-xs font-semibold text-[#1d2129] mb-1.5">规则名称</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="输入规则名称，如：XX公司出库单解析规则"
+          className="w-full px-3 py-2.5 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-2 focus:ring-[#0fc6c2]/20 outline-none transition-shadow"
+        />
+      </div>
+
+      {/* 字段映射 - 卡片式，每个字段一张卡片 */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-[#1d2129]">字段映射</h3>
+            <p className="text-xs text-[#86909c] mt-0.5">
+              告诉系统每个字段对应文件中的哪一列
+            </p>
+          </div>
+          <span className="text-xs bg-[#f2f3f5] text-[#4e5969] px-2 py-1 rounded-full">
+            必填 {requiredFilled}/{requiredTotal} · 已填 {filledCount}/{mappings.length}
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          {mappings.map((mapping) => {
+            const info = FIELD_LABELS[mapping.targetField] || {
+              label: mapping.targetField,
+              icon: "📌",
+              required: false,
+              placeholder: "列名",
+            };
+            const aiInfo = getAIInfo(mapping.targetField);
+            const conf = aiInfo?.confidence || 0;
+            const isLowConf = conf > 0 && conf < 0.5;
+            const isFocused = focusedField === mapping.targetField;
+
+            return (
+              <div
+                key={mapping.targetField}
+                className={`rounded-xl border transition-all ${
+                  isFocused
+                    ? "border-[#0fc6c2] shadow-[0_0_0_2px_rgba(15,198,194,0.15)] bg-white"
+                    : mapping.columnName
+                      ? "border-[#e5e6eb] bg-white"
+                      : mapping.required
+                        ? "border-[#ffece8] bg-[#fffbfa]"
+                        : "border-[#e5e6eb] bg-[#fafbfc]"
+                } p-3`}
+                onClick={() => setFocusedField(mapping.targetField)}
+              >
+                {/* 字段头 */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">{info.icon}</span>
+                  <span className="text-sm font-medium text-[#1d2129]">{info.label}</span>
+                  {info.required && (
+                    <span className="text-[#cf1322] text-xs font-bold">*必填</span>
+                  )}
+                  {/* AI 推断标签 */}
+                  {aiInfo && (
+                    <span
+                      className={`ml-auto inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                        isLowConf
+                          ? "bg-[#fff7e6] text-[#ff7d00]"
+                          : conf >= 0.75
+                            ? "bg-[#e8ffea] text-[#00b42a]"
+                            : "bg-[#f2f3f5] text-[#86909c]"
+                      }`}
+                      title={aiInfo.note || `置信度: ${Math.round(conf * 100)}%`}
+                    >
+                      {isLowConf ? "⚠️ 推测" : conf >= 0.75 ? "✅ 确认" : "💡 参考"}
+                      {" "}{Math.round(conf * 100)}%
+                    </span>
+                  )}
+                </div>
+
+                {/* 输入区 */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={mapping.columnName || ""}
+                    onChange={(e) =>
+                      handleMappingChange(mapping.targetField, "columnName", e.target.value)
+                    }
+                    placeholder={aiInfo?.suggestedSource || info.placeholder}
+                    className={`flex-1 px-3 py-2 text-sm border rounded-lg outline-none transition-all ${
+                      isLowConf
+                        ? "border-[#ffd591] bg-[#fffbe6] focus:border-[#ff7d00] focus:ring-2 focus:ring-[#ff7d00]/10"
+                        : "border-[#e5e6eb] focus:border-[#0fc6c2] focus:ring-2 focus:ring-[#0fc6c2]/10"
+                    }`}
+                    onFocus={() => setFocusedField(mapping.targetField)}
+                  />
+                  {!info.required && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMappingChange(mapping.targetField, "columnName", "");
+                      }}
+                      className={`shrink-0 text-xs px-2 py-2 rounded-lg transition-colors ${
+                        mapping.columnName
+                          ? "text-[#86909c] hover:text-[#cf1322] hover:bg-[#ffece8]"
+                          : "text-[#c9cdd4]"
+                      }`}
+                      title="清除此字段"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* AI 推测说明 */}
+                {aiInfo?.note && isFocused && (
+                  <p className="text-[10px] text-[#86909c] mt-1.5 pl-1">
+                    💡 {aiInfo.note}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* 数据区配置 */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-[#1d2129]">数据区配置</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs text-[#4e5969] mb-1">
-              跳过干扰头部行数
-            </label>
-            <input
-              type="number"
-              value={skipRows}
-              onChange={(e) => setSkipRows(Number(e.target.value))}
-              min={0}
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-            />
+      {/* 数据区域配置 - 折叠式 */}
+      <details className="group">
+        <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-[#1d2129] py-2 select-none">
+          <svg className="w-4 h-4 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+          数据区位置与高级选项
+          <span className="text-xs text-[#86909c] font-normal ml-auto">可选</span>
+        </summary>
+        <div className="mt-2 space-y-3 pl-6">
+          {/* 表头和数据起始行 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-[#4e5969] mb-1">
+                表头行号（0开始）
+              </label>
+              <input
+                type="number"
+                value={headerRow}
+                onChange={(e) => setHeaderRow(Number(e.target.value))}
+                min={0}
+                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              />
+              <p className="text-[10px] text-[#86909c] mt-0.5">第1行是标题？填0</p>
+            </div>
+            <div>
+              <label className="block text-xs text-[#4e5969] mb-1">
+                跳过干扰头部行数
+              </label>
+              <input
+                type="number"
+                value={skipRows}
+                onChange={(e) => setSkipRows(Number(e.target.value))}
+                min={0}
+                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
+              />
+              <p className="text-[10px] text-[#86909c] mt-0.5">表头前的无关行</p>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-[#4e5969] mb-1">
-              表头行（0-based）
-            </label>
-            <input
-              type="number"
-              value={headerRow}
-              onChange={(e) => setHeaderRow(Number(e.target.value))}
-              min={0}
-              className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-            />
-          </div>
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 cursor-pointer">
+
+          {/* 选项 */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer py-1">
               <input
                 type="checkbox"
                 checked={groupByExternalCode}
                 onChange={(e) => setGroupByExternalCode(e.target.checked)}
-                className="accent-[#0fc6c2]"
+                className="accent-[#0fc6c2] w-4 h-4"
               />
-              <span className="text-sm text-[#4e5969]">按外部编码聚合</span>
+              <span className="text-sm text-[#4e5969]">按单据号聚合多行</span>
+              <span className="text-xs text-[#86909c]">（同单号多物品合并为一条）</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer py-1">
+              <input
+                type="checkbox"
+                checked={skipTotalRow}
+                onChange={(e) => setSkipTotalRow(e.target.checked)}
+                className="accent-[#0fc6c2] w-4 h-4"
+              />
+              <span className="text-sm text-[#4e5969]">跳过合计行</span>
+              {skipTotalRow && (
+                <input
+                  type="text"
+                  value={totalRowPattern}
+                  onChange={(e) => setTotalRowPattern(e.target.value)}
+                  className="px-2 py-0.5 text-xs border border-[#e5e6eb] rounded-lg focus:border-[#0fc6c2] outline-none w-20"
+                />
+              )}
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer py-1">
+              <input
+                type="checkbox"
+                checked={mergeSheets}
+                onChange={(e) => setMergeSheets(e.target.checked)}
+                className="accent-[#0fc6c2] w-4 h-4"
+              />
+              <span className="text-sm text-[#4e5969]">合并所有Sheet</span>
+              <span className="text-xs text-[#86909c]">（多门店分Sheet场景）</span>
             </label>
           </div>
         </div>
-      </div>
+      </details>
 
-      {/* 高级解析模式 */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-[#1d2129]">高级解析模式</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* 矩阵转置 */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={matrixMode}
-              onChange={(e) => setMatrixMode(e.target.checked)}
-              className="accent-[#0fc6c2]"
-            />
-            <span className="text-sm text-[#4e5969]">矩阵转置模式</span>
-            <span className="text-xs text-[#86909c]">（SKU×门店矩阵）</span>
-          </label>
-
-          {/* 卡片式布局 */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={cardMode}
-              onChange={(e) => setCardMode(e.target.checked)}
-              className="accent-[#0fc6c2]"
-            />
-            <span className="text-sm text-[#4e5969]">卡片式布局</span>
-            <span className="text-xs text-[#86909c]">（调拨记录卡片）</span>
-          </label>
-          {cardMode && (
-            <div className="sm:col-span-2">
-              <label className="block text-xs text-[#4e5969] mb-1">卡片起始标志</label>
-              <input
-                type="text"
-                value={cardStartMarker}
-                onChange={(e) => setCardStartMarker(e.target.value)}
-                placeholder="如：▶ 调拨记录"
-                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-              />
-            </div>
-          )}
-
-          {/* 复合单元格拆分 */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={compositeMode}
-              onChange={(e) => setCompositeMode(e.target.checked)}
-              className="accent-[#0fc6c2]"
-            />
-            <span className="text-sm text-[#4e5969]">复合单元格拆分</span>
-            <span className="text-xs text-[#86909c]">（物品名x数量）</span>
-          </label>
-          {compositeMode && (
-            <div>
-              <label className="block text-xs text-[#4e5969] mb-1">分隔符</label>
-              <input
-                type="text"
-                value={compositeSeparator}
-                onChange={(e) => setCompositeSeparator(e.target.value)}
-                placeholder="默认换行符 \\n"
-                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-              />
-            </div>
-          )}
-
-          {/* 合并所有Sheet */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={mergeSheets}
-              onChange={(e) => setMergeSheets(e.target.checked)}
-              className="accent-[#0fc6c2]"
-            />
-            <span className="text-sm text-[#4e5969]">合并所有Sheet</span>
-            <span className="text-xs text-[#86909c]">（多门店分Sheet）</span>
-          </label>
+      {/* 底部操作 */}
+      <div className="flex items-center justify-between pt-4 border-t border-[#e5e6eb]">
+        <p className="text-xs text-[#86909c]">
+          完成字段映射后保存即可解析
+        </p>
+        <div className="flex gap-2.5">
+          <Button variant="secondary" onClick={onCancel} disabled={saving}>
+            取消
+          </Button>
+          <Button
+            onClick={handleSave}
+            loading={saving}
+            disabled={requiredFilled < requiredTotal}
+          >
+            {requiredFilled < requiredTotal
+              ? `请填写 ${requiredTotal - requiredFilled} 个必填字段`
+              : "保存规则"}
+          </Button>
         </div>
-      </div>
-
-      {/* Word/PDF 文本解析配置 */}
-      {(fileType === "word" || fileType === "pdf") && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-[#1d2129]">文本解析配置</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-[#4e5969] mb-1">记录分隔标志</label>
-              <input
-                type="text"
-                value={textRecordMarker}
-                onChange={(e) => setTextRecordMarker(e.target.value)}
-                placeholder="如：━━━"
-                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-[#4e5969] mb-1">文本分隔符</label>
-              <input
-                type="text"
-                value={textSeparator}
-                onChange={(e) => setTextSeparator(e.target.value)}
-                placeholder="如：|"
-                className="w-full px-3 py-2 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2] outline-none"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 额外处理 */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-[#1d2129]">额外处理</h3>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={skipTotalRow}
-              onChange={(e) => setSkipTotalRow(e.target.checked)}
-              className="accent-[#0fc6c2]"
-            />
-            <span className="text-sm text-[#4e5969]">跳过合计行</span>
-          </label>
-          {skipTotalRow && (
-            <input
-              type="text"
-              value={totalRowPattern}
-              onChange={(e) => setTotalRowPattern(e.target.value)}
-              placeholder="合计行匹配模式"
-              className="px-3 py-1.5 text-sm border border-[#e5e6eb] rounded-xl focus:border-[#0fc6c2] outline-none w-40"
-            />
-          )}
-        </div>
-      </div>
-
-      {/* 字段映射 */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[#1d2129]">字段映射</h3>
-          {rule?.aiGenerated && (
-            <span className="text-xs bg-[#e8fafa] text-[#0b6e6e] px-2 py-0.5 rounded-full">
-              🤖 AI 生成 · 置信度 {rule.aiConfidence ? `${(rule.aiConfidence * 100).toFixed(0)}%` : "未知"}
-            </span>
-          )}
-        </div>
-        {/* AI 推测提示 */}
-        {aiFieldMappings.length > 0 && (
-          <div className="p-2.5 bg-[#fff7e6] rounded-lg border border-[#ffd591] flex items-start gap-2">
-            <span className="text-sm shrink-0">💡</span>
-            <p className="text-xs text-[#86909c] leading-relaxed">
-              以下字段中，<strong className="text-[#ff7d00]">橙色标注 ⚠️ 推测</strong>表示 AI 置信度较低（&lt;50%），<strong className="text-[#ff7d00]">黄色 💡 参考</strong>表示中等置信度（50%~75%），<strong>绿色 ✅ 确认</strong>表示高置信度（&gt;75%）。
-              请重点检查标注为推测的字段是否正确。
-            </p>
-          </div>
-        )}
-        <div className="border border-[#e5e6eb] rounded-xl overflow-hidden">
-          <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 bg-[#f7f8fa] border-b border-[#e5e6eb] text-xs font-semibold text-[#4e5969]">
-            <div className="col-span-3 lg:col-span-3">目标字段</div>
-            <div className="col-span-3 lg:col-span-3">映射模式</div>
-            <div className="col-span-3 lg:col-span-3">列名/值</div>
-            <div className="col-span-1 lg:col-span-1">必填</div>
-            <div className="col-span-2 lg:col-span-2">AI 推断</div>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {mappings.map((mapping, index) => {
-              // 查找对应的 AI 映射信息
-              const aiInfo = aiFieldMappings.find(
-                (fm) => fm.targetField === mapping.targetField
-              );
-              const conf = aiInfo?.confidence || 0;
-              const isLow = conf > 0 && conf < 0.5;
-              const isMedium = conf >= 0.5 && conf < 0.75;
-              const isHigh = conf >= 0.75;
-
-              return (
-              <div
-                key={index}
-                className="grid grid-cols-1 sm:grid-cols-12 gap-2 px-3 lg:px-4 py-2.5 sm:py-2 border-b border-[#f2f3f5] text-sm"
-              >
-                <div className="sm:col-span-3 lg:col-span-3 flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">目标字段：</span>
-                  <span className="text-[#1d2129] font-medium">
-                    {mapping.targetField}
-                  </span>
-                  {mapping.required && (
-                    <span className="text-[#cf1322] ml-1">*</span>
-                  )}
-                </div>
-                <div className="sm:col-span-3 lg:col-span-3">
-                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">映射模式：</span>
-                  <select
-                    value={mapping.mode}
-                    onChange={(e) =>
-                      handleMappingChange(index, "mode", e.target.value)
-                    }
-                    className="w-full px-2 py-1 text-xs border border-[#e5e6eb] rounded focus:border-[#0fc6c2] outline-none bg-white"
-                  >
-                    <option value="column_name">列名匹配</option>
-                    <option value="column_index">列索引</option>
-                    <option value="static_value">静态值</option>
-                    <option value="tail_extract">尾部提取</option>
-                    <option value="row_field">行字段匹配</option>
-                    <option value="regex_extract">正则提取</option>
-                    <option value="ai_infer">AI 推断</option>
-                  </select>
-                </div>
-                <div className="sm:col-span-3 lg:col-span-3">
-                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">列名/值：</span>
-                  {mapping.mode === "column_index" ? (
-                    <input
-                      type="number"
-                      value={mapping.columnIndex || ""}
-                      onChange={(e) =>
-                        handleMappingChange(
-                          index,
-                          "columnIndex",
-                          Number(e.target.value)
-                        )
-                      }
-                      placeholder="列索引"
-                      className="w-full px-2 py-1 text-xs border border-[#e5e6eb] rounded focus:border-[#0fc6c2] outline-none"
-                    />
-                  ) : mapping.mode === "static_value" ? (
-                    <input
-                      type="text"
-                      value={mapping.staticValue || ""}
-                      onChange={(e) =>
-                        handleMappingChange(index, "staticValue", e.target.value)
-                      }
-                      placeholder="静态值"
-                      className="w-full px-2 py-1 text-xs border border-[#e5e6eb] rounded focus:border-[#0fc6c2] outline-none"
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      value={mapping.columnName || ""}
-                      onChange={(e) =>
-                        handleMappingChange(index, "columnName", e.target.value)
-                      }
-                      placeholder="列名"
-                      className="w-full px-2 py-1 text-xs border border-[#e5e6eb] rounded focus:border-[#0fc6c2] outline-none"
-                    />
-                  )}
-                </div>
-                <div className="sm:col-span-1 lg:col-span-1 flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[#4e5969] sm:hidden">必填：</span>
-                  <input
-                    type="checkbox"
-                    checked={mapping.required || false}
-                    onChange={(e) =>
-                      handleMappingChange(index, "required", e.target.checked)
-                    }
-                    className="accent-[#0fc6c2]"
-                  />
-                </div>
-                {/* AI 推断标注列 */}
-                <div className="sm:col-span-2 lg:col-span-2 flex items-center gap-1">
-                  {aiInfo ? (
-                    <span
-                      className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${
-                        isLow
-                          ? "bg-[#fff7e6] text-[#ff7d00] border border-[#ffd591]"
-                          : isMedium
-                            ? "bg-[#fffbe6] text-[#ff7d00]"
-                            : isHigh
-                              ? "bg-[#e8ffea] text-[#00b42a]"
-                              : "bg-[#f2f3f5] text-[#86909c]"
-                      }`}
-                      title={aiInfo.note || `置信度: ${(conf * 100).toFixed(0)}%`}
-                    >
-                      {isLow ? "⚠️ 推测" : isMedium ? "💡 参考" : isHigh ? "✅ 确认" : "—"}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-[#c9cdd4]">—</span>
-                  )}
-                </div>
-              </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* AI 分析说明 */}
-      {rule?.aiNotes && (
-        <div className="p-3 bg-[#e8fafa] border border-[#b5e8e8] rounded-xl">
-          <p className="text-sm font-semibold text-[#0b6e6e] mb-1">
-            🤖 AI 分析说明
-          </p>
-          <p className="text-xs text-[#4e5969]">{rule.aiNotes}</p>
-          {rule.aiConfidence !== undefined && (
-            <p className="text-xs text-[#86909c] mt-1">
-              置信度: {(rule.aiConfidence * 100).toFixed(0)}%
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* 操作按钮 */}
-      <div className="flex justify-end gap-3 pt-4 border-t border-[#e5e6eb]">
-        <Button variant="secondary" onClick={onCancel} disabled={saving}>
-          取消
-        </Button>
-        <Button onClick={handleSave} loading={saving}>
-          保存规则
-        </Button>
       </div>
     </div>
   );
