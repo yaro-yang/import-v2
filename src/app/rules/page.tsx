@@ -148,24 +148,29 @@ export default function RulesPage() {
 
         {/* 状态标签栏 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-4 lg:px-5">
-          <div className="flex items-center gap-1 overflow-x-auto">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
             <span className="text-base text-[#4e5969] whitespace-nowrap mr-2">规则类型</span>
             {[
-              { key: "all", label: "全部", count: 0 },
-              { key: "excel", label: "Excel", count: 0 },
-              { key: "word", label: "Word", count: 0 },
-              { key: "pdf", label: "PDF", count: 0 },
-              { key: "ai", label: "AI生成", count: 0 },
+              { key: "all", label: "全部", count: 0, badge: false },
+              { key: "excel", label: "Excel", count: 0, badge: false },
+              { key: "word", label: "Word", count: 0, badge: false },
+              { key: "pdf", label: "PDF", count: 0, badge: false },
+              { key: "ai", label: "AI生成", count: 0, badge: false },
             ].map((t) => (
               <button
                 key={t.key}
-                className={`px-4 py-2.5 text-base font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-base font-medium whitespace-nowrap rounded-md transition-colors ${
                   t.key === "all"
-                    ? "text-[#0fc6c2] border-[#0fc6c2]"
-                    : "text-[#4e5969] border-transparent hover:text-[#0fc6c2]"
+                    ? "bg-[#e8fafa] text-[#0fc6c2]"
+                    : "text-[#4e5969] hover:bg-[#f7f8fa] hover:text-[#0fc6c2]"
                 }`}
               >
                 {t.label}
+                {t.badge && t.count > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full bg-[#ff4d4f] text-white">
+                    {t.count > 99 ? "99+" : t.count}
+                  </span>
+                )}
               </button>
             ))}
           </div>

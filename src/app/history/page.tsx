@@ -105,39 +105,34 @@ export default function HistoryPage() {
                 查看已提交的历史运单，支持筛选与导出
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {orders.length > 0 && (
-                <Button variant="secondary" size="sm" onClick={handleExportAll}>
-                  导出
-                </Button>
-              )}
-              <Button size="sm" onClick={() => (window.location.href = "/")}>
-                前往导入
-              </Button>
-            </div>
           </div>
         </div>
 
         {/* 状态标签栏 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-4 lg:px-5">
-          <div className="flex items-center gap-1 overflow-x-auto">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
             <span className="text-base text-[#4e5969] whitespace-nowrap mr-2">运单状态</span>
             {[
-              { key: "all", label: "全部", count: 0 },
-              { key: "submitted", label: "已出库", count: 0 },
-              { key: "shipping", label: "运输中", count: 0 },
-              { key: "done", label: "调拨完成", count: 0 },
-              { key: "cancelled", label: "已取消", count: 0 },
+              { key: "all", label: "全部", count: 0, badge: false },
+              { key: "submitted", label: "已出库", count: 0, badge: false },
+              { key: "shipping", label: "运输中", count: 0, badge: false },
+              { key: "done", label: "调拨完成", count: 0, badge: false },
+              { key: "cancelled", label: "已取消", count: 0, badge: false },
             ].map((t) => (
               <button
                 key={t.key}
-                className={`px-4 py-2.5 text-base font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-base font-medium whitespace-nowrap rounded-md transition-colors ${
                   t.key === "all"
-                    ? "text-[#0fc6c2] border-[#0fc6c2]"
-                    : "text-[#4e5969] border-transparent hover:text-[#0fc6c2]"
+                    ? "bg-[#e8fafa] text-[#0fc6c2]"
+                    : "text-[#4e5969] hover:bg-[#f7f8fa] hover:text-[#0fc6c2]"
                 }`}
               >
                 {t.label}
+                {t.badge && t.count > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full bg-[#ff4d4f] text-white">
+                    {t.count > 99 ? "99+" : t.count}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -183,6 +178,29 @@ export default function HistoryPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 操作按钮行 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button size="sm" onClick={() => (window.location.href = "/")}>
+          + 新增
+        </Button>
+        <Button size="sm" onClick={() => toast("批量审核功能待接入")}>
+          审核
+        </Button>
+        <Button size="sm" onClick={() => toast("批量导入功能待接入")}>
+          导入
+        </Button>
+        {orders.length > 0 && (
+          <>
+            <Button variant="secondary" size="sm" onClick={handleExportAll}>
+              导出
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => toast("导出明细功能待接入")}>
+              导出明细
+            </Button>
+          </>
+        )}
       </div>
 
       {/* 数据列表 - 卡片式 */}
