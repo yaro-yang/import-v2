@@ -14,7 +14,7 @@ function SidebarIcon({ type }: { type: string }) {
   switch (type) {
     case "import":
       return (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
@@ -22,14 +22,14 @@ function SidebarIcon({ type }: { type: string }) {
       );
     case "settings":
       return (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
       );
     case "list":
       return (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="8" y1="6" x2="21" y2="6" />
           <line x1="8" y1="12" x2="21" y2="12" />
           <line x1="8" y1="18" x2="21" y2="18" />
@@ -87,7 +87,7 @@ export function Navigation() {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 py-8 px-3 space-y-2 overflow-y-auto">
+        <nav className="flex-1 py-10 px-3 space-y-4 overflow-y-auto">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -98,14 +98,14 @@ export function Navigation() {
                 key={item.href}
                 href={item.href}
                 onClick={handleNavClick}
-                className={`relative flex items-center gap-3 mx-2 px-4 py-[26px] rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`relative flex items-center gap-3 mx-2 px-4 py-[30px] rounded-lg text-base font-medium transition-all duration-200 ${
                   isActive
                     ? "bg-gradient-to-r from-[#0fc6c2] via-[#0fc6c2]/65 to-transparent text-white shadow-[0_6px_18px_rgba(15,198,194,0.3)]"
                     : "text-[#8faab5] hover:bg-[#22404b] hover:text-white"
                 }`}
               >
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-8 bg-white rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-9 bg-white rounded-r-full" />
                 )}
                 <SidebarIcon type={item.icon} />
                 <span>{item.label}</span>

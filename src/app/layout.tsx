@@ -18,7 +18,7 @@ export default function RootLayout({
       <body>
         <Navigation />
         <main className="main-content ml-[200px] lg:ml-[200px] mt-[56px] min-h-[calc(100vh-56px)] bg-[#f7f8fa] flex flex-col">
-          <div className="flex-1 w-full max-w-[1400px] mx-auto px-5 lg:px-8 py-10 lg:py-14">
+          <div className="flex-1 w-full max-w-[1400px] mx-auto px-5 lg:px-8 py-20 lg:py-28">
             {children}
           </div>
         </main>
