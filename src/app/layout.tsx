@@ -17,8 +17,19 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         <Navigation />
-        <main className="main-content ml-[200px] lg:ml-[200px] mt-[56px] min-h-[calc(100vh-56px)] bg-[#f7f8fa] flex flex-col">
-          <div className="flex-1 w-full max-w-[1400px] mx-auto px-5 lg:px-8 py-20 lg:py-28">
+        <main
+          className="main-content bg-[#f7f8fa]"
+          style={{
+            marginLeft: 240,
+            marginTop: 56,
+            minHeight: "calc(100vh - 56px)",
+            paddingLeft: 80,
+            paddingRight: 32,
+            paddingTop: 96,
+            paddingBottom: 48,
+          }}
+        >
+          <div className="w-full max-w-[1280px]">
             {children}
           </div>
         </main>

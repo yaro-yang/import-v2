@@ -14,7 +14,7 @@ function SidebarIcon({ type }: { type: string }) {
   switch (type) {
     case "import":
       return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
@@ -22,14 +22,14 @@ function SidebarIcon({ type }: { type: string }) {
       );
     case "settings":
       return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
       );
     case "list":
       return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="8" y1="6" x2="21" y2="6" />
           <line x1="8" y1="12" x2="21" y2="12" />
           <line x1="8" y1="18" x2="21" y2="18" />
@@ -72,12 +72,12 @@ export function Navigation() {
     <>
       {/* 左侧深色导航栏 */}
       <aside
-        className={`sidebar-panel fixed left-0 top-0 bottom-0 w-[200px] bg-[#1a2e35] z-50 flex flex-col lg:translate-x-0 ${
+        className={`sidebar-panel fixed left-0 top-0 bottom-0 w-[240px] bg-[#1a2e35] z-50 flex flex-col lg:translate-x-0 ${
           sidebarOpen ? "open" : ""
         }`}
       >
         {/* Logo 区域 */}
-        <div className="h-[56px] flex items-center px-5 border-b border-white/10">
+        <div className="h-[56px] flex items-center px-6 border-b border-white/10">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center">
               <span className="text-white font-bold text-sm">U</span>
@@ -87,7 +87,7 @@ export function Navigation() {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 py-10 px-3 space-y-4 overflow-y-auto">
+        <nav className="flex-1 py-8 px-4 space-y-5 overflow-y-auto">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -98,14 +98,19 @@ export function Navigation() {
                 key={item.href}
                 href={item.href}
                 onClick={handleNavClick}
-                className={`relative flex items-center gap-3 mx-2 px-4 py-[30px] rounded-lg text-base font-medium transition-all duration-200 ${
+                className={`relative flex items-center gap-3.5 rounded-lg text-base font-medium transition-all duration-200 ${
                   isActive
-                    ? "bg-gradient-to-r from-[#0fc6c2] via-[#0fc6c2]/65 to-transparent text-white shadow-[0_6px_18px_rgba(15,198,194,0.3)]"
+                    ? "bg-gradient-to-r from-[#0fc6c2] via-[#0fc6c2]/60 to-transparent text-white shadow-[0_8px_20px_rgba(15,198,194,0.35)]"
                     : "text-[#8faab5] hover:bg-[#22404b] hover:text-white"
                 }`}
+                style={{
+                  paddingLeft: 20,
+                  paddingRight: 20,
+                  height: 60,
+                }}
               >
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-9 bg-white rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-10 bg-white rounded-r-full" />
                 )}
                 <SidebarIcon type={item.icon} />
                 <span>{item.label}</span>
@@ -115,7 +120,7 @@ export function Navigation() {
         </nav>
 
         {/* 底部版本信息 */}
-        <div className="mt-auto px-5 py-4 border-t border-white/10">
+        <div className="mt-auto px-6 py-4 border-t border-white/10">
           <p className="text-sm text-[#4a9a95]">万能导入 V2</p>
         </div>
       </aside>
@@ -129,7 +134,7 @@ export function Navigation() {
       )}
 
       {/* 顶部标题栏 */}
-      <header className="top-header fixed left-[200px] right-0 top-0 h-[56px] bg-white border-b border-[#e5e6eb] z-40 flex items-center justify-between px-4 lg:px-6">
+      <header className="top-header fixed left-[240px] right-0 top-0 h-[56px] bg-white border-b border-[#e5e6eb] z-40 flex items-center justify-between px-4 lg:px-6">
         <div className="flex items-center gap-3">
           {/* 汉堡菜单按钮（小屏下显示） */}
           <button
