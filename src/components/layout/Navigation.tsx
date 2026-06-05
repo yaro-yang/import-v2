@@ -87,7 +87,7 @@ export function Navigation() {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 py-4 px-3 space-y-1">
+        <nav className="flex-1 py-4 px-2 space-y-1">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -98,17 +98,17 @@ export function Navigation() {
                 key={item.href}
                 href={item.href}
                 onClick={handleNavClick}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                className={`relative flex items-center gap-3 pl-4 pr-4 py-3.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? "bg-[#0fc6c2] text-white shadow-lg shadow-[#0fc6c2]/20"
+                    ? "bg-[#0d262b] text-white"
                     : "text-[#a8c0c7] hover:bg-[#243d45] hover:text-white"
                 }`}
               >
+                {isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#0fc6c2] rounded-r-full" />
+                )}
                 <SidebarIcon type={item.icon} />
                 <span>{item.label}</span>
-                {isActive && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/80" />
-                )}
               </Link>
             );
           })}
@@ -116,7 +116,7 @@ export function Navigation() {
 
         {/* 底部版本信息 */}
         <div className="mt-auto px-5 py-4 border-t border-white/10">
-          <p className="text-xs text-[#4a9a95]">万能导入 V2</p>
+          <p className="text-sm text-[#4a9a95]">万能导入 V2</p>
         </div>
       </aside>
 
@@ -159,12 +159,6 @@ export function Navigation() {
           </h2>
         </div>
         <div className="flex items-center gap-3 lg:gap-4 text-sm text-[#86909c]">
-          <div className="w-7 h-7 rounded-full bg-[#e8fafa] flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </div>
         </div>
       </header>
 
