@@ -87,7 +87,7 @@ export function Navigation() {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 py-8 px-3 space-y-2">
+        <nav className="flex-1 py-6 px-3 space-y-1">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -98,14 +98,14 @@ export function Navigation() {
                 key={item.href}
                 href={item.href}
                 onClick={handleNavClick}
-                className={`relative flex items-center gap-3 mx-3 px-4 py-[14px] rounded-md text-sm font-medium transition-all duration-150 ${
+                className={`relative flex items-center gap-3 mx-2 px-4 py-[20px] rounded-lg text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? "bg-gradient-to-r from-[#0fc6c2]/20 to-transparent text-white"
+                    ? "bg-gradient-to-r from-[#0fc6c2] via-[#0fc6c2]/70 to-[#0fc6c2]/20 text-white shadow-[0_4px_12px_rgba(15,198,194,0.25)]"
                     : "text-[#8faab5] hover:bg-[#22404b] hover:text-white"
                 }`}
               >
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[20px] bg-[#0fc6c2] rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[28px] bg-white rounded-r-full" />
                 )}
                 <SidebarIcon type={item.icon} />
                 <span>{item.label}</span>

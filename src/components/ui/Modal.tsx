@@ -51,7 +51,7 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 lg:p-4">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center p-3 lg:p-4 pt-20 lg:pt-24">
       {/* 遮罩 */}
       <div
         className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${
@@ -61,7 +61,7 @@ export function Modal({
       />
       {/* 内容 */}
       <div
-        className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12),0_2px_6px_rgba(0,0,0,0.06)] max-h-[90vh] lg:max-h-[85vh] flex flex-col transition-all duration-300 ${
+        className={`relative w-full ${sizeClasses[size]} bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12),0_2px_6px_rgba(0,0,0,0.06)] max-h-[calc(100vh-120px)] lg:max-h-[calc(100vh-120px)] flex flex-col transition-all duration-300 ${
           visible
             ? "opacity-100 translate-y-0 scale-100"
             : "opacity-0 translate-y-4 scale-95"
