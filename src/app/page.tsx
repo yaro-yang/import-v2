@@ -321,9 +321,9 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-5 page-container">
+    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-5 lg:py-8 space-y-4 lg:space-y-5 page-container">
       {/* 步骤指示器 - 卡片式 */}
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4">
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
         <div className="flex items-center gap-1 lg:gap-2 flex-wrap">
           {[
             { key: "upload", label: "上传文件" },
@@ -346,7 +346,7 @@ export default function HomePage() {
                   />
                 )}
                 <div
-                  className={`flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3 py-1 lg:py-1.5 rounded text-[11px] lg:text-xs font-medium transition-colors step-indicator-sm ${
+                  className={`flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-4 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-colors step-indicator-sm ${
                     isCurrent
                       ? "bg-[#0fc6c2] text-white"
                       : isActive
@@ -371,7 +371,7 @@ export default function HomePage() {
 
       {/* 步骤 1: 上传文件 */}
       {step === "upload" && (
-        <div key="upload" className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6 animate-fade-in card-padding-sm">
+        <div key="upload" className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-8 animate-fade-in card-padding-sm">
           <FileUploader onFileSelect={handleFileSelect} />
         </div>
       )}
@@ -380,16 +380,16 @@ export default function HomePage() {
       {step === "select-rule" && file && (
         <div className="animate-fade-in space-y-4 lg:space-y-5">
           {/* 文件信息卡片 */}
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
             <div className="flex items-center gap-3 lg:gap-4">
               <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-lg bg-[#e8fafa] flex items-center justify-center text-[#0fc6c2] flex-shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#1d2129] truncate">
+                <p className="text-base font-medium text-[#1d2129] truncate">
                   {file.name}
                 </p>
-                <p className="text-xs text-[#86909c]">
+                <p className="text-sm text-[#86909c] mt-0.5">
                   {formatFileSize(file.size)} ·{" "}
                   {file.name.split(".").pop()?.toUpperCase()}
                 </p>
@@ -401,7 +401,7 @@ export default function HomePage() {
           </div>
 
           {/* 规则选择卡片 */}
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
             <RuleSelector
               rules={rules}
               selectedRuleId={selectedRuleId}
@@ -412,7 +412,7 @@ export default function HomePage() {
           </div>
 
           {/* 操作栏卡片 */}
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
             <div className="flex items-center justify-end gap-3">
               <Button
                 onClick={handleParse}
@@ -440,27 +440,27 @@ export default function HomePage() {
       {step === "preview" && (
         <div className="animate-fade-in space-y-4 lg:space-y-5">
           {/* 统计信息卡片 */}
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
             <div className="flex items-center gap-4 lg:gap-8 flex-wrap">
               <div>
-                <p className="text-xs text-[#86909c] mb-0.5">总数据</p>
-                <p className="text-lg font-semibold text-[#1d2129]">
+                <p className="text-sm text-[#86909c] mb-1">总数据</p>
+                <p className="text-2xl font-semibold text-[#1d2129]">
                   {orders.length} 条
                 </p>
               </div>
-              <div className="w-[1px] h-10 bg-[#e5e6eb] hidden sm:block" />
+              <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
               <div>
-                <p className="text-xs text-[#86909c] mb-0.5">解析耗时</p>
-                <p className="text-lg font-semibold text-[#0fc6c2]">
+                <p className="text-sm text-[#86909c] mb-1">解析耗时</p>
+                <p className="text-2xl font-semibold text-[#0fc6c2]">
                   {formatTime(parseTime)}
                 </p>
               </div>
               {errors.length > 0 && (
                 <>
-                  <div className="w-[1px] h-10 bg-[#e5e6eb] hidden sm:block" />
+                  <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
                   <div>
-                    <p className="text-xs text-[#86909c] mb-0.5">校验错误</p>
-                    <p className="text-lg font-bold text-[#cf1322]">
+                    <p className="text-sm text-[#86909c] mb-1">校验错误</p>
+                    <p className="text-2xl font-bold text-[#cf1322]">
                       {errors.length} 个
                     </p>
                   </div>
@@ -471,7 +471,7 @@ export default function HomePage() {
 
           {/* 数据预览表格卡片 */}
           {orders.length > 0 ? (
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-5">
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
               <DataPreviewTable
                 orders={orders}
                 onUpdateOrder={handleUpdateOrder}
@@ -481,7 +481,7 @@ export default function HomePage() {
               />
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-6 lg:p-10">
               <EmptyState
                 title="没有解析到数据"
                 description="请检查解析规则配置是否正确，或尝试调整规则"
@@ -490,7 +490,7 @@ export default function HomePage() {
           )}
 
           {/* 操作按钮卡片 - 关键操作始终可见 */}
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4 sticky bottom-0 z-20">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5 sticky bottom-0 z-20">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={handleReset}>
@@ -515,17 +515,17 @@ export default function HomePage() {
 
       {/* 步骤 4: 提交完成 */}
       {step === "submitted" && (
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-8 lg:p-12 animate-fade-in">
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-10 lg:p-16 animate-fade-in">
           <div className="text-center">
-            <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-full bg-[#e8fafa] flex items-center justify-center mx-auto mb-4">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <div className="w-16 h-16 lg:w-18 lg:h-18 rounded-full bg-[#e8fafa] flex items-center justify-center mx-auto mb-5">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-[#1d2129] mb-2">
+            <h2 className="text-xl font-semibold text-[#1d2129] mb-2">
               提交成功！
             </h2>
-            <p className="text-sm text-[#4e5969] mb-6">
+            <p className="text-base text-[#4e5969] mb-6">
               已成功提交{" "}
               <span className="font-semibold text-[#0fc6c2]">{submittedCount}</span>{" "}
               条运单

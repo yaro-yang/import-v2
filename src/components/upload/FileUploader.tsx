@@ -94,7 +94,7 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         className={`
-          relative border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
+          relative border-2 border-dashed rounded-xl p-10 lg:p-16 text-center cursor-pointer
           transition-all duration-200
           ${
             isDragOver
@@ -113,16 +113,16 @@ export function FileUploader({
           disabled={disabled}
         />
 
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-4">
           {/* 上传图标 */}
           <div
-            className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
+            className={`w-16 h-16 rounded-xl flex items-center justify-center transition-colors ${
               isDragOver ? "bg-[#0fc6c2] text-white" : "bg-[#e8fafa] text-[#0fc6c2]"
             }`}
           >
             <svg
-              width="26"
-              height="26"
+              width="28"
+              height="28"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -138,13 +138,13 @@ export function FileUploader({
 
           {/* 文字提示 */}
           <div>
-            <p className="text-[#1d2129] font-medium text-sm">
+            <p className="text-[#1d2129] font-medium text-base">
               {isDragOver ? "释放文件以上传" : "拖拽文件到此处，或点击上传"}
             </p>
-            <p className="text-[#86909c] text-xs mt-1.5">
+            <p className="text-[#86909c] text-sm mt-2">
               支持 Excel (.xlsx/.xls)、Word (.docx)、PDF 格式
             </p>
-            <p className="text-[#b5bbc3] text-xs mt-0.5">
+            <p className="text-[#b5bbc3] text-sm mt-0.5">
               最大文件大小: {formatFileSize(maxSize)}
             </p>
           </div>

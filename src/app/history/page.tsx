@@ -32,11 +32,16 @@ export default function HistoryPage() {
         setOrders(data.data.orders);
         setTotal(data.data.total);
       } else {
-        toast.error(data.error || "加载失败");
+        // API 返回错误时不弹 toast，静默处理
+        console.error("API error:", data.error);
+        setOrders([]);
+        setTotal(0);
       }
     } catch (err) {
+      // 网络错误时也不弹 toast，静默降级为空列表
       console.error("Failed to load orders:", err);
-      toast.error("加载运单列表失败");
+      setOrders([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -78,19 +83,19 @@ export default function HistoryPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-5 page-container">
+    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-5 lg:py-8 space-y-4 lg:space-y-5 page-container">
       {/* 搜索栏 - 卡片式 */}
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-5">
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 search-controls-sm">
           <div className="flex items-center gap-2 text-sm text-[#4e5969]">
             <span className="whitespace-nowrap">申请渠道</span>
-            <select className="border border-[#d0d7de] rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+            <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
               <option>全部</option>
             </select>
           </div>
           <div className="flex items-center gap-2 text-sm text-[#4e5969]">
             <span className="whitespace-nowrap">审核状态</span>
-            <select className="border border-[#d0d7de] rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+            <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
               <option>全部</option>
             </select>
           </div>
@@ -100,7 +105,7 @@ export default function HistoryPage() {
             value={searchExternalCode}
             onChange={(e) => setSearchExternalCode(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="w-full sm:w-[160px] lg:w-[200px] px-3 py-1.5 text-sm border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+            className="w-full sm:w-[180px] lg:w-[220px] px-3 py-2 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
           />
           <input
             type="text"
@@ -108,11 +113,11 @@ export default function HistoryPage() {
             value={searchRecipientName}
             onChange={(e) => setSearchRecipientName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="w-full sm:w-[140px] lg:w-[180px] px-3 py-1.5 text-sm border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+            className="w-full sm:w-[160px] lg:w-[200px] px-3 py-2 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
           />
           <div className="flex items-center gap-2 text-sm text-[#4e5969]">
             <span className="whitespace-nowrap">创建时间</span>
-            <input type="date" className="border border-[#d0d7de] rounded px-2 py-1.5 text-xs outline-none focus:border-[#0fc6c2] bg-white" />
+            <input type="date" className="border border-[#d0d7de] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0fc6c2] bg-white" />
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleSearch}>查询</Button>
@@ -123,7 +128,7 @@ export default function HistoryPage() {
             )}
           </div>
         </div>
-        <div className="mt-3 pt-3 border-t border-[#f2f3f5] flex items-center gap-4 lg:gap-6 text-xs text-[#86909c] flex-wrap">
+        <div className="mt-3 pt-3 border-t border-[#f2f3f5] flex items-center gap-4 lg:gap-6 text-sm text-[#86909c] flex-wrap">
           <span>申请渠道：<span className="text-[#4e5969]">全部</span></span>
           <span>审核状态：<span className="text-[#4e5969]">全部</span></span>
           <span>创建时间：<span className="text-[#4e5969]">—</span></span>
@@ -131,7 +136,7 @@ export default function HistoryPage() {
       </div>
 
       {/* 数据列表 - 卡片式 */}
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
         {loading ? (
           <div className="p-4 lg:p-6">
             <div className="overflow-x-auto">
@@ -139,7 +144,7 @@ export default function HistoryPage() {
                 <thead>
                   <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
                     {["外部编码", "收货门店", "收件人", "SKU编码", "SKU名称", "数量", "提交时间", "状态"].map((h) => (
-                      <th key={h} className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">{h}</th>
+                      <th key={h} className="px-3 lg:px-4 py-3.5 text-left text-xs font-semibold text-[#4e5969]">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -158,7 +163,7 @@ export default function HistoryPage() {
             </div>
           </div>
         ) : orders.length === 0 ? (
-          <div className="p-6">
+          <div className="p-8">
             <EmptyState
               title="暂无运单记录"
               description="导入并提交运单后，可在此查看历史记录"
@@ -175,28 +180,28 @@ export default function HistoryPage() {
               <table className="w-full text-sm min-w-[700px]">
                 <thead>
                   <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
                       外部编码
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
                       收货门店
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
                       收件人
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">
                       SKU编码
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden md:table-cell">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden md:table-cell">
                       SKU名称
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-right text-xs font-semibold text-[#4e5969]">
+                    <th className="px-4 lg:px-5 py-3.5 text-right text-sm font-semibold text-[#4e5969]">
                       数量
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden sm:table-cell">
+                    <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden sm:table-cell">
                       提交时间
                     </th>
-                    <th className="px-3 lg:px-4 py-3 text-center text-xs font-semibold text-[#4e5969] sticky-action-col">
+                    <th className="px-4 lg:px-5 py-3.5 text-center text-sm font-semibold text-[#4e5969] sticky-action-col">
                       状态
                     </th>
                   </tr>
@@ -209,30 +214,30 @@ export default function HistoryPage() {
                         index % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"
                       }`}
                     >
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#1d2129] font-mono whitespace-nowrap">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#1d2129] font-mono whitespace-nowrap">
                         {order.externalCode || "—"}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate">
                         {order.storeName || "—"}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] whitespace-nowrap">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] whitespace-nowrap">
                         {order.recipientName || "—"}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] max-w-[100px] lg:max-w-[120px] truncate">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] max-w-[100px] lg:max-w-[120px] truncate">
                         {order.skuCode}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate hidden md:table-cell">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate hidden md:table-cell">
                         {order.skuName}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#1d2129] text-right font-medium whitespace-nowrap">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#1d2129] text-right font-medium whitespace-nowrap">
                         {order.skuQuantity}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-sm text-[#86909c] whitespace-nowrap hidden sm:table-cell">
+                      <td className="px-4 lg:px-5 py-3 text-sm text-[#86909c] whitespace-nowrap hidden sm:table-cell">
                         {order.submittedAt
                           ? formatDate(order.submittedAt)
                           : formatDate(order.createdAt)}
                       </td>
-                      <td className="px-3 lg:px-4 py-3 text-center sticky-action-col">
+                      <td className="px-4 lg:px-5 py-3 text-center sticky-action-col">
                         <span
                           className={`inline-block px-2 py-0.5 text-xs rounded whitespace-nowrap ${
                             order.status === "submitted"
@@ -258,14 +263,14 @@ export default function HistoryPage() {
             {/* 分页 - 鲸天风格 */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc]">
-                <p className="text-xs text-[#86909c]">
+                <p className="text-sm text-[#86909c]">
                   共 {total} 条
                 </p>
                 <div className="flex items-center gap-1">
                   <button
                     disabled={page <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="px-2.5 py-1 text-xs border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     &lt;
                   </button>
@@ -275,7 +280,7 @@ export default function HistoryPage() {
                       <button
                         key={pageNum}
                         onClick={() => setPage(pageNum)}
-                        className={`min-w-[28px] h-[26px] text-xs rounded transition-colors ${
+                        className={`min-w-[32px] h-[28px] text-sm rounded transition-colors ${
                           page === pageNum
                             ? "bg-[#0fc6c2] text-white"
                             : "hover:bg-white border border-transparent"
@@ -287,10 +292,10 @@ export default function HistoryPage() {
                   })}
                   {totalPages > 7 && (
                     <>
-                      <span className="text-xs text-[#86909c] px-1">...</span>
+                      <span className="text-sm text-[#86909c] px-1">...</span>
                       <button
                         onClick={() => setPage(totalPages)}
-                        className={`min-w-[28px] h-[26px] text-xs rounded transition-colors ${
+                        className={`min-w-[32px] h-[28px] text-sm rounded transition-colors ${
                           page === totalPages
                             ? "bg-[#0fc6c2] text-white"
                             : "hover:bg-white border border-transparent"
@@ -303,11 +308,11 @@ export default function HistoryPage() {
                   <button
                     disabled={page >= totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="px-2.5 py-1 text-xs border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     &gt;
                   </button>
-                  <span className="ml-2 text-xs text-[#86909c]">
+                  <span className="ml-2 text-sm text-[#86909c]">
                     前往第{" "}
                     <input
                       type="number"
@@ -318,7 +323,7 @@ export default function HistoryPage() {
                         const v = parseInt(e.target.value);
                         if (v >= 1 && v <= totalPages) setPage(v);
                       }}
-                      className="w-10 h-[22px] text-xs text-center border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2]"
+                      className="w-10 h-[24px] text-sm text-center border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2]"
                     />{" "}
                     页
                   </span>

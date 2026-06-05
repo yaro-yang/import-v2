@@ -82,7 +82,7 @@ export function Navigation() {
             <div className="w-8 h-8 rounded bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center">
               <span className="text-white font-bold text-sm">U</span>
             </div>
-            <span className="text-white font-semibold text-base tracking-wide">万能导入</span>
+            <span className="text-white font-semibold text-lg tracking-wide">万能导入</span>
           </div>
         </div>
 
@@ -152,14 +152,13 @@ export function Navigation() {
               )}
             </svg>
           </button>
-          <h2 className="text-base font-semibold text-[#1d2129]">
+          <h2 className="text-lg font-semibold text-[#1d2129]">
             {pathname === "/" && "导入下单"}
             {pathname.startsWith("/rules") && "解析规则管理"}
             {pathname.startsWith("/history") && "已导入运单"}
           </h2>
         </div>
         <div className="flex items-center gap-3 lg:gap-4 text-sm text-[#86909c]">
-          <span className="hidden sm:inline">管理员</span>
           <div className="w-7 h-7 rounded-full bg-[#e8fafa] flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />

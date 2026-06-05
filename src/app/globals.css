@@ -34,9 +34,10 @@
 }
 
 body {
-  font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
   color: var(--text-primary);
-  line-height: 1.8;
+  line-height: 1.6;
   background: var(--bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -195,17 +196,17 @@ body {
 /* 小屏（<768px）紧凑布局 */
 @media (max-width: 767px) {
   .page-container {
-    padding: 12px 12px !important;
+    padding: 16px 12px !important;
   }
 
   .card-padding-sm {
-    padding: 12px !important;
+    padding: 16px !important;
   }
 
   /* 步骤指示器：缩小文字和间距 */
   .step-indicator-sm {
-    font-size: 11px;
-    padding: 4px 8px;
+    font-size: 13px;
+    padding: 6px 10px;
     gap: 4px;
   }
 
@@ -229,11 +230,11 @@ body {
 /* 超小屏（<480px）极紧凑布局 */
 @media (max-width: 479px) {
   .page-container {
-    padding: 8px 8px !important;
+    padding: 12px 10px !important;
   }
 
   .card-padding-xs {
-    padding: 8px !important;
+    padding: 10px !important;
   }
 }
 

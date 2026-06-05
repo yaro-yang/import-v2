@@ -23,10 +23,15 @@ export default function RulesPage() {
       const data = await res.json();
       if (data.success) {
         setRules(data.data);
+      } else {
+        // API 返回错误时不弹 toast，静默处理
+        console.error("API error:", data.error);
+        setRules([]);
       }
     } catch (err) {
+      // 网络错误时也不弹 toast，静默降级为空列表
       console.error("Failed to load rules:", err);
-      toast.error("加载规则失败");
+      setRules([]);
     } finally {
       setLoading(false);
     }
@@ -115,12 +120,12 @@ export default function RulesPage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-5 page-container">
+    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-5 lg:py-8 space-y-4 lg:space-y-5 page-container">
       {/* 页面标题与操作栏 - 卡片式 */}
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-3 lg:p-4 flex items-center justify-between">
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-[#1d2129]">解析规则管理</h1>
-          <p className="text-xs text-[#86909c] mt-0.5 hidden sm:block">
+          <h1 className="text-lg font-semibold text-[#1d2129]">解析规则管理</h1>
+          <p className="text-sm text-[#86909c] mt-0.5 hidden sm:block">
             管理用于解析不同格式出库单文件的规则配置
           </p>
         </div>
@@ -130,13 +135,13 @@ export default function RulesPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[600px]">
               <thead>
                 <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
                   {["规则名称", "文件类型", "字段映射", "描述", "来源", "更新时间", "操作"].map((h) => (
-                    <th key={h} className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">{h}</th>
+                    <th key={h} className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -155,7 +160,7 @@ export default function RulesPage() {
           </div>
         </div>
       ) : rules.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-8 lg:p-10">
           <EmptyState
             title="暂无解析规则"
             description="创建解析规则后，可以用于解析各种格式的出库单文件"
@@ -163,18 +168,18 @@ export default function RulesPage() {
           />
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[600px]">
               <thead>
                 <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">规则名称</th>
-                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969]">文件类型</th>
-                  <th className="px-3 lg:px-4 py-3 text-center text-xs font-semibold text-[#4e5969] hidden sm:table-cell">字段映射</th>
-                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden md:table-cell">描述</th>
-                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden sm:table-cell">来源</th>
-                  <th className="px-3 lg:px-4 py-3 text-left text-xs font-semibold text-[#4e5969] hidden md:table-cell">更新时间</th>
-                  <th className="px-3 lg:px-4 py-3 text-right text-xs font-semibold text-[#4e5969] sticky-action-col">操作</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">规则名称</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969]">文件类型</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-center text-sm font-semibold text-[#4e5969] hidden sm:table-cell">字段映射</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden md:table-cell">描述</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden sm:table-cell">来源</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-left text-sm font-semibold text-[#4e5969] hidden md:table-cell">更新时间</th>
+                  <th className="px-4 lg:px-5 py-3.5 text-right text-sm font-semibold text-[#4e5969] sticky-action-col">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,7 +190,7 @@ export default function RulesPage() {
                       index % 2 === 1 ? "bg-[#fafbfc]" : "bg-white"
                     }`}
                   >
-                    <td className="px-3 lg:px-4 py-3">
+                    <td className="px-4 lg:px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-[#1d2129] whitespace-nowrap">{rule.name}</span>
                         {rule.aiGenerated && (
@@ -193,37 +198,37 @@ export default function RulesPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 lg:px-4 py-3 text-[#4e5969] uppercase text-xs whitespace-nowrap">{rule.fileType}</td>
-                    <td className="px-3 lg:px-4 py-3 text-center text-[#4e5969] hidden sm:table-cell">
+                    <td className="px-4 lg:px-5 py-3 text-[#4e5969] uppercase text-sm whitespace-nowrap">{rule.fileType}</td>
+                    <td className="px-4 lg:px-5 py-3 text-center text-[#4e5969] text-sm hidden sm:table-cell">
                       {rule.fieldMappings?.length || 0}
                     </td>
-                    <td className="px-3 lg:px-4 py-3 text-[#86909c] max-w-[150px] lg:max-w-[200px] truncate hidden md:table-cell">
+                    <td className="px-4 lg:px-5 py-3 text-[#86909c] text-sm max-w-[150px] lg:max-w-[200px] truncate hidden md:table-cell">
                       {rule.description || "—"}
                     </td>
-                    <td className="px-3 lg:px-4 py-3 text-[#86909c] text-xs hidden sm:table-cell">
+                    <td className="px-4 lg:px-5 py-3 text-[#86909c] text-sm hidden sm:table-cell">
                       {rule.aiGenerated ? "AI生成" : "手动创建"}
                     </td>
-                    <td className="px-3 lg:px-4 py-3 text-[#86909c] text-xs whitespace-nowrap hidden md:table-cell">
+                    <td className="px-4 lg:px-5 py-3 text-[#86909c] text-sm whitespace-nowrap hidden md:table-cell">
                       {formatDate(rule.updatedAt)}
                     </td>
-                    <td className="px-3 lg:px-4 py-3 text-right sticky-action-col">
+                    <td className="px-4 lg:px-5 py-3 text-right sticky-action-col">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleEdit(rule)}
-                          className="px-2 py-1 text-xs text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap"
+                          className="px-2 py-1 text-sm text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap"
                         >
                           编辑
                         </button>
                         <button
                           onClick={() => handleCopy(rule)}
-                          className="px-2 py-1 text-xs text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap hidden sm:inline"
+                          className="px-2 py-1 text-sm text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap hidden sm:inline"
                         >
                           复制
                         </button>
                         <button
                           onClick={() => handleDelete(rule.id)}
                           disabled={deletingId === rule.id}
-                          className={`px-2 py-1 text-xs text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap ${
+                          className={`px-2 py-1 text-sm text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap ${
                             deletingId === rule.id ? "opacity-50 cursor-not-allowed" : ""
                           }`}
                         >
@@ -238,7 +243,7 @@ export default function RulesPage() {
           </div>
 
           {/* 底部统计 */}
-          <div className="px-4 lg:px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc] flex items-center justify-between text-xs text-[#86909c]">
+          <div className="px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc] flex items-center justify-between text-sm text-[#86909c]">
             <span>共 {rules.length} 条规则</span>
           </div>
         </div>
