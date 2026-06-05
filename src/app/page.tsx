@@ -322,27 +322,29 @@ export default function HomePage() {
 
   return (
     <div className="space-y-4 lg:space-y-5 page-container">
-      {/* 页面标题卡片 */}
-      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
-        <div className="flex items-center gap-3 p-4 lg:p-5">
-          <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_4px_10px_rgba(15,198,194,0.25)]">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base lg:text-lg font-semibold text-[#1d2129]">导入下单</h1>
-            <p className="text-xs lg:text-sm text-[#86909c] mt-0.5 hidden sm:block">
-              上传 Excel / Word / PDF 文件，AI 自动解析并批量下单
-            </p>
+      {/* 吸顶操作区：标题 + 步骤指示器 */}
+      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-4 space-y-3">
+        {/* 页面标题卡片 */}
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
+          <div className="flex items-center gap-3 p-4 lg:p-5">
+            <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_4px_10px_rgba(15,198,194,0.25)]">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base lg:text-lg font-semibold text-[#1d2129]">导入下单</h1>
+              <p className="text-xs lg:text-sm text-[#86909c] mt-0.5 hidden sm:block">
+                上传 Excel / Word / PDF 文件，AI 自动解析并批量下单
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* 步骤指示器 - 卡片式 */}
-      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
+        {/* 步骤指示器 - 卡片式 */}
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
         <div className="flex items-center gap-1 lg:gap-2 flex-wrap">
           {[
             { key: "upload", label: "上传文件" },
@@ -386,6 +388,7 @@ export default function HomePage() {
             );
           })}
         </div>
+      </div>
       </div>
 
       {/* 步骤 1: 上传文件 */}

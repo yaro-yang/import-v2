@@ -25,7 +25,7 @@ export default function RootLayout({
             minHeight: "calc(100vh - 56px)",
             paddingLeft: 80,
             paddingRight: 32,
-            paddingTop: 96,
+            paddingTop: 24,
             paddingBottom: 48,
           }}
         >
