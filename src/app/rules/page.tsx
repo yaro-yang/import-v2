@@ -140,7 +140,7 @@ export default function RulesPage() {
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <Button size="sm" onClick={handleCreate}>
-                + 新建规则
+                新建规则
               </Button>
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function RulesPage() {
           <EmptyState
             title="暂无解析规则"
             description="创建解析规则后，可以用于解析各种格式的出库单文件"
-            action={<Button size="sm" onClick={handleCreate}>+ 新建规则</Button>}
+            action={<Button size="sm" onClick={handleCreate}>新建规则</Button>}
           />
         </div>
       ) : (

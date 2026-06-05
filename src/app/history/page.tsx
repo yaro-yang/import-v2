@@ -153,17 +153,17 @@ export default function HistoryPage() {
       {/* 操作按钮行 */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button size="sm" onClick={() => (window.location.href = "/")}>
-          + 新增
+          新增
         </Button>
-        <Button size="sm" onClick={() => toast("批量审核功能待接入")}>
+        <Button variant="outline" size="sm" onClick={() => toast("批量审核功能待接入")}>
           审核
         </Button>
-        <Button size="sm" onClick={() => toast("批量导入功能待接入")}>
+        <Button variant="outline" size="sm" onClick={() => toast("批量导入功能待接入")}>
           导入
         </Button>
         {orders.length > 0 && (
           <>
-            <Button variant="secondary" size="sm" onClick={handleExportAll}>
+            <Button variant="outline" size="sm" onClick={handleExportAll}>
               导出
             </Button>
             <Button variant="secondary" size="sm" onClick={() => toast("导出明细功能待接入")}>
