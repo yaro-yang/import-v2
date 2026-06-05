@@ -83,7 +83,29 @@ export default function HistoryPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-6 lg:py-10 space-y-4 lg:space-y-5 page-container">
+    <div className="space-y-4 lg:space-y-5 page-container">
+      {/* 页面标题卡片 */}
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
+        <div className="flex items-center gap-3 p-4 lg:p-5">
+          <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_4px_10px_rgba(15,198,194,0.25)]">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base lg:text-lg font-semibold text-[#1d2129]">已导入运单</h1>
+            <p className="text-xs lg:text-sm text-[#86909c] mt-0.5 hidden sm:block">
+              查看已提交的历史运单，支持筛选与导出
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* 搜索栏 - 卡片式 */}
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 search-controls-sm">
