@@ -83,7 +83,7 @@ export default function HistoryPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-5 lg:py-8 space-y-4 lg:space-y-5 page-container">
+    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-6 lg:py-10 space-y-4 lg:space-y-5 page-container">
       {/* 搜索栏 - 卡片式 */}
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 search-controls-sm">

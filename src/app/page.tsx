@@ -321,7 +321,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-5 lg:py-8 space-y-4 lg:space-y-5 page-container">
+    <div className="max-w-[1400px] mx-auto px-5 lg:px-8 py-6 lg:py-10 space-y-4 lg:space-y-5 page-container">
       {/* 步骤指示器 - 卡片式 */}
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
         <div className="flex items-center gap-1 lg:gap-2 flex-wrap">
