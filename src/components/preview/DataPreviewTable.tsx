@@ -169,11 +169,20 @@ export function DataPreviewTable({
   }, [orders, externalErrors, dirtyFields]);
 
   // 当 orders 数据源变更时（如重新解析），重置 dirtyFields
-  const prevOrdersRef = useRef<string>("");
+  // 仅在 orders 数据源变更时重置 dirtyFields（新增/替换，而非删除）
+  const prevOrderIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const key = orders.map((o) => o.id).join(",");
-    if (key !== prevOrdersRef.current) {
-      prevOrdersRef.current = key;
+    const currentIds = new Set(orders.map((o) => o.id));
+    // 有新的 id 出现（被替换或新增），说明是重新解析 → 重置
+    let hasNew = false;
+    for (const id of currentIds) {
+      if (!prevOrderIdsRef.current.has(id)) {
+        hasNew = true;
+        break;
+      }
+    }
+    prevOrderIdsRef.current = currentIds;
+    if (hasNew) {
       setDirtyFields(new Set());
     }
   }, [orders]);

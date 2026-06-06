@@ -60,12 +60,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const externalCode = searchParams.get("externalCode") || undefined;
     const recipientName = searchParams.get("recipientName") || undefined;
+    const startDate = searchParams.get("startDate") || undefined;
+    const endDate = searchParams.get("endDate") || undefined;
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
 
     const result = await getOrders({
       externalCode,
       recipientName,
+      startDate,
+      endDate,
       page,
       pageSize,
     });

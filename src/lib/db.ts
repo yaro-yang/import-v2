@@ -502,9 +502,6 @@ export async function getOrders(params?: {
 
   if (!hasDatabase()) {
     const store = await readLocalStore();
-    const transferIds = new Set(Object.values(store.orders).map((o) => o.transferOrderId).filter(Boolean));
-    const totalTransfers = transferIds.size;
-    const totalOutbounds = Object.values(store.orders).filter((o) => !o.transferOrderId).length;
     let all = Object.values(store.orders);
     if (params?.externalCode) {
       all = all.filter((o) => (o.externalCode || "").includes(params.externalCode!));
@@ -512,10 +509,20 @@ export async function getOrders(params?: {
     if (params?.recipientName) {
       all = all.filter((o) => (o.recipientName || "").includes(params.recipientName!));
     }
+    if (params?.startDate) {
+      all = all.filter((o) => o.createdAt >= params.startDate!);
+    }
+    if (params?.endDate) {
+      const endDateEnd = params.endDate + "T23:59:59.999Z";
+      all = all.filter((o) => o.createdAt <= endDateEnd);
+    }
     all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const transferIds = new Set(all.map((o) => o.transferOrderId).filter(Boolean));
+    const totalTransfers = transferIds.size;
+    const totalOutbounds = all.filter((o) => !o.transferOrderId).length;
     return {
       orders: all.slice(offset, offset + pageSize),
-      total: totalTransfers + totalOutbounds,
+      total: all.length,
       totalTransfers,
       totalOutbounds,
     };

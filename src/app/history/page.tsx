@@ -90,6 +90,8 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
   const [searchExternalCode, setSearchExternalCode] = useState("");
   const [searchRecipientName, setSearchRecipientName] = useState("");
+  const [searchStartDate, setSearchStartDate] = useState("");
+  const [searchEndDate, setSearchEndDate] = useState("");
   // 待删除的分组
   const [deletingGroup, setDeletingGroup] = useState<HistoryGroup | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -101,6 +103,8 @@ export default function HistoryPage() {
       const params = new URLSearchParams();
       if (searchExternalCode) params.set("externalCode", searchExternalCode);
       if (searchRecipientName) params.set("recipientName", searchRecipientName);
+      if (searchStartDate) params.set("startDate", searchStartDate);
+      if (searchEndDate) params.set("endDate", searchEndDate);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
 
@@ -128,7 +132,7 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchExternalCode, searchRecipientName]);
+  }, [page, searchExternalCode, searchRecipientName, searchStartDate, searchEndDate]);
 
   useEffect(() => {
     loadOrders();
@@ -424,7 +428,7 @@ export default function HistoryPage() {
               value={searchExternalCode}
               onChange={(e) => setSearchExternalCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full sm:w-[180px] lg:w-[220px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+              className="w-full sm:w-[180px] lg:w-[200px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
             />
             <input
               type="text"
@@ -432,7 +436,21 @@ export default function HistoryPage() {
               value={searchRecipientName}
               onChange={(e) => setSearchRecipientName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full sm:w-[160px] lg:w-[200px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+              className="w-full sm:w-[150px] lg:w-[180px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+            />
+            <span className="text-xs text-[#86909c]">提交时间</span>
+            <input
+              type="date"
+              value={searchStartDate}
+              onChange={(e) => setSearchStartDate(e.target.value)}
+              className="w-full sm:w-[140px] px-2 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
+            />
+            <span className="text-xs text-[#86909c]">至</span>
+            <input
+              type="date"
+              value={searchEndDate}
+              onChange={(e) => setSearchEndDate(e.target.value)}
+              className="w-full sm:w-[140px] px-2 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
             />
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={handleSearch}>

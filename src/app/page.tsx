@@ -77,6 +77,10 @@ export default function HomePage() {
   // 提交按钮防重复
   const [submitting, setSubmitting] = useState(false);
 
+  // 提交进度
+  const [submitProgress, setSubmitProgress] = useState(0);
+  const [submitMessage, setSubmitMessage] = useState("");
+
   // 规则编辑器状态
   const [showRuleEditor, setShowRuleEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<Partial<ParseRule> | null>(
@@ -542,10 +546,9 @@ export default function HomePage() {
   // 提交下单
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
-    // 校验：使用实时校验结果（已包含字段校验 + 过滤后的外部错误）
-    const hasBlockingError = liveErrors.some((e) => e.severity === "error");
-    if (hasBlockingError) {
-      toast.error("请先修正所有错误（红色标记）后再提交");
+    // 校验：使用实时校验结果（有任何错误或警告都不允许提交）
+    if (liveErrors.length > 0) {
+      toast.error("请先修正所有校验问题后再提交");
       return;
     }
     if (orders.length === 0) {
@@ -554,27 +557,41 @@ export default function HomePage() {
     }
 
     setSubmitting(true);
+    setSubmitProgress(10);
+    setSubmitMessage("正在准备数据...");
     const toastId = toast.loading("正在提交订单...");
     try {
+      setSubmitProgress(30);
+      setSubmitMessage("正在保存到数据库...");
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orders, mode: currentRuleMode }),
       });
+      setSubmitProgress(80);
+      setSubmitMessage("正在处理结果...");
       const data = await res.json();
 
       if (data.success) {
+        setSubmitProgress(100);
+        setSubmitMessage("提交完成");
         setSubmittedCount(data.data.savedCount);
         setStep("submitted");
+        const uniqueDocCount = data.data.savedOutbounds ?? 0;
+        const savedCount = data.data.savedCount ?? 0;
         const okMsg = currentRuleMode === "transfer"
-          ? `成功提交 ${data.data.savedTransfers ?? 0} 张调拨单（${data.data.savedOutbounds ?? 0} 个调拨明细，${data.data.savedCount} 条 SKU）！`
-          : `成功提交 ${data.data.savedOutbounds ?? 0} 张单据（${data.data.savedCount} 条货品）！`;
+          ? `成功提交 ${data.data.savedTransfers ?? 0} 张调拨单（${data.data.savedOutbounds ?? 0} 个调拨明细，${savedCount} 条 SKU）！`
+          : `成功提交 ${uniqueDocCount} 张单据（${savedCount} 条货品）！`;
         toast.success(okMsg, { id: toastId });
       } else {
+        setSubmitProgress(0);
+        setSubmitMessage("");
         toast.error(data.error || "提交失败", { id: toastId });
       }
     } catch (err) {
       console.error("Submit error:", err);
+      setSubmitProgress(0);
+      setSubmitMessage("");
       toast.error("提交失败", { id: toastId });
     } finally {
       setSubmitting(false);
@@ -625,6 +642,8 @@ export default function HomePage() {
     setParseMessage("");
     setParseTime(0);
     setSubmittedCount(0);
+    setSubmitProgress(0);
+    setSubmitMessage("");
     setParseError(null);
     setLiveErrors([]);
     setLiveErrorOrderIds(new Set());
@@ -953,6 +972,18 @@ export default function HomePage() {
             </div>
           )}
 
+          {/* 提交进度条 */}
+          {submitting && (
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
+              <ProgressBar
+                progress={submitProgress}
+                label={submitMessage}
+                showPercent={false}
+                variant={submitProgress >= 100 ? "success" : "primary"}
+              />
+            </div>
+          )}
+
           {/* 操作按钮卡片 */}
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-4.5 sticky bottom-0 z-20">
             <div className="flex justify-between items-center flex-wrap gap-2.5">
@@ -967,7 +998,7 @@ export default function HomePage() {
               <Button
                 onClick={handleSubmit}
                 loading={submitting}
-                disabled={liveErrors.some((e) => e.severity === "error") || submitting}
+                disabled={liveErrors.length > 0 || submitting}
               >
                 提交下单
               </Button>
@@ -1016,21 +1047,23 @@ export default function HomePage() {
                 提交成功
               </h2>
 
-              {/* 数据徽章 */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-[#d4f5f3] shadow-[0_2px_8px_rgba(15,198,194,0.10)] mb-3">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                </svg>
-                <span className="text-sm text-[#4e5969]">已成功提交</span>
-                <span className="text-xl font-bold text-[#0fc6c2] leading-none">{submittedCount}</span>
-                <span className="text-sm text-[#4e5969]">条货品数据</span>
+              {/* 提交结果汇总 */}
+              <div className="w-full max-w-[360px] mx-auto space-y-3 mb-6">
+                <div className="flex items-center gap-3 px-4 py-3 bg-[#f0fdf6] border border-[#b7eb8f] rounded-lg">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00b42a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span className="text-sm text-[#1d2129]">成功</span>
+                  <span className="ml-auto text-base font-bold text-[#00b42a]">{submittedCount}</span>
+                  <span className="text-sm text-[#4e5969]">条货品</span>
+                </div>
               </div>
 
               {/* 聚合说明 */}
               <p className="text-sm text-[#86909c] mb-8 leading-relaxed">
                 {currentRuleMode === "transfer"
                   ? "已按 调拨单 → 调拨明细 → SKU 三级聚合落库"
-                  : "已按外部编码自动聚合成单据"}
+                  : "数据已持久化到数据库，可在「已导入运单」中查看"}
               </p>
 
               {/* 操作按钮 */}
