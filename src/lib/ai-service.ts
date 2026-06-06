@@ -9,11 +9,16 @@ interface AIModelConfig {
   model: string;
 }
 
+// 兜底配置：未设置环境变量时使用（仅供个人项目/本地开发用，勿用于公开仓库）
+const FALLBACK_AI_API_KEY = "sk-344f80af6b994b61a43fd514583deaca";
+const FALLBACK_AI_API_URL = "https://api.deepseek.com/v1/chat/completions";
+const FALLBACK_AI_MODEL = "deepseek-chat";
+
 function getAIConfig(): AIModelConfig {
   return {
-    apiKey: process.env.AI_API_KEY || "",
-    apiUrl: process.env.AI_API_URL || "https://api.openai.com/v1/chat/completions",
-    model: process.env.AI_MODEL || "gpt-4o-mini",
+    apiKey: process.env.AI_API_KEY || FALLBACK_AI_API_KEY,
+    apiUrl: process.env.AI_API_URL || FALLBACK_AI_API_URL,
+    model: process.env.AI_MODEL || FALLBACK_AI_MODEL,
   };
 }
 

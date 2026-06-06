@@ -30,23 +30,33 @@ async function readLocalStore(): Promise<LocalStore> {
 
 // 写入本地存储
 async function writeLocalStore(store: LocalStore): Promise<void> {
+  // Vercel 等 Serverless 平台文件系统只读，禁止写本地文件
+  if (process.env.VERCEL === "1") {
+    throw new Error(
+      "Vercel 部署必须配置 DATABASE_URL 环境变量（推荐 Neon PostgreSQL），当前未配置数据库连接"
+    );
+  }
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(RULES_FILE, JSON.stringify(store, null, 2), "utf-8");
 }
 
 // 是否有数据库连接
 function hasDatabase(): boolean {
-  return !!process.env.DATABASE_URL;
+  return !!(process.env.DATABASE_URL || FALLBACK_DATABASE_URL);
 }
 
 // 获取数据库连接
 function getSql() {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL || FALLBACK_DATABASE_URL;
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
   return neon(url);
 }
+
+// 兜底配置：未设置环境变量时使用（仅供个人项目/本地开发用，勿用于公开仓库）
+const FALLBACK_DATABASE_URL =
+  "postgresql://neondb_owner:npg_mVh6iMlYUyc4@ep-ancient-mode-apjafd5f-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
 // ====== 数据库初始化 ======
 export async function initDB() {
