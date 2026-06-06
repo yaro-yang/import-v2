@@ -18,6 +18,9 @@
 *.pem
 
 # debug
+
+# local data storage (fallback when no DATABASE_URL)
+/.data/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

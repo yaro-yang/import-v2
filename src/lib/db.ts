@@ -1,8 +1,43 @@
 // 数据库操作层 - 使用 Neon PostgreSQL (Serverless)
 // 兼容 Vercel Edge Runtime
+// 无 DATABASE_URL 时回退到本地 JSON 文件存储
 
 import { neon } from "@neondatabase/serverless";
 import { OrderItem, ParseRule, ValidationError } from "@/types";
+import { promises as fs } from "fs";
+import * as path from "path";
+
+// 数据文件路径（无数据库时的回退方案）
+const DATA_DIR = path.join(process.cwd(), ".data");
+const RULES_FILE = path.join(DATA_DIR, "rules.json");
+const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
+
+// 本地文件存储接口
+interface LocalStore {
+  rules: Record<string, ParseRule>;
+  orders: Record<string, OrderItem[]>;
+}
+
+// 读取本地存储
+async function readLocalStore(): Promise<LocalStore> {
+  try {
+    const raw = await fs.readFile(RULES_FILE, "utf-8");
+    return JSON.parse(raw) as LocalStore;
+  } catch {
+    return { rules: {}, orders: {} };
+  }
+}
+
+// 写入本地存储
+async function writeLocalStore(store: LocalStore): Promise<void> {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(RULES_FILE, JSON.stringify(store, null, 2), "utf-8");
+}
+
+// 是否有数据库连接
+function hasDatabase(): boolean {
+  return !!process.env.DATABASE_URL;
+}
 
 // 获取数据库连接
 function getSql() {
@@ -15,6 +50,10 @@ function getSql() {
 
 // ====== 数据库初始化 ======
 export async function initDB() {
+  if (!hasDatabase()) {
+    console.log("No DATABASE_URL, using local file storage");
+    return;
+  }
   const sql = getSql();
   await sql`
     CREATE TABLE IF NOT EXISTS orders (
@@ -110,6 +149,19 @@ function mapOrderRow(row: Record<string, unknown>): OrderItem {
 
 export async function saveOrders(orders: OrderItem[]): Promise<number> {
   if (orders.length === 0) return 0;
+  if (!hasDatabase()) {
+    // 本地存储回退：存到 ORDERS_FILE（orders.json）
+    const store = await readLocalStore();
+    for (const order of orders) {
+      if (!store.orders[order.id]) {
+        store.orders[order.id] = [];
+      }
+      store.orders[order.id] = orders.filter((o) => o.ruleId === order.ruleId);
+    }
+    await writeLocalStore(store);
+    return orders.length;
+  }
+
   const sql = getSql();
   const now = new Date().toISOString();
 
@@ -280,65 +332,100 @@ function mapRuleRow(row: Record<string, unknown>): ParseRule {
 }
 
 export async function saveRule(rule: ParseRule): Promise<ParseRule> {
-  const sql = getSql();
+  if (hasDatabase()) {
+    const sql = getSql();
+    const now = new Date().toISOString();
+
+    await sql`
+      INSERT INTO rules (
+        id, name, description, file_type,
+        global_config, field_mappings, data_region, post_processing,
+        ai_generated, ai_confidence, ai_notes, created_by,
+        created_at, updated_at
+      ) VALUES (
+        ${rule.id},
+        ${rule.name},
+        ${rule.description || null},
+        ${rule.fileType},
+        ${JSON.stringify(rule.globalConfig)},
+        ${JSON.stringify(rule.fieldMappings)},
+        ${JSON.stringify(rule.dataRegion)},
+        ${rule.postProcessing ? JSON.stringify(rule.postProcessing) : null},
+        ${rule.aiGenerated ? 1 : 0},
+        ${rule.aiConfidence || null},
+        ${rule.aiNotes || null},
+        ${rule.createdBy || null},
+        ${rule.createdAt || now},
+        ${now}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        file_type = EXCLUDED.file_type,
+        global_config = EXCLUDED.global_config,
+        field_mappings = EXCLUDED.field_mappings,
+        data_region = EXCLUDED.data_region,
+        post_processing = EXCLUDED.post_processing,
+        ai_generated = EXCLUDED.ai_generated,
+        ai_confidence = EXCLUDED.ai_confidence,
+        ai_notes = EXCLUDED.ai_notes,
+        created_by = EXCLUDED.created_by,
+        updated_at = ${now}
+    `;
+
+    return rule;
+  }
+
+  // 本地文件存储回退
+  const store = await readLocalStore();
   const now = new Date().toISOString();
-
-  await sql`
-    INSERT INTO rules (
-      id, name, description, file_type,
-      global_config, field_mappings, data_region, post_processing,
-      ai_generated, ai_confidence, ai_notes, created_by,
-      created_at, updated_at
-    ) VALUES (
-      ${rule.id},
-      ${rule.name},
-      ${rule.description || null},
-      ${rule.fileType},
-      ${JSON.stringify(rule.globalConfig)},
-      ${JSON.stringify(rule.fieldMappings)},
-      ${JSON.stringify(rule.dataRegion)},
-      ${rule.postProcessing ? JSON.stringify(rule.postProcessing) : null},
-      ${rule.aiGenerated ? 1 : 0},
-      ${rule.aiConfidence || null},
-      ${rule.aiNotes || null},
-      ${rule.createdBy || null},
-      ${rule.createdAt || now},
-      ${now}
-    )
-    ON CONFLICT (id) DO UPDATE SET
-      name = EXCLUDED.name,
-      description = EXCLUDED.description,
-      file_type = EXCLUDED.file_type,
-      global_config = EXCLUDED.global_config,
-      field_mappings = EXCLUDED.field_mappings,
-      data_region = EXCLUDED.data_region,
-      post_processing = EXCLUDED.post_processing,
-      ai_generated = EXCLUDED.ai_generated,
-      ai_confidence = EXCLUDED.ai_confidence,
-      ai_notes = EXCLUDED.ai_notes,
-      created_by = EXCLUDED.created_by,
-      updated_at = ${now}
-  `;
-
-  return rule;
+  store.rules[rule.id] = {
+    ...rule,
+    updatedAt: now,
+    createdAt: rule.createdAt || now,
+  };
+  await writeLocalStore(store);
+  return store.rules[rule.id];
 }
 
 export async function getRules(): Promise<ParseRule[]> {
-  const sql = getSql();
-  const result = await sql`SELECT * FROM rules ORDER BY updated_at DESC`;
-  return (result as Record<string, unknown>[]).map(mapRuleRow);
+  if (hasDatabase()) {
+    const sql = getSql();
+    const result = await sql`SELECT * FROM rules ORDER BY updated_at DESC`;
+    return (result as Record<string, unknown>[]).map(mapRuleRow);
+  }
+
+  const store = await readLocalStore();
+  return Object.values(store.rules).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
 }
 
 export async function getRuleById(id: string): Promise<ParseRule | null> {
-  const sql = getSql();
-  const result = await sql`SELECT * FROM rules WHERE id = ${id}`;
-  const rows = result as Record<string, unknown>[];
-  if (rows.length === 0) return null;
-  return mapRuleRow(rows[0]);
+  if (hasDatabase()) {
+    const sql = getSql();
+    const result = await sql`SELECT * FROM rules WHERE id = ${id}`;
+    const rows = result as Record<string, unknown>[];
+    if (rows.length === 0) return null;
+    return mapRuleRow(rows[0]);
+  }
+
+  const store = await readLocalStore();
+  return store.rules[id] || null;
 }
 
 export async function deleteRule(id: string): Promise<boolean> {
-  const sql = getSql();
-  await sql`DELETE FROM rules WHERE id = ${id}`;
-  return true;
+  if (hasDatabase()) {
+    const sql = getSql();
+    await sql`DELETE FROM rules WHERE id = ${id}`;
+    return true;
+  }
+
+  const store = await readLocalStore();
+  if (store.rules[id]) {
+    delete store.rules[id];
+    await writeLocalStore(store);
+    return true;
+  }
+  return false;
 }
