@@ -427,10 +427,12 @@ export default function HistoryPage() {
   const transferCount = groups.filter((g) => g.kind === "transfer").length;
   const outboundCount = groups.filter((g) => g.kind === "outbound").length;
 
-  // 重复校验：同一外部编码（含空编码组）下，(SKU编码 + 收货门店) 不能重复
+  // 重复校验：同一外部编码下，(SKU编码 + 收货门店) 不能重复
+  // 空外部编码（"（无编码）"）组不做重复校验
   const duplicateWarnings = useMemo<string[]>(() => {
     const warnings: string[] = [];
     for (const group of groups) {
+      if (group.externalCode === "（无编码）") continue;
       const seen = new Set<string>();
       for (const detail of group.details) {
         const storeKey = detail.storeName || "";
