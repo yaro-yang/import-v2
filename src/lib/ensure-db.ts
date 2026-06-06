@@ -9,8 +9,14 @@ let dbInitPromise: Promise<void> | null = null;
 export async function ensureDB(): Promise<void> {
   if (dbReady) return;
   if (dbInitPromise) {
-    await dbInitPromise;
-    return;
+    // 如果之前的初始化失败（rejected），重置并重试
+    try {
+      await dbInitPromise;
+      return;
+    } catch {
+      // 前一次初始化失败，重置后重新尝试
+      dbInitPromise = null;
+    }
   }
   dbInitPromise = initDB().then(() => {
     dbReady = true;
