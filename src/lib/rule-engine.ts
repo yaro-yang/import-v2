@@ -687,8 +687,8 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   if (rawData.length === 0) return [];
 
   // ===== 第一步：确定门店列名和索引 =====
-  let storeNames: string[] = mode.storeColumnNames || [];
-  let storeIndices: number[] = mode.storeColumnIndices || [];
+  const storeNames: string[] = mode.storeColumnNames || [];
+  const storeIndices: number[] = mode.storeColumnIndices || [];
 
   // 如果配置中已有有效的索引和名称，直接使用
   const hasValidConfig = storeIndices.length > 0 && storeNames.length === storeIndices.length;
