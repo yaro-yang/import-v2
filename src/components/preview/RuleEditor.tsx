@@ -179,7 +179,13 @@ export function RuleEditor({
           mergeSheets: rule?.globalConfig?.mergeSheets || false,
         },
         fieldMappings: mappings,
-        dataRegion: { skipRows, headerRow },
+        // 保留 AI/启发式分析返回的高级配置（matrixMode, cardMode, tailRegion 等），
+        // 只覆盖用户可修改的 skipRows / headerRow
+        dataRegion: {
+          ...(rule?.dataRegion || {}),
+          skipRows,
+          headerRow,
+        },
         postProcessing: {
           skipTotalRow,
           totalRowPattern: "合计",
