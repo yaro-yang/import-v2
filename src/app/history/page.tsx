@@ -703,7 +703,7 @@ export default function HistoryPage() {
                         {/* # 列 - 跨整组 */}
                         {row.isFirstRowOfGroup && (
                           <td
-                            rowSpan={row.groupTotalRows}
+                            rowSpan={isCollapsed ? 1 : row.groupTotalRows}
                             className={cn(
                               "sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center border-r border-b border-[#f2f3f5] font-mono align-top",
                               "bg-inherit",
@@ -727,7 +727,7 @@ export default function HistoryPage() {
                         {/* 外部编码列 - 跨整组（运单号 + 摘要徽章） */}
                         {row.isFirstRowOfGroup && (
                           <td
-                            rowSpan={row.groupTotalRows}
+                            rowSpan={isCollapsed ? 1 : row.groupTotalRows}
                             className="px-3 py-2.5 border-r border-b border-[#f2f3f5] align-top"
                             style={{
                               backgroundColor:
@@ -786,7 +786,7 @@ export default function HistoryPage() {
                         {row.isFirstRowOfDetail && (
                           <>
                             <td
-                              rowSpan={row.detailSkuCount}
+                              rowSpan={isCollapsed ? 1 : row.detailSkuCount}
                               className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
                               style={{
                                 backgroundColor:
@@ -807,7 +807,7 @@ export default function HistoryPage() {
                               </span>
                             </td>
                             <td
-                              rowSpan={row.detailSkuCount}
+                              rowSpan={isCollapsed ? 1 : row.detailSkuCount}
                               className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
                               style={{ backgroundColor: "#f7f8fa" }}
                             >
@@ -823,7 +823,7 @@ export default function HistoryPage() {
                               </span>
                             </td>
                             <td
-                              rowSpan={row.detailSkuCount}
+                              rowSpan={isCollapsed ? 1 : row.detailSkuCount}
                               className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top font-mono"
                               style={{ backgroundColor: "#f7f8fa" }}
                             >
@@ -839,7 +839,7 @@ export default function HistoryPage() {
                               </span>
                             </td>
                             <td
-                              rowSpan={row.detailSkuCount}
+                              rowSpan={isCollapsed ? 1 : row.detailSkuCount}
                               className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
                               style={{ backgroundColor: "#f7f8fa" }}
                             >
@@ -934,7 +934,7 @@ export default function HistoryPage() {
                         {/* 操作列 - 跨整组（chevron 展开/收起 + 删除） */}
                         {row.isFirstRowOfGroup && (
                           <td
-                            rowSpan={row.groupTotalRows}
+                            rowSpan={isCollapsed ? 1 : row.groupTotalRows}
                             className={cn(
                               "sticky right-0 z-10 px-2.5 py-2.5 text-sm border-b border-[#f2f3f5] align-top shadow-[-2px_0_4px_rgba(0,0,0,0.04)]",
                               !isCollapsed && "bg-white"
@@ -1041,40 +1041,38 @@ export default function HistoryPage() {
               <p className="text-sm text-[#86909c]">
                 共 {total} 张出库单，{totalSkuCount} 条 SKU
               </p>
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    &lt;
-                  </button>
-                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                    const pageNum = i + 1;
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setPage(pageNum)}
-                        className={`min-w-[32px] h-[28px] text-sm rounded transition-colors ${
-                          page === pageNum
-                            ? "bg-[#0fc6c2] text-white"
-                            : "hover:bg-white border border-transparent"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  <button
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    &gt;
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  &lt;
+                </button>
+                {Array.from({ length: Math.min(Math.max(totalPages, 1), 7) }, (_, i) => {
+                  const pageNum = i + 1;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`min-w-[32px] h-[28px] text-sm rounded transition-colors ${
+                        page === pageNum
+                          ? "bg-[#0fc6c2] text-white"
+                          : "hover:bg-white border border-transparent"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  &gt;
+                </button>
+              </div>
             </div>
           </>
         )}
