@@ -85,12 +85,12 @@ export default function HistoryPage() {
   return (
     <div className="space-y-4 lg:space-y-5 page-container">
       {/* 吸顶操作区：标题 + 状态标签 + 筛选 + 操作按钮 */}
-      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-4 space-y-3">
+      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-3.5 space-y-3">
         {/* 页面标题 + 操作按钮 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb]">
-          <div className="flex items-center gap-3 p-4 lg:p-5">
-            <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_4px_10px_rgba(15,198,194,0.25)]">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex items-center gap-3 p-4">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_3px_10px_rgba(15,198,194,0.25)]">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="8" y1="6" x2="21" y2="6" />
                 <line x1="8" y1="12" x2="21" y2="12" />
                 <line x1="8" y1="18" x2="21" y2="18" />
@@ -100,8 +100,8 @@ export default function HistoryPage() {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg lg:text-xl font-semibold text-[#1d2129]">已导入运单</h1>
-              <p className="text-sm lg:text-base text-[#86909c] mt-1 hidden sm:block">
+              <h1 className="text-lg font-semibold text-[#1d2129]">已导入运单</h1>
+              <p className="text-sm text-[#86909c] mt-0.5">
                 查看已提交的历史运单，支持筛选与导出
               </p>
             </div>
@@ -109,17 +109,17 @@ export default function HistoryPage() {
         </div>
 
         {/* 筛选表单 */}
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
-          <div className="flex flex-wrap items-center gap-2 lg:gap-3 search-controls-sm">
-            <div className="flex items-center gap-2 text-base text-[#4e5969]">
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4">
+          <div className="flex flex-wrap items-center gap-2 lg:gap-2.5 search-controls-sm">
+            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
               <span className="whitespace-nowrap">申请渠道</span>
-              <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-base outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+              <select className="border border-[#d0d7de] rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
                 <option>全部</option>
               </select>
             </div>
-            <div className="flex items-center gap-2 text-base text-[#4e5969]">
+            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
               <span className="whitespace-nowrap">审核状态</span>
-              <select className="border border-[#d0d7de] rounded-lg px-3 py-2 text-base outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
+              <select className="border border-[#d0d7de] rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
                 <option>全部</option>
               </select>
             </div>
@@ -129,7 +129,7 @@ export default function HistoryPage() {
               value={searchExternalCode}
               onChange={(e) => setSearchExternalCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full sm:w-[180px] lg:w-[220px] px-3 py-2 text-base border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+              className="w-full sm:w-[180px] lg:w-[220px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
             />
             <input
               type="text"
@@ -137,11 +137,11 @@ export default function HistoryPage() {
               value={searchRecipientName}
               onChange={(e) => setSearchRecipientName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full sm:w-[160px] lg:w-[200px] px-3 py-2 text-base border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+              className="w-full sm:w-[160px] lg:w-[200px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
             />
-            <div className="flex items-center gap-2 text-base text-[#4e5969]">
+            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
               <span className="whitespace-nowrap">创建时间</span>
-              <input type="date" className="border border-[#d0d7de] rounded-lg px-3 py-2 text-base outline-none focus:border-[#0fc6c2] bg-white" />
+              <input type="date" className="border border-[#d0d7de] rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0fc6c2] bg-white" />
             </div>
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={handleSearch}>查询</Button>

@@ -122,19 +122,19 @@ export default function RulesPage() {
   return (
     <div className="space-y-4 lg:space-y-5 page-container">
       {/* 吸顶操作区：标题 + 状态标签 + 操作按钮 */}
-      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-4 space-y-3">
+      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-3.5 space-y-3">
         {/* 页面标题 + 操作按钮 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
-          <div className="flex items-center gap-3 p-4 lg:p-5">
-            <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_4px_10px_rgba(15,198,194,0.25)]">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex items-center gap-3 p-4">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_3px_10px_rgba(15,198,194,0.25)]">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg lg:text-xl font-semibold text-[#1d2129]">解析规则管理</h1>
-              <p className="text-sm lg:text-base text-[#86909c] mt-1 hidden sm:block">
+              <h1 className="text-lg font-semibold text-[#1d2129]">解析规则管理</h1>
+              <p className="text-sm text-[#86909c] mt-0.5">
                 管理用于解析不同格式出库单文件的规则配置
               </p>
             </div>
@@ -147,9 +147,9 @@ export default function RulesPage() {
         </div>
 
         {/* 状态标签栏 */}
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-4 lg:px-5">
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-            <span className="text-base text-[#4e5969] whitespace-nowrap mr-2">规则类型</span>
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-4">
+          <div className="flex items-center gap-1 overflow-x-auto py-1.5">
+            <span className="text-sm text-[#4e5969] whitespace-nowrap mr-1.5">规则类型</span>
             {[
               { key: "all", label: "全部", count: 0, badge: false },
               { key: "excel", label: "Excel", count: 0, badge: false },
@@ -159,7 +159,7 @@ export default function RulesPage() {
             ].map((t) => (
               <button
                 key={t.key}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-base font-medium whitespace-nowrap rounded-md transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap rounded-md transition-colors ${
                   t.key === "all"
                     ? "bg-[#e8fafa] text-[#0fc6c2]"
                     : "text-[#4e5969] hover:bg-[#f7f8fa] hover:text-[#0fc6c2]"
