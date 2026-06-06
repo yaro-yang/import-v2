@@ -5,6 +5,7 @@ import { OrderItem, ValidationError, TEMPERATURE_LEVELS } from "@/types";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { StatBlock, Divider, StatusDot } from "@/components/ui/TableDecorations";
 import {
   validateOrders,
   findBatchDuplicates,
@@ -527,33 +528,80 @@ export function DataPreviewTable({
 
     return (
       <div className="flex flex-col h-full">
-        {/* 工具栏 */}
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div className="text-sm text-[#4e5969] flex items-center gap-3 flex-wrap">
-            <span>
-              共 <span className="font-semibold text-[#1d2129]">{transferGroups.length}</span> 个调拨单
-              ·<span className="font-semibold text-[#1d2129]">{totalDetails}</span> 个调拨明细
-              ·<span className="font-semibold text-[#1d2129]">{orders.length}</span> 条 SKU
-            </span>
+        {/* 工具栏 - StatBlock 风格统计 + 操作按钮 */}
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-5 py-4 mb-3 flex flex-wrap items-center gap-5 lg:gap-7">
+          <div className="flex items-center gap-5 lg:gap-7 flex-wrap">
+            <StatBlock
+              icon={
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              }
+              label="调拨单"
+              value={transferGroups.length}
+              tone="default"
+            />
+            <Divider />
+            <StatBlock
+              icon={
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              }
+              label="调拨明细"
+              value={totalDetails}
+              tone="default"
+            />
+            <Divider />
+            <StatBlock
+              icon={
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                  <line x1="15" y1="3" x2="15" y2="21" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="3" y1="15" x2="21" y2="15" />
+                </svg>
+              }
+              label="SKU 总数"
+              value={orders.length}
+              tone="primary"
+            />
             {errorFieldMap.size > 0 && (
-              <span className="text-[#cf1322] flex items-center gap-1">
-                <span className="inline-block w-1.5 h-1.5 bg-[#cf1322] rounded-full" />
-                {errorFieldMap.size} 行有错
-              </span>
+              <>
+                <Divider />
+                <StatBlock
+                  icon={
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                  }
+                  label="错误行"
+                  value={errorFieldMap.size}
+                  tone="default"
+                />
+              </>
             )}
+          </div>
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             {duplicateCodes.length > 0 && (
-              <span className="text-[#d97b00] flex items-center gap-1">
-                <span className="inline-block w-1.5 h-1.5 bg-[#d97b00] rounded-full" />
+              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#d97b00] bg-[#fff7e8] border border-[#ffe4ba] rounded-md font-medium">
+                <StatusDot status="error" />
                 {duplicateCodes.length} 个调拨单内有重复
               </span>
             )}
+            <Button size="sm" variant="outline" onClick={onAddRow}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              新增 SKU
+            </Button>
           </div>
-          <Button size="sm" variant="ghost" onClick={onAddRow}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            新增 SKU
-          </Button>
         </div>
 
         {/* Excel rowspan 表格 */}
@@ -567,7 +615,7 @@ export function DataPreviewTable({
             style={{ maxHeight: "clamp(360px, 65vh, 640px)" }}
           >
             <table
-              className="w-full text-sm"
+              className="history-table min-w-max w-full text-sm"
               style={{
                 borderCollapse: "separate",
                 borderSpacing: 0,
@@ -580,18 +628,18 @@ export function DataPreviewTable({
                 {transferColumns.map((c) => (
                   <col key={c.key} style={{ width: c.width }} />
                 ))}
-                <col style={{ width: 72 }} />
+                <col style={{ width: 108 }} />
               </colgroup>
 
               <thead>
                 <tr>
-                  <th className="sticky top-0 left-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-b border-[#e5e6eb]">
+                  <th className="sticky top-0 left-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 tracking-wide uppercase">
                     #
                   </th>
                   {transferColumns.map((col) => (
                     <th
                       key={col.key}
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-2.5 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-b border-[#e5e6eb] whitespace-nowrap text-left"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap text-left tracking-wide uppercase"
                     >
                       {col.label}
                       {col.required && (
@@ -599,7 +647,7 @@ export function DataPreviewTable({
                       )}
                     </th>
                   ))}
-                  <th className="sticky top-0 right-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-b border-[#e5e6eb]">
+                  <th className="sticky top-0 right-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-b-2 border-b-[#0fc6c2]/40 tracking-wide uppercase shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
                     操作
                   </th>
                 </tr>
@@ -768,6 +816,48 @@ export function DataPreviewTable({
                           >
                             {isEditing ? (
                               renderInput()
+                            ) : col.key === "externalCode" ? (
+                              // 外部编码单元格：运单号 + 摘要徽章
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <StatusDot status="draft" />
+                                <span
+                                  className={cn(
+                                    "block truncate flex-1 min-w-0",
+                                    hasFieldError && "text-[#cf1322] font-medium",
+                                    !displayValue && "text-[#c9cdd4] italic"
+                                  )}
+                                  title={displayValue}
+                                >
+                                  {row.kind === "empty-group" && (isStore || isSku)
+                                    ? "—"
+                                    : displayValue || "—"}
+                                </span>
+                                {row.kind !== "empty-group" &&
+                                  (row.group.details.length > 1 ||
+                                    (row.group.details[0]?.skus.length ?? 0) > 1) && (
+                                    <span
+                                      className="inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-[#0bada9] bg-white border border-[#0fc6c2]/30 rounded whitespace-nowrap"
+                                      title={`包含 ${row.group.details.length} 个门店 / ${row.group.details.reduce(
+                                        (s, d) => s + d.skus.length,
+                                        0
+                                      )} 条 SKU`}
+                                    >
+                                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                                        <line x1="9" y1="3" x2="9" y2="21" />
+                                        <line x1="15" y1="3" x2="15" y2="21" />
+                                        <line x1="3" y1="9" x2="21" y2="9" />
+                                        <line x1="3" y1="15" x2="21" y2="15" />
+                                      </svg>
+                                      {row.group.details.length} 门店 ·{" "}
+                                      {row.group.details.reduce(
+                                        (s, d) => s + d.skus.length,
+                                        0
+                                      )}{" "}
+                                      SKU
+                                    </span>
+                                  )}
+                              </div>
                             ) : (
                               <span
                                 className={cn(
@@ -799,9 +889,25 @@ export function DataPreviewTable({
                           ) : (
                             <button
                               onClick={() => handleDeleteGroup(row.group)}
-                              className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
                               title="删除整张调拨单"
                             >
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
                               删除
                             </button>
                           )}

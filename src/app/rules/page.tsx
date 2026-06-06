@@ -12,7 +12,6 @@ import { formatDate } from "@/lib/utils";
 export default function RulesPage() {
   const [rules, setRules] = useState<ParseRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadTime, setLoadTime] = useState(0);
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<Partial<ParseRule> | null>(null);
   const [filterType, setFilterType] = useState<"all" | "excel" | "word" | "pdf" | "ai">("all");
@@ -20,7 +19,6 @@ export default function RulesPage() {
   // 加载规则
   const loadRules = useCallback(async () => {
     setLoading(true);
-    const t0 = performance.now();
     try {
       const res = await fetch("/api/rules");
       const data = await res.json();
@@ -34,7 +32,6 @@ export default function RulesPage() {
       console.error("Failed to load rules:", err);
       setRules([]);
     } finally {
-      setLoadTime(Math.round(performance.now() - t0));
       setLoading(false);
     }
   }, []);
@@ -206,11 +203,8 @@ export default function RulesPage() {
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
                   <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" className="opacity-75" />
                 </svg>
-                加载中... (Vercel 冷启动可能 2-3 秒)
+                加载中...
               </span>
-            )}
-            {!loading && loadTime > 0 && (
-              <span className="text-xs text-[#86909c] ml-auto">加载耗时 {loadTime}ms</span>
             )}
           </div>
         </div>
@@ -333,13 +327,10 @@ export default function RulesPage() {
           </div>
 
           {/* 底部统计 */}
-          <div className="px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc] flex items-center justify-between text-sm text-[#86909c]">
+          <div className="px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc] flex items-center text-sm text-[#86909c]">
             <span>
               {filterType === "all" ? `共 ${rules.length} 条规则` : `显示 ${filteredRules.length} / ${rules.length} 条`}
             </span>
-            {loadTime > 0 && (
-              <span className="text-xs">本次加载耗时 {loadTime}ms</span>
-            )}
           </div>
         </div>
       )}
