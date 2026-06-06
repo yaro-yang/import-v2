@@ -585,12 +585,17 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     const colName = extractCleanColumnName(m.suggestedSource);
     const colIdx = colName ? headerParts.findIndex((p) => p.replace(/^行\d+:\s*/, "").trim() === colName) : -1;
 
+    // 模式判定：如果字段在表头中找到 → column_name；在尾部信息区 → row_field；
+    // 在数据前区（既不在表头也不在尾部）→ tail_extract（由 excelToRawData 的前区扫描填充 tailFields）
+    const isMetaField = m.targetField === "storeName" || m.targetField === "externalCode" || m.targetField.startsWith("recipient");
+    const inTail = tailFields.some((tf) => tf.targetField === m.targetField);
+    const mode: FieldMapping["mode"] = isMetaField
+      ? (inTail ? "row_field" : colIdx >= 0 ? "column_name" : "tail_extract")
+      : "column_name";
+
     return {
       targetField: m.targetField,
-      mode: (m.targetField === "storeName" || m.targetField === "externalCode" || m.targetField.startsWith("recipient"))
-             && tailFields.some((tf) => tf.targetField === m.targetField)
-             ? "row_field" as FieldMapping["mode"]
-             : "column_name" as FieldMapping["mode"],
+      mode,
       columnName: colName,
       columnIndex: colIdx >= 0 ? colIdx : undefined,
     };

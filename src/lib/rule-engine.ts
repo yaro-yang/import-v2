@@ -1089,6 +1089,40 @@ export function excelToRawData(
     rows.push({ rowIndex: r, cells, tailFields: {} });
   }
 
+  // 数据前区信息提取：扫描 skipRows 之前的行，提取 key-value 元数据
+  // （如收货机构、收货单位等，这些字段不在 SKU 表头中而在数据表之前的元数据行）
+  const preHeaderFields: Record<string, string> = {};
+  const preHeaderKeyMap: Record<string, string> = {
+    storeName: "收货机构|收货门店",
+    externalCode: "单据号|配送单号",
+    recipientName: "收货人",
+    recipientPhone: "收货电话",
+    recipientAddress: "收货地址",
+  };
+  for (let r = 0; r < startRow; r++) {
+    const rowData = data[r];
+    if (!rowData) continue;
+    for (let n = 0; n < rowData.length - 1; n++) {
+      const key = String(rowData[n] ?? "").trim();
+      for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
+        if (patterns.split("|").some((p) => key === p)) {
+          // 取下一个非空单元格的值
+          for (let m = n + 1; m < rowData.length; m++) {
+            const v = String(rowData[m] ?? "").trim();
+            if (v) { preHeaderFields[target] = v; break; }
+          }
+          break;
+        }
+      }
+    }
+  }
+  // 应用到所有数据行
+  if (Object.keys(preHeaderFields).length > 0) {
+    for (const row of rows) {
+      row.tailFields = { ...preHeaderFields, ...row.tailFields };
+    }
+  }
+
   // 尾部信息提取
   if (config.tailRegion && config.tailRegion.startRow !== undefined) {
     // 容错窗口：从配置的 startRow 向前最多 5 行开始搜索
