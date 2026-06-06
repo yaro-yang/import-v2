@@ -6,7 +6,9 @@ import * as XLSX from "xlsx";
 // 在某些 JS 引擎（老版本 Node、Webpack 沙箱、Edge Runtime 早期版本）下可能不存在，
 // 导致解析 PDF 时报 "Promise.withResolvers is not a function"。
 // 这里加一个防御性 polyfill：仅在缺失时注入，实现与规范一致。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (typeof (Promise as any).withResolvers !== "function") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Promise as any).withResolvers = function withResolvers<T>() {
     let resolve!: (value: T | PromiseLike<T>) => void;
     let reject!: (reason?: unknown) => void;
@@ -123,7 +125,7 @@ export function getAcceptTypes(): string {
 export function parseTextLines(
   text: string,
   recordMarker?: string,
-  separator?: string
+  _separator?: string
 ): { sections: string[]; lines: string[] } {
   const lines = text.split("\n");
 

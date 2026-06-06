@@ -156,7 +156,7 @@ export async function executeRule(
       const section = textSections[i];
       const sectionOrders = buildOrderFromTextSection(section, rule, fileName);
       for (const order of sectionOrders) {
-        const errs = validateOrder(order, rawData.length);
+        const errs = validateOrder(order);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
@@ -178,7 +178,7 @@ export async function executeRule(
           const current = (order as unknown as Record<string, unknown>)[k];
           if (!current) (order as unknown as Record<string, unknown>)[k] = v;
         }
-        const errs = validateOrder(order, rawData.length);
+        const errs = validateOrder(order);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
@@ -526,7 +526,7 @@ function processRows(
       const row = filteredData[i];
       const order = buildOrderFromRow(row, rule, fileName);
       if (order) {
-        const errs = validateOrder(order, rawData.length);
+        const errs = validateOrder(order);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
@@ -540,7 +540,7 @@ function processRows(
       const [code, rows] = groups[i];
       const groupOrders = buildOrderFromRows(rows, rule, fileName, code);
       for (const order of groupOrders) {
-        const errs = validateOrder(order, rawData.length);
+        const errs = validateOrder(order);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
@@ -551,7 +551,7 @@ function processRows(
       const row = filteredData[i];
       const order = buildOrderFromRow(row, rule, fileName);
       if (order) {
-        const errs = validateOrder(order, rawData.length);
+        const errs = validateOrder(order);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
@@ -965,7 +965,7 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
 // ====== 校验（委托给共享 validation 模块） ======
 import { validateOrderItem as _validateOrderItem } from "./validation";
 
-function validateOrder(order: OrderItem, _totalRows: number): ValidationError[] {
+function validateOrder(order: OrderItem): ValidationError[] {
   return _validateOrderItem(order);
 }
 
