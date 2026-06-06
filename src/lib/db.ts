@@ -71,15 +71,31 @@ const FALLBACK_DATABASE_URL =
   "postgresql://neondb_owner:npg_mVh6iMlYUyc4@ep-ancient-mode-apjafd5f-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
 // ====== 按 externalCode 把 OrderItem[] 聚合成 OutboundOrder[] ======
+// 聚合 key = externalCode + 收货门店 + 收件人 + 电话 + 地址
+// 同一 externalCode 下不同门店会被拆成多个 outbound_order（卡片式文件常见）
+// 同一门店不同 SKU 合并为同一条 outbound_order
 function groupItemsIntoOutboundOrders(items: OrderItem[]): OutboundOrder[] {
   const groups = new Map<string, OutboundOrder>();
 
   for (const item of items) {
-    // 用 externalCode 作为聚合 key；缺失时退化为 "__no_code__" 单独一组
-    const key = item.externalCode || "__no_code__";
+    // 用 (externalCode + 门店 + 收件人 + 电话 + 地址) 作为聚合 key
+    // 这样同一运单号下的多门店数据会拆为多条 outbound_order
+    const parts = [
+      item.externalCode || "",
+      item.storeName || "",
+      item.recipientName || "",
+      item.recipientPhone || "",
+      item.recipientAddress || "",
+    ];
+    const key = parts.some((p) => p.trim())
+      ? parts.join("|")
+      : "__no_code__";
     if (!groups.has(key)) {
+      const idHash = Math.abs(
+        parts.join("|").split("").reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0)
+      ).toString(36);
       groups.set(key, {
-        id: `out_${key}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: `out_${idHash}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         externalCode: item.externalCode,
         storeName: item.storeName,
         recipientName: item.recipientName,
