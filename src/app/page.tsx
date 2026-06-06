@@ -929,14 +929,7 @@ export default function HomePage() {
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2 ml-auto flex-wrap">
-              {effectiveDisplayMode === "transfer" && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#0bada9] bg-[#e8fafa] border border-[#0fc6c2]/15 rounded-md font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#0fc6c2]" />
-                  调拨单模式 · 1+N+M 合并展示
-                </span>
-              )}
-            </div>
+            <div className="flex items-center gap-2 ml-auto flex-wrap" />
           </div>
 
           {/* 数据预览表格卡片 */}

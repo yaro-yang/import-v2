@@ -258,8 +258,6 @@ export function DataPreviewTable({
 
   // ============ 调拨单模式：Excel rowspan 合并单元格表格 ============
   if (mode === "transfer") {
-    const totalDetails = transferGroups.reduce((s, g) => s + g.details.length, 0);
-
     // 字段归属
     const codeFields = new Set(["externalCode"]);
     const storeFields = new Set([
@@ -517,48 +515,12 @@ export function DataPreviewTable({
 
     return (
       <div className="flex flex-col h-full">
-        {/* 工具栏 - StatBlock 风格统计 + 操作按钮 */}
+        {/* 工具栏 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-5 py-4 mb-3 flex flex-wrap items-center gap-5 lg:gap-7">
           <div className="flex items-center gap-5 lg:gap-7 flex-wrap">
-            <StatBlock
-              icon={
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-              }
-              label="调拨单"
-              value={transferGroups.length}
-              tone="default"
-            />
-            <Divider />
-            <StatBlock
-              icon={
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
-              }
-              label="调拨明细"
-              value={totalDetails}
-              tone="default"
-            />
-            <Divider />
-            <StatBlock
-              icon={
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
-                  <line x1="15" y1="3" x2="15" y2="21" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                  <line x1="3" y1="15" x2="21" y2="15" />
-                </svg>
-              }
-              label="SKU 总数"
-              value={orders.length}
-              tone="primary"
-            />
+            <span className="text-sm text-[#4e5969]">
+              共 <span className="font-semibold text-[#1d2129]">{orders.length}</span> 条数据
+            </span>
             {errorFieldMap.size > 0 && (
               <>
                 <Divider />
@@ -588,7 +550,7 @@ export function DataPreviewTable({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              新增 SKU
+              新增行
             </Button>
           </div>
         </div>
@@ -608,8 +570,8 @@ export function DataPreviewTable({
               style={{
                 borderCollapse: "separate",
                 borderSpacing: 0,
-                minWidth: 1280,
-                tableLayout: "auto",
+                minWidth: 1440,
+                tableLayout: "fixed",
               }}
             >
               <colgroup>
@@ -660,8 +622,8 @@ export function DataPreviewTable({
                         hasErr && "ring-1 ring-inset ring-[#ffccc7]/60"
                       )}
                     >
-                      {/* # 列 */}
-                      {row.isFirstRowOfGroup ? (
+                      {/* # 列 — 非首行用 rowSpan 覆盖，不渲染额外 td */}
+                      {row.isFirstRowOfGroup && (
                         <td
                           rowSpan={row.groupTotalRows}
                           className={cn(
@@ -672,17 +634,15 @@ export function DataPreviewTable({
                         >
                           {rowLabel(row)}
                         </td>
-                      ) : (
-                        <td style={{ display: "none" }} />
                       )}
 
-                      {/* 数据列 — 所有行始终渲染相同数量的 <td> */}
+                      {/* 数据列 */}
                       {transferColumns.map((col) => {
                         const isCode = codeFields.has(col.key);
                         const isStore = storeFields.has(col.key);
                         const isSku = skuFields.has(col.key);
 
-                        // 判断该单元格是否应该可见
+                        // 该字段是否在本行有显示（其余由 rowSpan 覆盖）
                         let cellVisible: boolean;
                         let rowSpanVal: number | undefined;
 
@@ -701,15 +661,11 @@ export function DataPreviewTable({
                           }
                         } else if (isSku) {
                           cellVisible = row.kind === "sku";
-                          rowSpanVal = undefined;
                         } else {
                           cellVisible = false;
                         }
 
-                        // 隐藏的单元格仍然渲染 <td> 但 display:none，保证每行 td 数量一致
-                        if (!cellVisible) {
-                          return <td key={col.key} style={{ display: "none" }} />;
-                        }
+                        if (!cellVisible) return null;
 
                         const ck = cellKeyOf(row, col.key);
                         const isEditing =
@@ -858,7 +814,7 @@ export function DataPreviewTable({
                       })}
 
                       {/* 操作列 */}
-                      {row.isFirstRowOfGroup ? (
+                      {row.isFirstRowOfGroup && (
                         <td
                           rowSpan={row.groupTotalRows}
                           className="sticky right-0 z-10 px-2 py-2.5 text-center align-top border-b border-[#f2f3f5] bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
@@ -880,8 +836,6 @@ export function DataPreviewTable({
                             </button>
                           )}
                         </td>
-                      ) : (
-                        <td style={{ display: "none" }} />
                       )}
                     </tr>
                   );
