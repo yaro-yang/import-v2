@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { OrderItem, ValidationError, TEMPERATURE_LEVELS } from "@/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -83,6 +83,9 @@ export function DataPreviewTable({
     field: string;
   } | null>(null);
 
+  // 用户修改过的字段：记录 (orderId, field) → 标记为 dirty，不再显示对应外部错误
+  const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
+
   // 实时校验 + 错误映射
   const { errors, errorFieldMap, duplicateCodes, duplicateOrderIds } = useMemo((): {
     errors: ValidationError[];
@@ -134,10 +137,20 @@ export function DataPreviewTable({
       }
     }
 
-    // 3. 合并外部传入的错误
+    // 3. 合并外部传入的错误（忽略已经被用户修改过的字段）
     const allErrors: ValidationError[] = [...fieldErrors];
     for (const err of externalErrors) {
       const ordersAtRow = orders.filter((o) => (o.sourceRow || 0) === err.row);
+      let anyDirty = false;
+      for (const o of ordersAtRow) {
+        const dirtyKey = `${o.id}|${err.field}`;
+        if (dirtyFields.has(dirtyKey)) {
+          anyDirty = true;
+          break;
+        }
+      }
+      if (anyDirty) continue; // 用户已修改该字段，跳过外部错误
+
       for (const o of ordersAtRow) {
         if (!errorFieldMap.has(o.id)) errorFieldMap.set(o.id, new Set());
         errorFieldMap.get(o.id)!.add(err.field);
@@ -151,7 +164,17 @@ export function DataPreviewTable({
       duplicateCodes: duplicateKeys,
       duplicateOrderIds,
     };
-  }, [orders, externalErrors]);
+  }, [orders, externalErrors, dirtyFields]);
+
+  // 当 orders 数据源变更时（如重新解析），重置 dirtyFields
+  const prevOrdersRef = useRef<string>("");
+  useEffect(() => {
+    const key = orders.map((o) => o.id).join(",");
+    if (key !== prevOrdersRef.current) {
+      prevOrdersRef.current = key;
+      setDirtyFields(new Set());
+    }
+  }, [orders]);
 
   useEffect(() => {
     onValidationChange?.({ errors, errorOrderIds: new Set(errorFieldMap.keys()), duplicateCodes });
@@ -175,6 +198,11 @@ export function DataPreviewTable({
 
   const handleCellBlur = () => {
     setEditingCell(null);
+  };
+
+  // 标记用户修改过的字段（修改后不再显示该字段的外部错误）
+  const markDirty = (id: string, field: string) => {
+    setDirtyFields((prev) => new Set(prev).add(`${id}|${field}`));
   };
 
   const handleKeyDown = (
@@ -343,7 +371,7 @@ export function DataPreviewTable({
                           col.options ? (
                             <select
                               value={displayValue}
-                              onChange={(e) => onUpdateOrder(order.id, col.key, e.target.value)}
+                              onChange={(e) => { onUpdateOrder(order.id, col.key, e.target.value); markDirty(order.id, col.key); }}
                               onBlur={handleCellBlur}
                               onKeyDown={(e) => handleKeyDown(e, order.id, col.key, rowIdx)}
                               className={cn(
@@ -363,7 +391,7 @@ export function DataPreviewTable({
                             <input
                               type={col.type === "number" ? "number" : "text"}
                               value={displayValue}
-                              onChange={(e) => onUpdateOrder(order.id, col.key, e.target.value)}
+                              onChange={(e) => { onUpdateOrder(order.id, col.key, e.target.value); markDirty(order.id, col.key); }}
                               onBlur={handleCellBlur}
                               onKeyDown={(e) => handleKeyDown(e, order.id, col.key, rowIdx)}
                               className={cn(
