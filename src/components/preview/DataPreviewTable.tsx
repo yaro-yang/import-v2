@@ -502,12 +502,10 @@ export function DataPreviewTable({
       return row.isFirstRowOfDetail ? "bg-[#f7f8fa]" : "bg-white";
     };
 
-    // 行号标签
+    // 行号标签：显示分组序号（flat index）
     const rowLabel = (row: TRow): string => {
       if (row.kind === "empty-group") return `${row.groupIdx + 1}`;
-      if (row.kind === "empty-store")
-        return `${row.groupIdx + 1}.${row.detailIdx + 1}`;
-      return `${row.groupIdx + 1}.${row.detailIdx + 1}.${row.skuIdx + 1}`;
+      return `${row.groupIdx + 1}`;
     };
 
     // 删除整组
@@ -662,67 +660,55 @@ export function DataPreviewTable({
                         hasErr && "ring-1 ring-inset ring-[#ffccc7]/60"
                       )}
                     >
-                      {/* # 列 - 合并单元格 */}
-                      {row.isFirstRowOfGroup && (
+                      {/* # 列 */}
+                      {row.isFirstRowOfGroup ? (
                         <td
                           rowSpan={row.groupTotalRows}
                           className={cn(
                             "sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center align-top border-r border-b border-[#f2f3f5] bg-inherit font-mono",
-                            row.kind !== "sku" || row.isFirstRowOfGroup
-                              ? row.kind === "sku"
-                                ? "text-[#86909c]"
-                                : "text-[#0fc6c2] font-semibold"
-                              : "text-[#86909c]",
+                            "text-[#0fc6c2] font-semibold",
                             hasErr && "text-[#cf1322]"
                           )}
                         >
                           {rowLabel(row)}
                         </td>
+                      ) : (
+                        <td style={{ display: "none" }} />
                       )}
 
-                      {/* 数据列 */}
+                      {/* 数据列 — 所有行始终渲染相同数量的 <td> */}
                       {transferColumns.map((col) => {
-                        // 字段归属判断
                         const isCode = codeFields.has(col.key);
                         const isStore = storeFields.has(col.key);
                         const isSku = skuFields.has(col.key);
 
-                        // 该字段是否属于本行
-                        let cellApplicable: boolean;
-                        let rowSpan: number | undefined;
+                        // 判断该单元格是否应该可见
+                        let cellVisible: boolean;
+                        let rowSpanVal: number | undefined;
 
                         if (isCode) {
-                          cellApplicable = row.isFirstRowOfGroup;
-                          rowSpan = row.groupTotalRows;
+                          cellVisible = row.isFirstRowOfGroup;
+                          rowSpanVal = row.groupTotalRows;
                         } else if (isStore) {
                           if (row.kind === "empty-group") {
-                            cellApplicable = false;
-                            rowSpan = undefined;
+                            cellVisible = false;
                           } else if (row.kind === "empty-store") {
-                            cellApplicable = true;
-                            rowSpan = 1;
+                            cellVisible = true;
+                            rowSpanVal = 1;
                           } else {
-                            cellApplicable = row.isFirstRowOfDetail;
-                            rowSpan = row.detailSkuCount;
+                            cellVisible = row.isFirstRowOfDetail;
+                            rowSpanVal = row.detailSkuCount;
                           }
                         } else if (isSku) {
-                          if (row.kind === "empty-group") {
-                            cellApplicable = false;
-                            rowSpan = undefined;
-                          } else if (row.kind === "empty-store") {
-                            cellApplicable = false;
-                            rowSpan = undefined;
-                          } else {
-                            cellApplicable = true;
-                            rowSpan = undefined;
-                          }
+                          cellVisible = row.kind === "sku";
+                          rowSpanVal = undefined;
                         } else {
-                          cellApplicable = false;
-                          rowSpan = undefined;
+                          cellVisible = false;
                         }
 
-                        if (!cellApplicable) {
-                          return null;
+                        // 隐藏的单元格仍然渲染 <td> 但 display:none，保证每行 td 数量一致
+                        if (!cellVisible) {
+                          return <td key={col.key} style={{ display: "none" }} />;
                         }
 
                         const ck = cellKeyOf(row, col.key);
@@ -798,7 +784,7 @@ export function DataPreviewTable({
                         return (
                           <td
                             key={col.key}
-                            rowSpan={rowSpan}
+                            rowSpan={rowSpanVal}
                             className={cellClass}
                             onClick={() => {
                               if (row.kind === "empty-group") return;
@@ -871,8 +857,8 @@ export function DataPreviewTable({
                         );
                       })}
 
-                      {/* 操作列 - 合并单元格 */}
-                      {row.isFirstRowOfGroup && (
+                      {/* 操作列 */}
+                      {row.isFirstRowOfGroup ? (
                         <td
                           rowSpan={row.groupTotalRows}
                           className="sticky right-0 z-10 px-2 py-2.5 text-center align-top border-b border-[#f2f3f5] bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
@@ -885,26 +871,17 @@ export function DataPreviewTable({
                               className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
                               title="删除整张调拨单"
                             >
-                              <svg
-                                width="11"
-                                height="11"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="3 6 5 6 21 6" />
                                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                <path d="M10 11v6" />
-                                <path d="M14 11v6" />
-                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                               </svg>
                               删除
                             </button>
                           )}
                         </td>
+                      ) : (
+                        <td style={{ display: "none" }} />
                       )}
                     </tr>
                   );
