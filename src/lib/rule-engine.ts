@@ -183,19 +183,63 @@ function buildOrderFromCard(
     createdAt: new Date().toISOString(),
   };
 
+  // 卡片头部常见字段的默认关键词
+  const cardHeaderDefaults: Record<string, string[]> = {
+    storeName: ["调入门店", "收货门店", "门店", "收货机构", "客户名称", "店铺名称"],
+    recipientName: ["收货人", "联系人", "收件人", "收件人姓名", "收货人姓名"],
+    recipientPhone: ["电话", "联系电话", "手机", "收货电话", "手机号"],
+    recipientAddress: ["收货地址", "地址", "收件人地址", "详细地址"],
+    externalCode: ["调拨单号", "配送单号", "单据号", "外部编码", "运单号"],
+    remark: ["备注", "说明", "附注"],
+  };
+
+  // 在卡片所有行中查找 "标签|值" 或 "标签：值" 形式
+  const extractFromCardHeader = (keywords: string[]): string => {
+    for (const row of cardRows) {
+      const cells = Object.values(row.cells);
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i] || "";
+        for (const kw of keywords) {
+          // 单元格本身就是 "标签|值"（如 "收货地址 | 武汉..."） - 取 | 后面的值
+          if (cell === kw) {
+            // 找下一个非空单元格
+            for (let j = i + 1; j < cells.length; j++) {
+              const v = (cells[j] || "").trim();
+              if (v && v !== "·" && v !== "-") return v;
+            }
+          }
+          // 单元格本身包含 "标签|值" 或 "标签：值" - 提取第一个分隔符后的值
+          if (cell.includes(kw)) {
+            const kwIdx = cell.indexOf(kw);
+            const after = cell.substring(kwIdx + kw.length);
+            // 找第一个分隔符
+            const sepMatch = after.match(/^\s*[|｜：:]\s*(.+?)(?:\s*[|｜]|$)/);
+            if (sepMatch) {
+              const v = sepMatch[1].trim();
+              if (v && v !== "·" && v !== "-") return v;
+            }
+          }
+        }
+      }
+    }
+    return "";
+  };
+
   // 提取卡片头部信息（收货门店、收货人等）
   for (const mapping of rule.fieldMappings) {
     if (["storeName", "recipientName", "recipientPhone", "recipientAddress", "externalCode", "remark"].includes(mapping.targetField)) {
       let value = "";
+      // 优先按用户配置的 rowKeyPattern 提取
       if (mapping.mode === "row_field" && mapping.rowKeyPattern) {
-        for (const row of cardRows) {
-          const rowText = Object.values(row.cells).join(" ");
-          if (rowText.includes(mapping.rowKeyPattern)) {
-            const match = rowText.match(new RegExp(`${mapping.rowKeyPattern}[：:]*\\s*(.+)`));
-            if (match) { value = match[1].trim(); break; }
-          }
-        }
-      } else {
+        value = extractFromCardHeader([mapping.rowKeyPattern]);
+      }
+      // 兜底：用字段的默认关键词自动提取（适用于未配置 rowKeyPattern 的旧规则）
+      if (!value) {
+        const defaults = cardHeaderDefaults[mapping.targetField] || [];
+        value = extractFromCardHeader(defaults);
+      }
+      // 最后再尝试 column_name 等普通模式
+      if (!value) {
         value = extractFieldValue(cardRows[0], mapping);
       }
       if (value) setOrderField(order, mapping.targetField, value);
@@ -608,7 +652,11 @@ export function excelToRawData(
   }
 
   // 提取数据行
-  const startRow = Math.max(skipRows, headerRow + 1);
+  // 卡片模式下不要按 headerRow 跳行（headerRow 通常被 AI 设为大值），所有行都要交给 splitByCards 处理
+  const isCardMode = config.cardMode?.enabled === true;
+  const startRow = isCardMode
+    ? Math.max(skipRows, 0)
+    : Math.max(skipRows, headerRow + 1);
   for (let r = startRow; r < Math.min(endRow, data.length); r++) {
     const rowData = data[r];
     if (!rowData || rowData.length === 0) continue;
