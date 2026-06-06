@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import { FileUploader } from "@/components/upload/FileUploader";
 import { RuleSelector } from "@/components/upload/RuleSelector";
@@ -21,6 +21,13 @@ import { formatFileSize, formatTime, exportToExcel } from "@/lib/utils";
 
 type Step = "upload" | "select-rule" | "preview" | "submitted";
 
+// 解析错误信息（解析失败时展示给用户）
+interface ParseError {
+  code: string;
+  message: string;
+  fileInfo: { name: string; size: number; type: string };
+}
+
 export default function HomePage() {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -30,8 +37,14 @@ export default function HomePage() {
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [loading, setLoading] = useState(false);
   const [parseProgress, setParseProgress] = useState(0);
+  const [parseProcessed, setParseProcessed] = useState(0);
+  const [parseTotal, setParseTotal] = useState(0);
+  const [parseMessage, setParseMessage] = useState("");
   const [parseTime, setParseTime] = useState(0);
   const [submittedCount, setSubmittedCount] = useState(0);
+
+  // 解析错误状态
+  const [parseError, setParseError] = useState<ParseError | null>(null);
 
   // 提交按钮防重复
   const [submitting, setSubmitting] = useState(false);
@@ -58,6 +71,11 @@ export default function HomePage() {
       setShowRuleEditor(false);
       setEditingRule(null);
       setAiAnalysisResult(null);
+      setParseError(null);
+      setParseProgress(0);
+      setParseProcessed(0);
+      setParseTotal(0);
+      setParseMessage("");
 
       // 加载已有规则列表
       try {
@@ -73,12 +91,58 @@ export default function HomePage() {
     []
   );
 
+  // 打开手动配置规则弹窗（用于"解析失败"时提供手动配置入口）
+  const openManualRuleEditor = useCallback(async () => {
+    if (!file) return;
+    setParseError(null);
+    // 先尝试 AI 分析
+    setAiAnalyzing(true);
+    setAiAnalysisResult(null);
+    const toastId = toast.loading("🤖 DeepSeek 正在分析文件结构...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/ai-generate-rules", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setAiAnalysisResult(data.data);
+        setEditingRule(data.data.suggestedRule || {});
+        toast.success("✅ AI 分析完成，请检查并确认", { id: toastId });
+      } else {
+        setEditingRule({
+          fileType: file.name.endsWith(".pdf")
+            ? "pdf"
+            : file.name.endsWith(".docx")
+              ? "word"
+              : "excel",
+        });
+        toast.error(data.error || "AI 分析失败，请手动配置", { id: toastId });
+      }
+    } catch (err) {
+      console.error("AI analysis failed:", err);
+      setEditingRule({
+        fileType: file.name.endsWith(".pdf")
+          ? "pdf"
+          : file.name.endsWith(".docx")
+            ? "word"
+            : "excel",
+      });
+      toast.error("AI 分析失败，请手动配置", { id: toastId });
+    } finally {
+      setAiAnalyzing(false);
+      setShowRuleEditor(true);
+    }
+  }, [file]);
+
   // 新建规则：触发 AI 预分析，然后打开编辑器让用户确认
   const handleCreateNewRule = useCallback(async () => {
     if (!file) return;
-
     setAiAnalyzing(true);
     setAiAnalysisResult(null);
+    setParseError(null);
     const toastId = toast.loading("🤖 DeepSeek 正在分析文件结构，生成推荐解析规则...");
     try {
       const formData = new FormData();
@@ -96,7 +160,6 @@ export default function HomePage() {
         setShowRuleEditor(true);
         toast.success("✅ AI 分析完成，请检查并确认推荐的解析规则", { id: toastId });
       } else {
-        // AI 分析失败，打开空规则编辑器
         setEditingRule({
           fileType: file.name.endsWith(".pdf")
             ? "pdf"
@@ -151,7 +214,6 @@ export default function HomePage() {
         return;
       }
 
-      // 保存成功：先刷新列表（独立 try-catch，刷新失败不影响主流程）
       toast.success("规则保存成功");
       setSelectedRuleId(rule.id);
       try {
@@ -161,15 +223,39 @@ export default function HomePage() {
           setRules(rulesData.data);
         }
       } catch (refreshErr) {
-        // 刷新失败不影响保存结果，规则已写入数据库
         console.warn("Refresh rules after save failed:", refreshErr);
       }
       setShowRuleEditor(false);
+      // 关闭后清空 ai 分析结果
+      setAiAnalysisResult(null);
     },
     []
   );
 
-  // 执行解析
+  // 错误码 → 友好标题
+  const getErrorTitle = (code: string): string => {
+    const map: Record<string, string> = {
+      NO_FILE: "未上传文件",
+      NO_RULE: "未选择规则",
+      EMPTY_FILE: "文件为空",
+      FILE_TOO_LARGE: "文件过大",
+      RULE_NOT_FOUND: "规则不存在",
+      UNSUPPORTED_FORMAT: "不支持的格式",
+      READ_FAILED: "读取失败",
+      EXCEL_PARSE_FAILED: "Excel 解析失败",
+      WORD_PARSE_FAILED: "Word 解析失败",
+      PDF_PARSE_FAILED: "PDF 解析失败",
+      NO_SHEETS: "工作表为空",
+      EMPTY_SHEET: "工作表无数据",
+      EMPTY_CONTENT: "文件无内容",
+      RULE_EXEC_FAILED: "规则执行失败",
+      NO_DATA_PARSED: "未解析到数据",
+      INTERNAL_ERROR: "服务器错误",
+    };
+    return map[code] || "解析失败";
+  };
+
+  // 执行解析 - 通过 SSE 流式接收进度和结果
   const handleParse = useCallback(async () => {
     if (!file || !selectedRuleId) {
       toast.error("请选择文件和解析规则");
@@ -178,16 +264,12 @@ export default function HomePage() {
 
     setLoading(true);
     setParseProgress(0);
+    setParseProcessed(0);
+    setParseTotal(0);
+    setParseMessage("准备解析...");
+    setParseError(null);
     const startTime = performance.now();
     const toastId = toast.loading("正在解析文件...");
-
-    // 模拟进度
-    const progressInterval = setInterval(() => {
-      setParseProgress((prev) => {
-        if (prev >= 90) return prev;
-        return prev + Math.random() * 20;
-      });
-    }, 300);
 
     try {
       const formData = new FormData();
@@ -198,40 +280,114 @@ export default function HomePage() {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
 
-      clearInterval(progressInterval);
-      setParseProgress(100);
+      if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
+        // 服务端在流开始前就返回了 JSON 错误
+        const errData = await res.json();
+        const pe: ParseError = {
+          code: errData.code || "INTERNAL_ERROR",
+          message: errData.error || "解析失败",
+          fileInfo: { name: file.name, size: file.size, type: file.type },
+        };
+        setParseError(pe);
+        setLoading(false);
+        toast.error(getErrorTitle(pe.code), { id: toastId });
+        return;
+      }
 
-      if (data.success && data.data) {
-        const result: ParseResult = data.data;
-        setOrders(result.orders);
-        setErrors(result.errors || []);
-        setParseTime(performance.now() - startTime);
-        setStep("preview");
+      if (!res.body) {
+        throw new Error("服务器无响应");
+      }
 
-        if (result.errorCount > 0) {
-          toast(`解析完成，${result.errorCount} 条数据存在错误`, {
-            id: toastId,
-            icon: "⚠️",
-          });
-        } else {
-          toast.success(
-            `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
-            { id: toastId }
-          );
+      // 读取 SSE 流
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let doneReceived = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE 事件以 "\n\n" 分隔
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const eventStr of events) {
+          const line = eventStr.trim();
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6);
+          let event: { type: string;[k: string]: unknown };
+          try {
+            event = JSON.parse(jsonStr);
+          } catch (e) {
+            console.error("Failed to parse SSE event:", jsonStr, e);
+            continue;
+          }
+
+          if (event.type === "start") {
+            const total = event.total as number;
+            setParseTotal(total);
+            setParseMessage((event.message as string) || `共 ${total} 条`);
+            setParseProgress(0);
+            setParseProcessed(0);
+          } else if (event.type === "progress") {
+            const processed = event.processed as number;
+            const total = (event.total as number) || 1;
+            setParseProcessed(processed);
+            setParseTotal(total);
+            setParseProgress((processed / total) * 100);
+            if (event.message) setParseMessage(event.message as string);
+          } else if (event.type === "done") {
+            doneReceived = true;
+            const result = event.result as ParseResult;
+            setOrders(result.orders);
+            setErrors(result.errors || []);
+            setParseTime(performance.now() - startTime);
+            setParseProgress(100);
+            setParseMessage(`解析完成，共 ${result.totalCount} 条`);
+            setStep("preview");
+
+            if (result.errorCount > 0) {
+              toast(`解析完成，${result.errorCount} 条数据存在错误`, {
+                id: toastId,
+                icon: "⚠️",
+              });
+            } else {
+              toast.success(
+                `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
+                { id: toastId }
+              );
+            }
+          } else if (event.type === "error") {
+            const pe: ParseError = {
+              code: event.code as string,
+              message: event.message as string,
+              fileInfo: event.fileInfo as ParseError["fileInfo"],
+            };
+            setParseError(pe);
+            toast.error(getErrorTitle(pe.code), { id: toastId });
+          }
         }
-      } else {
-        toast.error(data.error || "解析失败", { id: toastId });
+      }
+
+      if (!doneReceived && !parseError) {
+        // 流意外关闭
+        throw new Error("解析流意外中断，请重试");
       }
     } catch (err) {
-      clearInterval(progressInterval);
       console.error("Parse error:", err);
-      toast.error("解析失败，请检查文件格式和解析规则", { id: toastId });
+      setParseError({
+        code: "INTERNAL_ERROR",
+        message: err instanceof Error ? err.message : "解析失败，请检查文件格式和解析规则",
+        fileInfo: { name: file.name, size: file.size, type: file.type },
+      });
+      toast.error("解析失败", { id: toastId });
     } finally {
       setLoading(false);
     }
-  }, [file, selectedRuleId]);
+  }, [file, selectedRuleId, parseError]);
 
   // 更新订单数据
   const handleUpdateOrder = useCallback(
@@ -274,12 +430,11 @@ export default function HomePage() {
 
   // 提交下单
   const handleSubmit = useCallback(async () => {
-    if (submitting) return; // 防重复点击
+    if (submitting) return;
     if (errors.length > 0) {
       toast.error("请先修正所有错误后再提交");
       return;
     }
-
     if (orders.length === 0) {
       toast.error("没有可提交的数据");
       return;
@@ -339,8 +494,12 @@ export default function HomePage() {
     setOrders([]);
     setErrors([]);
     setParseProgress(0);
+    setParseProcessed(0);
+    setParseTotal(0);
+    setParseMessage("");
     setParseTime(0);
     setSubmittedCount(0);
+    setParseError(null);
   }, []);
 
   return (
@@ -460,7 +619,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 规则选择卡片 - 用户手动选择已有规则或点击"新建规则"触发 AI 分析 */}
+          {/* 规则选择卡片 */}
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5 mt-3 lg:mt-4">
             <RuleSelector
               rules={rules}
@@ -470,6 +629,74 @@ export default function HomePage() {
               loading={false}
             />
           </div>
+
+          {/* 解析失败时的错误展示 + 手动配置入口 */}
+          {parseError && (
+            <div className="bg-[#fff1f0] border border-[#ffccc7] rounded-xl p-4 lg:p-5 animate-fade-in">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#ffccc7] text-[#cf1322] flex items-center justify-center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-semibold text-[#cf1322]">
+                      {getErrorTitle(parseError.code)}
+                    </h3>
+                    <span className="text-xs px-1.5 py-0.5 bg-[#ffccc7] text-[#cf1322] rounded font-mono">
+                      {parseError.code}
+                    </span>
+                  </div>
+                  <p className="text-sm text-[#cf1322] mt-1.5 leading-relaxed">
+                    {parseError.message}
+                  </p>
+
+                  {/* 原始文件信息 */}
+                  <div className="mt-3 p-3 bg-white/60 rounded-lg border border-[#ffccc7]/50">
+                    <p className="text-xs font-semibold text-[#86909c] mb-1.5">原始文件信息</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-[#4e5969]">
+                      <div>
+                        <span className="text-[#86909c]">文件名：</span>
+                        <span className="font-mono">{parseError.fileInfo.name || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#86909c]">大小：</span>
+                        <span>{formatFileSize(parseError.fileInfo.size)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#86909c]">MIME：</span>
+                        <span className="font-mono">{parseError.fileInfo.type || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 操作按钮 */}
+                  <div className="mt-3.5 flex flex-wrap gap-2">
+                    <Button size="sm" onClick={openManualRuleEditor} loading={aiAnalyzing}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                        <path d="M12 20h9"/>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                      </svg>
+                      手动配置规则
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={handleParse}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                      </svg>
+                      重新解析
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={handleReset}>
+                      更换文件
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 操作栏卡片 */}
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-4.5">
@@ -483,12 +710,16 @@ export default function HomePage() {
               </Button>
             </div>
 
-            {/* 进度条 */}
-            {loading && parseProgress > 0 && (
+            {/* 进度条 - 实时显示 X / Y 条 */}
+            {loading && (
               <div className="mt-4">
                 <ProgressBar
                   progress={parseProgress}
-                  label="正在解析文件..."
+                  label={parseMessage || "正在解析..."}
+                  showPercent
+                  showCount
+                  processed={parseProcessed}
+                  total={parseTotal}
                 />
               </div>
             )}
@@ -549,7 +780,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* 操作按钮卡片 - 关键操作始终可见 */}
+          {/* 操作按钮卡片 */}
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-4.5 sticky bottom-0 z-20">
             <div className="flex justify-between items-center flex-wrap gap-2.5">
               <div className="flex gap-2">

@@ -1,9 +1,12 @@
 "use client";
 
 interface ProgressBarProps {
-  progress: number;
+  progress: number;            // 0-100
   label?: string;
   showPercent?: boolean;
+  showCount?: boolean;         // 是否显示 "X / Y" 条数
+  processed?: number;          // 已处理条数
+  total?: number;              // 总条数
   variant?: "primary" | "success" | "warning" | "danger";
 }
 
@@ -18,19 +21,31 @@ export function ProgressBar({
   progress,
   label,
   showPercent = true,
+  showCount = false,
+  processed,
+  total,
   variant = "primary",
 }: ProgressBarProps) {
   const clampedProgress = Math.min(100, Math.max(0, progress));
 
   return (
     <div className="w-full">
-      {(label || showPercent) && (
+      {(label || showPercent || showCount) && (
         <div className="flex justify-between items-center mb-2">
-          {label && (
-            <span className="text-sm text-[#4e5969] font-medium">{label}</span>
-          )}
+          <div className="flex items-center gap-2 min-w-0">
+            {label && (
+              <span className="text-sm text-[#4e5969] font-medium truncate">
+                {label}
+              </span>
+            )}
+            {showCount && processed !== undefined && total !== undefined && total > 0 && (
+              <span className="text-xs text-[#86909c] font-mono whitespace-nowrap">
+                {processed.toLocaleString()} / {total.toLocaleString()} 条
+              </span>
+            )}
+          </div>
           {showPercent && (
-            <span className="text-sm text-[#0fc6c2] font-semibold">
+            <span className="text-sm text-[#0fc6c2] font-semibold tabular-nums">
               {clampedProgress.toFixed(0)}%
             </span>
           )}

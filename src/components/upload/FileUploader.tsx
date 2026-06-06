@@ -23,6 +23,11 @@ export function FileUploader({
   const validateFile = (file: File): boolean => {
     setError(null);
 
+    if (file.size === 0) {
+      setError("文件为空，请选择一个有效的文件");
+      return false;
+    }
+
     if (file.size > maxSize) {
       setError(`文件大小超过限制（最大 ${formatFileSize(maxSize)}）`);
       return false;

@@ -14,10 +14,17 @@ interface RawDataRow {
 
 // ====== 主入口 ======
 
+export type ProgressCallback = (
+  processed: number,
+  total: number,
+  message?: string
+) => void;
+
 export async function executeRule(
   rawData: RawDataRow[],
   rule: ParseRule,
-  fileName: string
+  fileName: string,
+  onProgress?: ProgressCallback
 ): Promise<{ orders: OrderItem[]; errors: ValidationError[] }> {
   // 自动检测：如果是卡片式文件（内容含 ▶ 标记），强制启用 cardMode
   if (!rule.dataRegion.cardMode?.enabled) {
@@ -36,25 +43,33 @@ export async function executeRule(
   const startTime = performance.now();
   const orders: OrderItem[] = [];
   const errors: ValidationError[] = [];
+  const total = rawData.length;
+  // 初始进度
+  onProgress?.(0, total, "开始解析...");
 
   // 0. 文本记录拆分（Word/PDF 纯文本模式）
   if (rule.postProcessing?.textRecordMarker) {
     const textSections = splitByTextMarker(rawData, rule);
-    for (const section of textSections) {
+    onProgress?.(0, textSections.length, `识别到 ${textSections.length} 个文本段`);
+    for (let i = 0; i < textSections.length; i++) {
+      const section = textSections[i];
       const sectionOrders = buildOrderFromTextSection(section, rule, fileName);
       for (const order of sectionOrders) {
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
+      onProgress?.(i + 1, textSections.length, `已处理 ${i + 1}/${textSections.length} 段`);
     }
   }
   // 1. 卡片模式处理
   else if (rule.dataRegion.cardMode?.enabled) {
     const { groups: cardGroups, preCardRows } = splitByCards(rawData, rule);
+    onProgress?.(0, cardGroups.length, `识别到 ${cardGroups.length} 个卡片`);
     // 从第一个标记前的行中提取订单级字段（如 externalCode）
     const orderLevelFields = extractOrderLevelFields(preCardRows);
-    for (const group of cardGroups) {
+    for (let i = 0; i < cardGroups.length; i++) {
+      const group = cardGroups[i];
       const cardOrders = buildOrderFromCard(group, rule, fileName);
       // 合并订单级字段（如未在卡片中提取到）
       for (const order of cardOrders) {
@@ -66,24 +81,26 @@ export async function executeRule(
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
+      onProgress?.(i + 1, cardGroups.length, `已处理 ${i + 1}/${cardGroups.length} 张卡片`);
     }
   }
   // 2. 复合单元格拆分
   else if (rule.dataRegion.compositeMode?.enabled) {
     const expandedRows = expandCompositeCells(rawData, rule);
-    processRows(expandedRows, rule, fileName, orders, errors);
+    processRows(expandedRows, rule, fileName, orders, errors, total, onProgress);
   }
   // 3. 矩阵转置
   else if (rule.dataRegion.matrixMode?.enabled) {
     const transposedRows = transposeMatrix(rawData, rule);
-    processRows(transposedRows, rule, fileName, orders, errors);
+    processRows(transposedRows, rule, fileName, orders, errors, total, onProgress);
   }
   // 4. 标准处理
   else {
-    processRows(rawData, rule, fileName, orders, errors);
+    processRows(rawData, rule, fileName, orders, errors, total, onProgress);
   }
 
   const endTime = performance.now();
+  onProgress?.(total, total, `解析完成，共 ${orders.length} 条`);
   console.log(`Rule execution completed in ${(endTime - startTime).toFixed(2)}ms, orders: ${orders.length}`);
   return { orders, errors };
 }
@@ -384,7 +401,9 @@ function processRows(
   rule: ParseRule,
   fileName: string,
   orders: OrderItem[],
-  errors: ValidationError[]
+  errors: ValidationError[],
+  total: number = rawData.length,
+  onProgress?: ProgressCallback
 ) {
   // 跳过合计行
   let filteredData = rawData;
@@ -399,22 +418,29 @@ function processRows(
   // 按外部编码聚合（同一 externalCode 的多行 → 共享收货信息，每行一个 SKU）
   if (rule.globalConfig.groupByExternalCode && rule.globalConfig.externalCodeField) {
     const grouped = groupByExternalCode(filteredData, rule);
-    for (const [code, rows] of grouped) {
+    const groups = Array.from(grouped.entries());
+    onProgress?.(0, groups.length, `识别到 ${groups.length} 个外部编码`);
+    for (let i = 0; i < groups.length; i++) {
+      const [code, rows] = groups[i];
       const groupOrders = buildOrderFromRows(rows, rule, fileName, code);
       for (const order of groupOrders) {
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
+      onProgress?.(i + 1, groups.length, `已处理 ${i + 1}/${groups.length} 个外部编码`);
     }
   } else {
-    for (const row of filteredData) {
+    for (let i = 0; i < filteredData.length; i++) {
+      const row = filteredData[i];
       const order = buildOrderFromRow(row, rule, fileName);
       if (order) {
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
       }
+      // 每处理 1 行回调一次（避免大文件回调过频）
+      onProgress?.(i + 1, total, `已处理 ${i + 1}/${total} 行`);
     }
   }
 }

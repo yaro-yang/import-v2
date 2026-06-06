@@ -1,128 +1,281 @@
-import { NextRequest, NextResponse } from "next/server";
-import { parseExcel, parseWord, parsePDF, detectFileType, excelToText, measureParseTime } from "@/lib/file-parser";
+import { NextRequest } from "next/server";
+import { parseExcel, parseWord, parsePDF, detectFileType } from "@/lib/file-parser";
 import { executeRule, excelToRawData } from "@/lib/rule-engine";
 import { getRuleById } from "@/lib/db";
 import { ensureDB } from "@/lib/ensure-db";
-import { ApiResponse, ParseResult, OrderItem } from "@/types";
-import { v4 as uuidv4 } from "uuid";
+import { ParseResult, OrderItem } from "@/types";
+
+// SSE 事件类型
+type ParseEvent =
+  | { type: "start"; total: number; message: string }
+  | { type: "progress"; processed: number; total: number; message?: string }
+  | { type: "done"; result: ParseResult }
+  | { type: "error"; code: string; message: string; fileInfo: { name: string; size: number; type: string } };
+
+// 文件大小限制（与服务端 body 解析一致）
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 export async function POST(request: NextRequest) {
   await ensureDB();
   const parseStart = performance.now();
-  try {
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const ruleId = formData.get("ruleId") as string;
+  const encoder = new TextEncoder();
 
-    if (!file) {
-      return NextResponse.json(
-        { success: false, error: "未上传文件" } as ApiResponse<null>,
-        { status: 400 }
-      );
-    }
-
-    if (!ruleId) {
-      return NextResponse.json(
-        { success: false, error: "未选择解析规则" } as ApiResponse<null>,
-        { status: 400 }
-      );
-    }
-
-    // 获取规则
-    const rule = await getRuleById(ruleId);
-    if (!rule) {
-      return NextResponse.json(
-        { success: false, error: "解析规则不存在" } as ApiResponse<null>,
-        { status: 404 }
-      );
-    }
-
-    // 读取文件内容
-    const buffer = await file.arrayBuffer();
-    const fileType = detectFileType(file.name);
-
-    if (fileType === "unknown") {
-      return NextResponse.json(
-        { success: false, error: "不支持的文件格式" } as ApiResponse<null>,
-        { status: 400 }
-      );
-    }
-
-    let orders: OrderItem[] = [];
-
-    // 解析文件
-    if (fileType === "excel") {
-      const { sheets } = await parseExcel(buffer);
-
-      // 遍历所有 Sheet（支持 mergeSheets 模式）
-      const sheetNames = rule.globalConfig.mergeSheets
-        ? Object.keys(sheets)
-        : (rule.dataRegion.sheetNames || Object.keys(sheets));
-
-      for (const sheetName of sheetNames) {
-        const sheetData = sheets[sheetName];
-        if (!sheetData) continue;
-
-        const rawData = excelToRawData(sheetData, rule);
-        const result = await executeRule(rawData, rule, file.name);
-
-        // 添加 sheet 信息
-        for (const order of result.orders) {
-          order.sourceSheet = sheetName;
+  // 立即创建 SSE 流 - 即使后续失败，也能把错误推给客户端
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: ParseEvent) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch (e) {
+          // 流已关闭，忽略
         }
-        orders.push(...result.orders);
+      };
+
+      // 包装 controller.close，幂等
+      let closed = false;
+      const safeClose = () => {
+        if (!closed) {
+          closed = true;
+          try { controller.close(); } catch { /* ignore */ }
+        }
+      };
+
+      try {
+        // 1. 解析 formData
+        const formData = await request.formData();
+        const file = formData.get("file") as File | null;
+        const ruleId = formData.get("ruleId") as string | null;
+
+        // 2. 参数校验
+        if (!file) {
+          send({ type: "error", code: "NO_FILE", message: "未上传文件", fileInfo: { name: "", size: 0, type: "" } });
+          safeClose();
+          return;
+        }
+        if (!ruleId) {
+          send({ type: "error", code: "NO_RULE", message: "未选择解析规则", fileInfo: { name: file.name, size: file.size, type: file.type } });
+          safeClose();
+          return;
+        }
+        if (file.size === 0) {
+          send({ type: "error", code: "EMPTY_FILE", message: "文件为空，请检查文件内容", fileInfo: { name: file.name, size: file.size, type: file.type } });
+          safeClose();
+          return;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          send({ type: "error", code: "FILE_TOO_LARGE", message: `文件超过 ${Math.floor(MAX_FILE_SIZE / 1024 / 1024)}MB 限制`, fileInfo: { name: file.name, size: file.size, type: file.type } });
+          safeClose();
+          return;
+        }
+
+        // 3. 校验规则
+        const rule = await getRuleById(ruleId);
+        if (!rule) {
+          send({ type: "error", code: "RULE_NOT_FOUND", message: "解析规则不存在或已被删除", fileInfo: { name: file.name, size: file.size, type: file.type } });
+          safeClose();
+          return;
+        }
+
+        // 4. 检测文件类型
+        const fileType = detectFileType(file.name);
+        if (fileType === "unknown") {
+          send({
+            type: "error",
+            code: "UNSUPPORTED_FORMAT",
+            message: `不支持的文件格式 "${file.name}"，仅支持 .xlsx/.xls/.docx/.pdf`,
+            fileInfo: { name: file.name, size: file.size, type: file.type },
+          });
+          safeClose();
+          return;
+        }
+
+        // 5. 读取文件内容
+        let buffer: ArrayBuffer;
+        try {
+          buffer = await file.arrayBuffer();
+        } catch (e) {
+          send({ type: "error", code: "READ_FAILED", message: `读取文件失败：${e instanceof Error ? e.message : "未知错误"}`, fileInfo: { name: file.name, size: file.size, type: file.type } });
+          safeClose();
+          return;
+        }
+
+        let orders: OrderItem[] = [];
+
+        // 6. 按类型解析 + 进度推送
+        if (fileType === "excel") {
+          let sheets: Record<string, (string | number | null)[][]>;
+          let sheetNames: string[];
+          try {
+            const result = await parseExcel(buffer);
+            sheets = result.sheets;
+            sheetNames = result.sheetNames;
+          } catch (e) {
+            send({
+              type: "error",
+              code: "EXCEL_PARSE_FAILED",
+              message: `Excel 解析失败：${e instanceof Error ? e.message : "文件可能已损坏或被加密"}`,
+              fileInfo: { name: file.name, size: file.size, type: file.type },
+            });
+            safeClose();
+            return;
+          }
+
+          if (sheetNames.length === 0) {
+            send({ type: "error", code: "NO_SHEETS", message: "Excel 文件不包含任何工作表", fileInfo: { name: file.name, size: file.size, type: file.type } });
+            safeClose();
+            return;
+          }
+
+          // 计算总行数
+          const sheetNamesToProcess = rule.globalConfig.mergeSheets
+            ? Object.keys(sheets)
+            : (rule.dataRegion.sheetNames || Object.keys(sheets));
+          let totalRows = 0;
+          for (const name of sheetNamesToProcess) {
+            totalRows += sheets[name]?.length || 0;
+          }
+          if (totalRows === 0) {
+            send({ type: "error", code: "EMPTY_SHEET", message: "所有工作表均为空", fileInfo: { name: file.name, size: file.size, type: file.type } });
+            safeClose();
+            return;
+          }
+          send({ type: "start", total: totalRows, message: `共 ${totalRows} 行 ${sheetNamesToProcess.length} 个工作表` });
+
+          // 逐个 sheet 解析
+          for (const sheetName of sheetNamesToProcess) {
+            const sheetData = sheets[sheetName];
+            if (!sheetData) continue;
+            try {
+              const rawData = excelToRawData(sheetData, rule);
+              const result = await executeRule(rawData, rule, file.name, (processed, total, msg) => {
+                send({ type: "progress", processed, total, message: `[${sheetName}] ${msg || ""}` });
+              });
+              for (const order of result.orders) {
+                order.sourceSheet = sheetName;
+              }
+              orders.push(...result.orders);
+            } catch (e) {
+              send({
+                type: "error",
+                code: "RULE_EXEC_FAILED",
+                message: `工作表「${sheetName}」解析失败：${e instanceof Error ? e.message : "未知错误"}，请检查解析规则`,
+                fileInfo: { name: file.name, size: file.size, type: file.type },
+              });
+              safeClose();
+              return;
+            }
+          }
+        } else if (fileType === "word") {
+          let text: string;
+          try {
+            text = await parseWord(buffer);
+          } catch (e) {
+            send({
+              type: "error",
+              code: "WORD_PARSE_FAILED",
+              message: `Word 解析失败：${e instanceof Error ? e.message : "文件可能已损坏、加密或包含不可读内容"}`,
+              fileInfo: { name: file.name, size: file.size, type: file.type },
+            });
+            safeClose();
+            return;
+          }
+          if (!text || !text.trim()) {
+            send({ type: "error", code: "EMPTY_CONTENT", message: "Word 文件内容为空", fileInfo: { name: file.name, size: file.size, type: file.type } });
+            safeClose();
+            return;
+          }
+          const lines = text.split("\n").filter((l) => l.trim());
+          const total = lines.length;
+          send({ type: "start", total, message: `共 ${total} 行文本` });
+          const rawData = lines.map((line, i) => ({
+            rowIndex: i,
+            cells: { text: line, col_0: line },
+          }));
+          const result = await executeRule(rawData, rule, file.name, (processed, total, msg) => {
+            send({ type: "progress", processed, total, message: msg });
+          });
+          orders = result.orders;
+        } else if (fileType === "pdf") {
+          let fullText: string;
+          try {
+            const result = await parsePDF(buffer);
+            fullText = result.fullText;
+          } catch (e) {
+            send({
+              type: "error",
+              code: "PDF_PARSE_FAILED",
+              message: `PDF 解析失败：${e instanceof Error ? e.message : "文件可能已损坏、为扫描件（无文字层）或加密"}`,
+              fileInfo: { name: file.name, size: file.size, type: file.type },
+            });
+            safeClose();
+            return;
+          }
+          if (!fullText || !fullText.trim()) {
+            send({ type: "error", code: "EMPTY_CONTENT", message: "PDF 文件无文本内容（可能是扫描件或图片型 PDF）", fileInfo: { name: file.name, size: file.size, type: file.type } });
+            safeClose();
+            return;
+          }
+          const lines = fullText.split("\n").filter((l) => l.trim());
+          const total = lines.length;
+          send({ type: "start", total, message: `共 ${total} 行文本` });
+          const rawData = lines.map((line, i) => ({
+            rowIndex: i,
+            cells: { text: line, col_0: line },
+          }));
+          const result = await executeRule(rawData, rule, file.name, (processed, total, msg) => {
+            send({ type: "progress", processed, total, message: msg });
+          });
+          orders = result.orders;
+        }
+
+        // 7. 校验汇总
+        const errors = orders.flatMap((o) => o.errors || []).filter(Boolean);
+        const errorCount = orders.filter((o) => o.status === "error").length;
+        const parseTime = performance.now() - parseStart;
+
+        const result: ParseResult = {
+          orders,
+          totalCount: orders.length,
+          successCount: orders.length - errorCount,
+          errorCount,
+          errors,
+          parseTime,
+        };
+
+        // 8. 检查是否真的解析到了数据
+        if (orders.length === 0) {
+          send({
+            type: "error",
+            code: "NO_DATA_PARSED",
+            message: "未能从文件中解析出任何数据，请检查文件内容或调整解析规则",
+            fileInfo: { name: file.name, size: file.size, type: file.type },
+          });
+          safeClose();
+          return;
+        }
+
+        send({ type: "done", result });
+        safeClose();
+      } catch (error) {
+        console.error("Parse error:", error);
+        const fileName = (request as unknown as { _fileName?: string })._fileName || "unknown";
+        send({
+          type: "error",
+          code: "INTERNAL_ERROR",
+          message: `服务器内部错误：${error instanceof Error ? error.message : "未知错误"}`,
+          fileInfo: { name: fileName, size: 0, type: "" },
+        });
+        safeClose();
       }
-    } else if (fileType === "word") {
-      const text = await parseWord(buffer);
-      // Word 解析：将文本按行拆分
-      const lines = text.split("\n").filter((l) => l.trim());
-      const rawData = lines.map((line, i) => ({
-        rowIndex: i,
-        cells: { text: line, col_0: line },
-      }));
-      const result = await executeRule(rawData, rule, file.name);
-      orders = result.orders;
-    } else if (fileType === "pdf") {
-      const { fullText } = await parsePDF(buffer);
-      // PDF 解析：保持页面分隔符，支持多订单拆分
-      const lines = fullText.split("\n");
-      const rawData = lines.map((line, i) => ({
-        rowIndex: i,
-        cells: { text: line, col_0: line },
-      }));
-      const result = await executeRule(rawData, rule, file.name);
-      orders = result.orders;
-    }
+    },
+  });
 
-    // 校验
-    const errors = orders
-      .flatMap((o) => o.errors || [])
-      .filter(Boolean);
-    const errorCount = orders.filter((o) => o.status === "error").length;
-
-    const parseTime = performance.now() - parseStart;
-
-    const result: ParseResult = {
-      orders,
-      totalCount: orders.length,
-      successCount: orders.length - errorCount,
-      errorCount,
-      errors,
-      parseTime,
-    };
-
-    return NextResponse.json({
-      success: true,
-      data: result,
-    } as ApiResponse<ParseResult>);
-  } catch (error) {
-    console.error("Parse error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "解析失败",
-      } as ApiResponse<null>,
-      { status: 500 }
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
