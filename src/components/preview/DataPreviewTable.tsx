@@ -86,8 +86,8 @@ export function DataPreviewTable({
   // 强制 useMemo 重新计算：每次编辑更新为当前时间戳
   const [revision, setRevision] = useState(Date.now());
 
-  // 用户修改过的字段：记录 (orderId, field) → 标记为 dirty，不再显示对应外部错误
-  const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
+  // 记录外部错误中每个字段的原始问题值：key=`${orderId}|${field}`，value=原始值
+  const [originalErrorValues, setOriginalErrorValues] = useState<Map<string, string>>(new Map());
 
   // 实时校验 + 错误映射
   const { errors, errorFieldMap, duplicateCodes, duplicateOrderIds } = useMemo((): {
@@ -140,21 +140,26 @@ export function DataPreviewTable({
       }
     }
 
-    // 3. 合并外部传入的错误（忽略已被用户修改或已删除的行）
+    // 3. 合并外部传入的错误
+    // 动态对比：如果当前值与原始问题值不一致（用户已修改），跳过；改回原值则重新显示
     const allErrors: ValidationError[] = [...fieldErrors];
     for (const err of externalErrors) {
       const ordersAtRow = orders.filter((o) => (o.sourceRow || 0) === err.row);
-      // 行已被删除或修改了字段，跳过
+      // 行已被删除，跳过
       if (ordersAtRow.length === 0) continue;
-      let anyDirty = false;
-      for (const o of ordersAtRow) {
-        const dirtyKey = `${o.id}|${err.field}`;
-        if (dirtyFields.has(dirtyKey)) {
-          anyDirty = true;
-          break;
+
+      // 检查是否所有匹配行的当前值都与原始问题值不同（都已被修改）
+      const allModified = ordersAtRow.every((o) => {
+        const key = `${o.id}|${err.field}`;
+        const originalVal = originalErrorValues.get(key);
+        const currentVal = String((o as unknown as Record<string, unknown>)[err.field] ?? "");
+        // 有原始记录 → 对比当前值；无原始记录 → 记录当前值为"问题值"
+        if (originalVal !== undefined) {
+          return originalVal !== currentVal; // 不同=已修改，相同=改回了
         }
-      }
-      if (anyDirty) continue;
+        return false; // 首次，认为未修改
+      });
+      if (allModified) continue; // 所有行都已修改且未改回 → 跳过
 
       for (const o of ordersAtRow) {
         if (!errorFieldMap.has(o.id)) errorFieldMap.set(o.id, new Set());
@@ -169,14 +174,26 @@ export function DataPreviewTable({
       duplicateCodes: duplicateKeys,
       duplicateOrderIds,
     };
-  }, [orders, externalErrors, dirtyFields, revision]);
+  }, [orders, externalErrors, originalErrorValues, revision]);
 
-  // 当 orders 数据源变更时（如重新解析），重置 dirtyFields
-  // 仅在 orders 数据源变更时重置 dirtyFields（新增/替换，而非删除）
+  // 当 externalErrors 到达时，记录每个错误字段的当前值作为"问题值"
+  useEffect(() => {
+    const map = new Map<string, string>();
+    for (const err of externalErrors) {
+      const ordersAtRow = orders.filter((o) => (o.sourceRow || 0) === err.row);
+      for (const o of ordersAtRow) {
+        const key = `${o.id}|${err.field}`;
+        const val = String((o as unknown as Record<string, unknown>)[err.field] ?? "");
+        map.set(key, val);
+      }
+    }
+    setOriginalErrorValues(map);
+  }, [externalErrors, orders]);
+
+  // 当 orders 数据源变更时（如重新解析），重置
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const currentIds = new Set(orders.map((o) => o.id));
-    // 有新的 id 出现（被替换或新增），说明是重新解析 → 重置
     let hasNew = false;
     for (const id of currentIds) {
       if (!prevOrderIdsRef.current.has(id)) {
@@ -186,7 +203,7 @@ export function DataPreviewTable({
     }
     prevOrderIdsRef.current = currentIds;
     if (hasNew) {
-      setDirtyFields(new Set());
+      setOriginalErrorValues(new Map());
       setRevision(Date.now());
     }
   }, [orders]);
@@ -215,22 +232,13 @@ export function DataPreviewTable({
     setEditingCell(null);
   };
 
-  // 标记用户修改过的字段（修改后不再显示该字段的外部错误），同时递增 revision 强制重校验
-  const markDirty = (id: string, field: string) => {
-    setDirtyFields((prev) => new Set(prev).add(`${id}|${field}`));
+  // 触发重校验（动态对比当前值与原始问题值）
+  const markDirty = (_id: string, _field: string) => {
     setRevision(Date.now());
   };
 
-  // 删除行时标记整行所有字段为 dirty，确保外部错误被清除
+  // 删除行
   const handleDelete = (id: string) => {
-    const cols = mode === "transfer" ? transferColumns : columns;
-    setDirtyFields((prev) => {
-      const next = new Set(prev);
-      for (const col of cols) {
-        next.add(`${id}|${col.key}`);
-      }
-      return next;
-    });
     onDeleteOrder(id);
   };
 

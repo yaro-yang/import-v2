@@ -1039,38 +1039,25 @@ export default function HistoryPage() {
             {/* 分页 */}
             <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc]">
               <p className="text-sm text-[#86909c]">
-                共 {total} 张出库单，{totalSkuCount} 条 SKU
+                共 {total} 张出库单，{totalSkuCount} 条 SKU，第 {page}/{Math.max(totalPages, 1)} 页
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm border border-[#d0d7de] rounded-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  &lt;
+                  上一页
                 </button>
-                {Array.from({ length: Math.min(Math.max(totalPages, 1), 7) }, (_, i) => {
-                  const pageNum = i + 1;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`min-w-[32px] h-[28px] text-sm rounded transition-colors ${
-                        page === pageNum
-                          ? "bg-[#0fc6c2] text-white"
-                          : "hover:bg-white border border-transparent"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
+                <span className="text-sm font-semibold text-[#1d2129] px-2">
+                  {page} / {Math.max(totalPages, 1)}
+                </span>
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-2.5 py-1 text-sm border border-[#d0d7de] rounded hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm border border-[#d0d7de] rounded-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  &gt;
+                  下一页
                 </button>
               </div>
             </div>
