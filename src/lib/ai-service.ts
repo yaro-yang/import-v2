@@ -593,7 +593,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
           ? { enabled: true, startMarker: "▶" }
           : undefined,
         matrixMode: isMatrixMode
-          ? { enabled: true, valueColumnNamesRow: headerRow }
+          ? { enabled: true, valueColumnNamesRow: headerRow, storeColumnNames: matrixStoreColumns }
           : undefined,
       },
       postProcessing: {
