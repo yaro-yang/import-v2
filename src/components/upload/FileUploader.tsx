@@ -94,7 +94,7 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         className={`
-          relative border-2 border-dashed rounded-xl p-10 lg:p-16 text-center cursor-pointer
+          relative border-2 border-dashed rounded-xl p-8 lg:p-12 text-center cursor-pointer
           transition-all duration-200
           ${
             isDragOver
@@ -113,16 +113,16 @@ export function FileUploader({
           disabled={disabled}
         />
 
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-3.5">
           {/* 上传图标 */}
           <div
-            className={`w-16 h-16 rounded-xl flex items-center justify-center transition-colors ${
-              isDragOver ? "bg-[#0fc6c2] text-white" : "bg-[#e8fafa] text-[#0fc6c2]"
+            className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
+              isDragOver ? "bg-[#0fc6c2] text-white shadow-[0_4px_12px_rgba(15,198,194,0.3)]" : "bg-[#e8fafa] text-[#0fc6c2]"
             }`}
           >
             <svg
-              width="28"
-              height="28"
+              width="26"
+              height="26"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -138,13 +138,13 @@ export function FileUploader({
 
           {/* 文字提示 */}
           <div>
-            <p className="text-[#1d2129] font-medium text-base">
+            <p className="text-[#1d2129] font-medium text-sm lg:text-base">
               {isDragOver ? "释放文件以上传" : "拖拽文件到此处，或点击上传"}
             </p>
-            <p className="text-[#86909c] text-sm mt-2">
+            <p className="text-[#86909c] text-sm mt-1.5">
               支持 Excel (.xlsx/.xls)、Word (.docx)、PDF 格式
             </p>
-            <p className="text-[#b5bbc3] text-sm mt-0.5">
+            <p className="text-[#b5bbc3] text-xs mt-0.5">
               最大文件大小: {formatFileSize(maxSize)}
             </p>
           </div>
@@ -153,12 +153,12 @@ export function FileUploader({
 
       {/* 错误提示 */}
       {error && (
-        <div className="mt-3 p-3 bg-[#fff1f0] border border-[#ffccc7] rounded text-sm text-[#cf1322] animate-fade-in">
-          <svg className="inline-block w-4 h-4 mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="mt-3 p-3 bg-[#fff1f0] border border-[#ffccc7] rounded-lg text-sm text-[#cf1322] animate-fade-in flex items-center gap-2">
+          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          {error}
+          <span>{error}</span>
         </div>
       )}
     </div>

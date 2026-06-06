@@ -481,7 +481,7 @@ export default function HomePage() {
 
       {/* 步骤 3: 预览编辑 */}
       {step === "preview" && (
-        <div className="animate-fade-in space-y-4 lg:space-y-5">
+        <div className="animate-fade-in space-y-4 lg:space-y-4.5">
           {/* 统计信息卡片 */}
           <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
             <div className="flex items-center gap-4 lg:gap-8 flex-wrap">
@@ -514,7 +514,7 @@ export default function HomePage() {
 
           {/* 数据预览表格卡片 */}
           {orders.length > 0 ? (
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
+            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
               <DataPreviewTable
                 orders={orders}
                 onUpdateOrder={handleUpdateOrder}
@@ -533,8 +533,8 @@ export default function HomePage() {
           )}
 
           {/* 操作按钮卡片 - 关键操作始终可见 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5 sticky bottom-0 z-20">
-            <div className="flex justify-between items-center flex-wrap gap-2">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-4.5 sticky bottom-0 z-20">
+            <div className="flex justify-between items-center flex-wrap gap-2.5">
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={handleReset}>
                   重新上传
@@ -544,7 +544,6 @@ export default function HomePage() {
                 </Button>
               </div>
               <Button
-                size="lg"
                 onClick={handleSubmit}
                 loading={submitting}
                 disabled={errors.length > 0 || submitting}
@@ -558,23 +557,28 @@ export default function HomePage() {
 
       {/* 步骤 4: 提交完成 */}
       {step === "submitted" && (
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-10 lg:p-16 animate-fade-in">
-          <div className="text-center">
-            <div className="w-16 h-16 lg:w-18 lg:h-18 rounded-full bg-[#e8fafa] flex items-center justify-center mx-auto mb-5">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-10 lg:p-14 animate-fade-in">
+          <div className="text-center max-w-md mx-auto">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#e8fafa] to-[#d4f5f3] flex items-center justify-center mx-auto mb-4 shadow-[0_4px_16px_rgba(15,198,194,0.2)]">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
               </svg>
             </div>
             <h2 className="text-xl font-semibold text-[#1d2129] mb-2">
               提交成功！
             </h2>
-            <p className="text-base text-[#4e5969] mb-6">
+            <p className="text-sm text-[#4e5969] mb-6 leading-relaxed">
               已成功提交{" "}
-              <span className="font-semibold text-[#0fc6c2]">{submittedCount}</span>{" "}
+              <span className="font-semibold text-[#0fc6c2] text-base">{submittedCount}</span>{" "}
               条运单
             </p>
-            <div className="flex justify-center gap-3 flex-wrap">
-              <Button onClick={handleReset}>继续导入</Button>
+            <div className="flex justify-center gap-2.5 flex-wrap">
+              <Button onClick={handleReset}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                继续导入
+              </Button>
               <Button
                 variant="secondary"
                 onClick={() => (window.location.href = "/history")}

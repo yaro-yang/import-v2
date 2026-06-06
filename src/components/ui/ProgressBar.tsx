@@ -25,7 +25,7 @@ export function ProgressBar({
   return (
     <div className="w-full">
       {(label || showPercent) && (
-        <div className="flex justify-between items-center mb-1.5">
+        <div className="flex justify-between items-center mb-2">
           {label && (
             <span className="text-sm text-[#4e5969] font-medium">{label}</span>
           )}
@@ -36,7 +36,7 @@ export function ProgressBar({
           )}
         </div>
       )}
-      <div className="w-full h-2 bg-[#f2f3f5] rounded-full overflow-hidden">
+      <div className="w-full h-2.5 bg-[#f2f3f5] rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-300 ease-out ${variantColors[variant]} ${
             clampedProgress < 100 ? "progress-striped" : ""

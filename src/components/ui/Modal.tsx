@@ -68,19 +68,19 @@ export function Modal({
         }`}
       >
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-4 lg:px-5 py-3 lg:py-3.5 border-b border-[#e5e6eb] bg-[#fafbfc] rounded-t-xl flex-shrink-0">
-          <h2 className="text-sm lg:text-base font-semibold text-[#1d2129]">{title}</h2>
+        <div className="flex items-center justify-between px-5 lg:px-6 py-3.5 border-b border-[#e5e6eb] bg-gradient-to-b from-[#fafbfc] to-white rounded-t-xl flex-shrink-0">
+          <h2 className="text-base lg:text-lg font-semibold text-[#1d2129]">{title}</h2>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded text-[#86909c] hover:bg-[#e5e6eb] hover:text-[#1d2129] transition-colors flex-shrink-0"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[#86909c] hover:bg-[#f2f3f5] hover:text-[#1d2129] transition-colors flex-shrink-0"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
         {/* 内容区 */}
-        <div className="px-4 lg:px-5 py-3 lg:py-4 overflow-y-auto flex-1">{children}</div>
+        <div className="px-5 lg:px-6 py-4 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

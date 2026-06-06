@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useMemo } from "react";
 import { OrderItem, ValidationError } from "@/types";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
 
 interface DataPreviewTableProps {
   orders: OrderItem[];
@@ -43,7 +44,7 @@ export function DataPreviewTable({
   const rowVirtualizer = useVirtualizer({
     count: orders.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 42,
+    estimateSize: () => 44,
     overscan: 10,
   });
 
@@ -127,29 +128,29 @@ export function DataPreviewTable({
             </span>
           )}
         </div>
-        <button
-          onClick={onAddRow}
-          className="px-3 py-1.5 text-xs font-medium text-[#0fc6c2] bg-[#e8fafa] rounded hover:bg-[#c5f0f0] transition-colors whitespace-nowrap"
-        >
-          + 新增行
-        </button>
+        <Button size="sm" variant="ghost" onClick={onAddRow}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新增行
+        </Button>
       </div>
 
       {/* 表格容器 - 鲸天风格：紧凑边框表格 */}
       <div
         ref={parentRef}
-        className="border border-[#e5e6eb] rounded-lg overflow-auto"
+        className="border border-[#e5e6eb] rounded-xl overflow-auto"
         style={{ height: "480px", maxHeight: "clamp(320px, 60vh, 480px)" }}
       >
         {/* 表头 */}
-        <div className="sticky top-0 z-10 flex bg-[#f7f8fa] border-b border-[#e5e6eb] min-w-max">
-          <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#f7f8fa] z-20">
+        <div className="sticky top-0 z-10 flex bg-[#fafbfc] border-b border-[#e5e6eb] min-w-max">
+          <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#fafbfc] z-20">
             #
           </div>
           {columns.map((col) => (
             <div
               key={col.key}
-              className="flex-shrink-0 px-2 lg:px-3 py-2 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb]"
+              className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb]"
               style={{ width: col.width }}
             >
               {col.label}
@@ -158,7 +159,7 @@ export function DataPreviewTable({
               )}
             </div>
           ))}
-          <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#f7f8fa] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
+          <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#fafbfc] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
             操作
           </div>
         </div>
@@ -191,7 +192,7 @@ export function DataPreviewTable({
                 {/* 行号 - 粘性左列 */}
                 <div
                   className={cn(
-                    "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2 text-xs text-center border-r border-[#f2f3f5] sticky left-0 z-10",
+                    "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs text-center border-r border-[#f2f3f5] sticky left-0 z-10",
                     hasError ? "text-[#cf1322] bg-[#fff7e8]/80" : "text-[#86909c] bg-inherit"
                   )}
                 >
@@ -215,7 +216,7 @@ export function DataPreviewTable({
                     <div
                       key={col.key}
                       className={cn(
-                        "flex-shrink-0 px-2 lg:px-3 py-2 text-sm border-r border-[#f2f3f5] cursor-pointer",
+                        "flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-sm border-r border-[#f2f3f5] cursor-pointer",
                         hasFieldError && "bg-[#fff1f0]"
                       )}
                       style={{ width: col.width }}
@@ -233,10 +234,10 @@ export function DataPreviewTable({
                             handleKeyDown(e, order.id, col.key, virtualRow.index)
                           }
                           className={cn(
-                            "w-full px-1 py-0.5 text-sm border rounded outline-none",
+                            "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
                             hasFieldError
                               ? "border-[#cf1322] bg-[#fff1f0]"
-                              : "border-[#0fc6c2] bg-white"
+                              : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
                           )}
                           autoFocus
                         />
@@ -257,7 +258,7 @@ export function DataPreviewTable({
                 })}
 
                 {/* 操作列 - 粘性右列 */}
-                <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
+                <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
                   <button
                     onClick={() => onDeleteOrder(order.id)}
                     className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
@@ -274,13 +275,17 @@ export function DataPreviewTable({
 
       {/* 错误汇总 */}
       {errors.length > 0 && (
-        <div className="mt-3 p-3 bg-[#fff7e8] border border-[#ffe4ba] rounded">
-          <p className="text-sm font-medium text-[#d97b00] mb-1.5">
+        <div className="mt-3 p-3 bg-[#fff7e8] border border-[#ffe4ba] rounded-lg">
+          <p className="text-sm font-medium text-[#d97b00] mb-1.5 flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
             校验发现 {errors.length} 个问题：
           </p>
           <div className="max-h-28 overflow-y-auto space-y-0.5">
             {errors.map((err, i) => (
-              <p key={i} className="text-xs text-[#d97b00]">
+              <p key={i} className="text-xs text-[#d97b00] pl-5">
                 第 {err.row} 行 · {err.field}: {err.message}
               </p>
             ))}
