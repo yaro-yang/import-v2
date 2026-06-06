@@ -563,13 +563,18 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
         defaultValue: "",
       };
     }
+    // 查找列名在 headerParts 中的索引作为兜底
+    const colName = extractCleanColumnName(m.suggestedSource);
+    const colIdx = colName ? headerParts.findIndex((p) => p.replace(/^行\d+:\s*/, "").trim() === colName) : -1;
+
     return {
       targetField: m.targetField,
       mode: (m.targetField === "storeName" || m.targetField.startsWith("recipient"))
              && tailFields.some((tf) => tf.targetField === m.targetField)
              ? "row_field" as FieldMapping["mode"]
              : "column_name" as FieldMapping["mode"],
-      columnName: extractCleanColumnName(m.suggestedSource),
+      columnName: colName,
+      columnIndex: colIdx >= 0 ? colIdx : undefined,
     };
   });
 

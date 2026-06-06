@@ -877,8 +877,13 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
   switch (mapping.mode) {
     case "column_index":
       return row.cells[`col_${mapping.columnIndex}`] || "";
-    case "column_name":
-      return row.cells[mapping.columnName || ""] || "";
+    case "column_name": {
+      const named = mapping.columnName ? (row.cells[mapping.columnName] || "") : "";
+      if (named) return named;
+      // 列名查找失败，用列索引兜底
+      if (mapping.columnIndex !== undefined) return row.cells[`col_${mapping.columnIndex}`] || "";
+      return mapping.defaultValue || "";
+    }
     case "static_value":
       return mapping.staticValue || mapping.defaultValue || "";
     case "tail_extract":
@@ -909,10 +914,12 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
       if (mapping.columnName) return row.cells[mapping.columnName] || "";
       if (mapping.columnIndex !== undefined) return row.cells[`col_${mapping.columnIndex}`] || "";
       return mapping.defaultValue || "";
-    default:
-      if (mapping.columnName) return row.cells[mapping.columnName] || "";
+    default: {
+      const named = mapping.columnName ? (row.cells[mapping.columnName] || "") : "";
+      if (named) return named;
       if (mapping.columnIndex !== undefined) return row.cells[`col_${mapping.columnIndex}`] || "";
       return mapping.defaultValue || "";
+    }
   }
 }
 
@@ -940,10 +947,10 @@ export function excelToRawData(
     const headerData = data[headerRow];
     if (headerData) {
       for (let col = 0; col < headerData.length; col++) {
-        const rawHeader = String(headerData[col] ?? `col_${col}`);
+        const rawHeader = String(headerData[col] ?? `col_${col}`).trim();
         // 处理合并表头：取最后一行作为实际列名
         const parts = rawHeader.split("\n").filter((p) => p.trim());
-        headers.push(parts[parts.length - 1] || rawHeader);
+        headers.push((parts[parts.length - 1] || rawHeader).trim());
       }
     }
   }
