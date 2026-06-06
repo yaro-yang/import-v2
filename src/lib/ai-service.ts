@@ -47,32 +47,35 @@ ${contentPreview}
 
 重要规则：
 
-1. headerRow: 表头所在行号(0-based)。如果第1行是公司名称/标题则headerRow>=1。
+1. headerRow: 表头所在行号(0-based)。
    - 标准表：表头行包含"物品编码/物品名称/规格/数量"等
-   - 如果表头行不存在（如卡片式、纯文本），headerRow设大一点如99
+   - **卡片式布局：必须设置 headerRow=0, skipRows=0**（由卡片分隔符 ▶ 决定结构，表头行不适用）
 
-2. skipRows: headerRow之前需要跳过的行数
+2. skipRows: headerRow之前需要跳过的行数。**卡片式必须为 0**。
 
 3. fieldMappings: 每个字段的映射。columnName必须是表头行中的原始列名文字。
    - 标准表：从表头行找对应的列名，如"物品编码"、"SKU名称"、"调入门店"
+   - **卡片式：SKU 字段的 columnName 直接填卡片内 SKU 小表的列名（如"物品编码"、"物品名称"、"数量"）**
    - 卡片式/多区域：如果在表头找不到，检查内容中是否有key:value对，如"调拨单号：xxx"，则columnName填"调拨单号"
    - 矩阵布局：standardFields中填skuCode/skuName等标准列的映射；matrixStoreColumns中填门店名列表
 
 4. 特殊模式检测（非常重要）：
    a) cardMode: true —— 如果内容包含"▶ 调拨记录"、"▶ 配送记录"等卡片分隔符
+      - **卡片式必须将 cardMode.enabled 设为 true, startMarker 设为 "▶"**
+      - **卡片式不要设置 tailRegion（每张卡片内部已含收货门店/收货人/电话/地址信息，由卡片解析器自动提取）**
    b) matrixMode: true —— 如果表头行包含门店/分店名作为列（如"银泰"、"金桥"、"金银潭"）
    c) compositeMode: true —— 如果表格单元格包含"\n"换行分隔的复合信息
    d) groupByExternalCode: true —— 如果多个仓库配送单合并到一个文件中
    e) mergeSheets: true —— 如果有多个结构相同的Sheet
 
-5. 尾部信息区（tailRegion）:
+5. 尾部信息区（tailRegion）——**仅对标准表有效，卡片式不需要**:
    - 如果数据表下方有额外的信息行（如"收货人：xxx"、"电话：xxx"、"地址：xxx"、"收货门店：xxx"、"单据号：xxx"），
      这些应提取到tailFields中
    - tailFields格式：[{targetField, mode: "row_field", rowKeyPattern: "收货人|收货人姓名", staticValue: null, confidence: 0.8}]
    - tailStartRow: 尾部信息起始行号。如果有合计行，tailStartRow在合计行之后
 
 6. storeName(收货门店)优先匹配含"调入/门店/收货店/店铺/客户/收货机构"等关键词的列名
-7. recipientName/recipientPhone/recipientAddress优先从尾部信息区提取
+7. recipientName/recipientPhone/recipientAddress优先从尾部信息区提取（卡片式则由卡片解析器自动处理）
 
 输出纯JSON,不要markdown代码块,不要解释:
 {
@@ -90,13 +93,8 @@ ${contentPreview}
     {"targetField": "recipientAddress", "mode": "column_name", "columnName": null, "confidence": 0.2},
     {"targetField": "remark", "mode": "column_name", "columnName": null, "confidence": 0.2}
   ],
-  "tailFields": [
-    {"targetField": "recipientName", "mode": "row_field", "rowKeyPattern": "收货人|收货人姓名", "confidence": 0.8},
-    {"targetField": "recipientPhone", "mode": "row_field", "rowKeyPattern": "电话|收货电话|联系电话", "confidence": 0.8},
-    {"targetField": "recipientAddress", "mode": "row_field", "rowKeyPattern": "地址|收货地址", "confidence": 0.8},
-    {"targetField": "storeName", "mode": "row_field", "rowKeyPattern": "收货门店|收货机构", "confidence": 0.8}
-  ],
-  "tailStartRow": 数字,
+  "tailFields": [],
+  "tailStartRow": null,
   "groupByExternalCode": false,
   "skipTotalRow": false,
   "mergeSheets": false,
@@ -449,9 +447,10 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       },
       fieldMappings: suggestedRuleFieldMappings,
       dataRegion: {
-        skipRows,
-        headerRow,
-        tailRegion: tailLines.length > 0
+        // 卡片模式：从第 0 行开始（包含标题/订单头），headerRow 不适用
+        skipRows: isCardMode ? 0 : skipRows,
+        headerRow: isCardMode ? 0 : headerRow,
+        tailRegion: tailLines.length > 0 && !isCardMode
           ? { startRow: tailStartRow, fields: tailFields }
           : undefined,
         cardMode: isCardMode

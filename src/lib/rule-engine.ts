@@ -282,6 +282,35 @@ function buildOrderFromCard(
   // 通用 SKU 表头 / 标记
   ["物品编码", "物品名称", "规格", "数量", "SKU编码", "SKU名称", "SKU数量"].forEach((s) => labelKeywords.add(s));
 
+  // 检测卡片内的 SKU 表头行，建立"列名 → col_N"映射
+  // 优先级：规则配置 > 通用 SKU 关键词
+  const skuHeaderMap: Record<string, number> = {};
+  const skuHeaderKeywords: Record<string, string[]> = {
+    skuCode: ["物品编码", "SKU编码", "商品编码", "产品编码", "编码"],
+    skuName: ["物品名称", "SKU名称", "商品名称", "产品名称", "品名", "名称"],
+    skuSpec: ["规格型号", "规格", "型号"],
+    skuQuantity: ["发货数量", "数量", "件数", "SKU数量", "订货数量"],
+  };
+  for (const row of cardRows) {
+    const cells = getCardCells(row);
+    if (cells.length === 0) continue;
+    // 检查这一行是否是 SKU 表头行（包含多个 SKU 字段关键词）
+    const hits: Record<string, number> = {};
+    for (let i = 0; i < cells.length; i++) {
+      const cell = (cells[i] || "").trim();
+      for (const [field, kws] of Object.entries(skuHeaderKeywords)) {
+        if (kws.some((kw) => cell === kw || cell.includes(kw))) {
+          hits[field] = i;
+          break;
+        }
+      }
+    }
+    if (Object.keys(hits).length >= 2) {
+      Object.assign(skuHeaderMap, hits);
+      break; // 找到表头就退出
+    }
+  }
+
   const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
   let totalQty = 0;
 
@@ -297,17 +326,33 @@ function buildOrderFromCard(
     const skuQtyMapping = rule.fieldMappings.find((m) => m.targetField === "skuQuantity");
     const skuSpecMapping = rule.fieldMappings.find((m) => m.targetField === "skuSpec");
 
-    const code = extractFieldValue(row, skuCodeMapping);
-    const name = extractFieldValue(row, skuNameMapping);
-    const qty = parseFloat(extractFieldValue(row, skuQtyMapping) || "0");
-    const spec = extractFieldValue(row, skuSpecMapping);
+    // 三段式提取：①规则配置 → ②卡片内检测的 SKU 表头位置 → ③col_N 兜底
+    const code =
+      extractFieldValue(row, skuCodeMapping) ||
+      (skuHeaderMap.skuCode !== undefined ? cells[skuHeaderMap.skuCode] || "" : "") ||
+      cells[0] || "";
+    const name =
+      extractFieldValue(row, skuNameMapping) ||
+      (skuHeaderMap.skuName !== undefined ? cells[skuHeaderMap.skuName] || "" : "") ||
+      cells[1] || "";
+    const qtyStr =
+      extractFieldValue(row, skuQtyMapping) ||
+      (skuHeaderMap.skuQuantity !== undefined ? cells[skuHeaderMap.skuQuantity] || "" : "") ||
+      cells[3] || "";
+    const qty = parseFloat(qtyStr) || 0;
+    const spec =
+      extractFieldValue(row, skuSpecMapping) ||
+      (skuHeaderMap.skuSpec !== undefined ? cells[skuHeaderMap.skuSpec] || "" : "") ||
+      cells[2] || "";
 
-    if (code || name) {
-      if (code) skuCodes.push(code);
-      if (name) skuNames.push(name);
-      totalQty += qty || 0;
-      if (spec) skuSpecs.push(spec);
-    }
+    // 只有 col_0 看起来像 SKU 编码（字母数字混合，不是中文）才接受
+    const isLikelySku = /^[A-Z0-9][A-Z0-9\-_]*$/i.test(code);
+    if (!isLikelySku) continue;
+
+    if (code) skuCodes.push(code);
+    if (name) skuNames.push(name);
+    totalQty += qty;
+    if (spec) skuSpecs.push(spec);
   }
 
   if (skuCodes.length > 0) {
@@ -737,10 +782,11 @@ export function excelToRawData(
   }
 
   // 提取数据行
-  // 卡片模式下不要按 headerRow 跳行（headerRow 通常被 AI 设为大值），所有行都要交给 splitByCards 处理
+  // 卡片模式下：从第 0 行开始处理（包含标题、订单头、卡片标记），完全忽略 skipRows/headerRow
+  // 因为 splitByCards 会按 ▶ 标记拆分，headerRow/skipRows 在卡片模式下无意义
   const isCardMode = config.cardMode?.enabled === true;
   const startRow = isCardMode
-    ? Math.max(skipRows, 0)
+    ? 0
     : Math.max(skipRows, headerRow + 1);
   for (let r = startRow; r < Math.min(endRow, data.length); r++) {
     const rowData = data[r];
