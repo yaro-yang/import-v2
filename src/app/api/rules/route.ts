@@ -41,8 +41,9 @@ export async function POST(request: NextRequest) {
     } as ApiResponse<ParseRule>);
   } catch (error) {
     console.error("Save rule error:", error);
+    const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: "保存规则失败" } as ApiResponse<null>,
+      { success: false, error: `保存规则失败: ${detail}` } as ApiResponse<null>,
       { status: 500 }
     );
   }
