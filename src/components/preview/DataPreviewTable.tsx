@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { OrderItem, ValidationError, TEMPERATURE_LEVELS } from "@/types";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { StatBlock, Divider, StatusDot } from "@/components/ui/TableDecorations";
@@ -83,7 +82,6 @@ export function DataPreviewTable({
     id: string;
     field: string;
   } | null>(null);
-  const parentRef = useRef<HTMLDivElement>(null);
 
   // 实时校验 + 错误映射
   const { errors, errorFieldMap, duplicateCodes, duplicateOrderIds } = useMemo((): {
@@ -163,13 +161,6 @@ export function DataPreviewTable({
   useEffect(() => {
     onValidationChange?.({ errors, errorOrderIds: new Set(errorFieldMap.keys()), duplicateCodes });
   }, [errors, errorFieldMap, duplicateCodes, onValidationChange]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: orders.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 44,
-    overscan: 10,
-  });
 
   const isFieldError = (orderId: string, field: string): boolean => {
     const fields = errorFieldMap.get(orderId);
@@ -968,7 +959,9 @@ export function DataPreviewTable({
     );
   }
 
-  // ============ 出库单模式：扁平 Excel 风格表格（保留旧实现） ============
+  // ============ 出库单模式：扁平 Excel 风格表格（参照 history 页面表格实现）============
+  const totalWidth = 44 + columns.reduce((s, c) => s + c.width, 0) + 72;
+
   return (
     <div className="flex flex-col h-full">
       {/* 工具栏 */}
@@ -998,182 +991,178 @@ export function DataPreviewTable({
         </Button>
       </div>
 
-      {/* 表格容器 - 类 Excel：粘性表头 + 横向滚动 */}
+      {/* 表格容器 */}
       <div
-        ref={parentRef}
         className="border border-[#e5e6eb] rounded-xl overflow-auto"
-        style={{ height: "480px", maxHeight: "clamp(320px, 60vh, 480px)" }}
+        style={{ maxHeight: "480px" }}
       >
-        {/* 表头 - 固定吸顶 */}
-        <div className="sticky top-0 z-10 flex bg-[#fafbfc] border-b border-[#e5e6eb] min-w-max shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-          <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#fafbfc] z-20">
-            #
-          </div>
-          {columns.map((col) => (
-            <div
-              key={col.key}
-              className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb] whitespace-nowrap"
-              style={{ width: col.width }}
-            >
-              {col.label}
-              {col.required && (
-                <span className="text-[#cf1322] ml-0.5">*</span>
-              )}
-            </div>
-          ))}
-          <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#fafbfc] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
-            操作
-          </div>
-        </div>
-
-        {/* 虚拟列表行 */}
-        <div
+        <table
+          className="w-full text-sm"
           style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: "100%",
-            position: "relative",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            minWidth: totalWidth,
+            tableLayout: "fixed",
           }}
         >
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            const order = orders[virtualRow.index];
-            const rowHasError = isWholeRowError(order.id);
-            const isDup = isDuplicateRow(order.id);
+          <colgroup>
+            <col style={{ width: 44 }} />
+            {columns.map((c) => (
+              <col key={c.key} style={{ width: c.width }} />
+            ))}
+            <col style={{ width: 72 }} />
+          </colgroup>
 
-            return (
-              <div
-                key={order.id}
-                className={cn(
-                  "absolute top-0 left-0 w-full flex min-w-max border-b border-[#f2f3f5] hover:bg-[#fafbfc] transition-colors",
-                  rowHasError && "bg-[#fff7e8]/40",
-                  isDup && "bg-[#fff1f0]/70 ring-1 ring-inset ring-[#ffccc7]"
-                )}
-                style={{
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                {/* 行号 - 粘性左列 */}
-                <div
+          <thead>
+            <tr>
+              <th className="sticky top-0 left-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 tracking-wide uppercase">
+                #
+              </th>
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2.5 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
+                  style={{ width: col.width }}
+                >
+                  {col.label}
+                  {col.required && <span className="text-[#cf1322] ml-0.5">*</span>}
+                </th>
+              ))}
+              <th className="sticky top-0 right-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-b-2 border-b-[#0fc6c2]/40 tracking-wide uppercase shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
+                操作
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {orders.map((order, rowIdx) => {
+              const rowHasError = isWholeRowError(order.id);
+              const isDup = isDuplicateRow(order.id);
+              const rowBg = rowHasError
+                ? "bg-[#fff7e8]/40"
+                : isDup
+                  ? "bg-[#fff1f0]/70"
+                  : rowIdx % 2 === 1
+                    ? "bg-[#fafbfc]"
+                    : "bg-white";
+
+              return (
+                <tr
+                  key={order.id}
                   className={cn(
-                    "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs text-center border-r border-[#f2f3f5] sticky left-0 z-10",
-                    rowHasError
-                      ? "text-[#cf1322] bg-[#fff7e8]/80"
-                      : isDup
-                        ? "text-[#cf1322] bg-[#fff1f0]/80"
-                        : "text-[#86909c] bg-inherit"
+                    rowBg,
+                    "hover:bg-[#fafbfc]/60 transition-colors",
+                    isDup && "ring-1 ring-inset ring-[#ffccc7]"
                   )}
                 >
-                  {virtualRow.index + 1}
-                  {(rowHasError || isDup) && (
-                    <span
-                      className={cn(
-                        "inline-block w-1.5 h-1.5 rounded-full ml-1 align-middle",
-                        isDup ? "bg-[#cf1322]" : "bg-[#cf1322]"
-                      )}
-                    />
-                  )}
-                </div>
-
-                {/* 数据列 */}
-                {columns.map((col) => {
-                  const isEditing =
-                    editingCell?.id === order.id &&
-                    editingCell?.field === col.key;
-                  const value = (order as unknown as Record<string, unknown>)[col.key];
-                  const displayValue = value === undefined || value === null ? "" : String(value);
-                  const hasFieldError = isFieldError(order.id, col.key);
-
-                  return (
-                    <div
-                      key={col.key}
-                      className={cn(
-                        "flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-sm border-r border-[#f2f3f5] cursor-pointer relative group",
-                        hasFieldError && "bg-[#fff1f0]"
-                      )}
-                      style={{ width: col.width }}
-                      onClick={() => handleCellClick(order.id, col.key)}
-                      title={hasFieldError ? `本单元格有错误：${[...errorFieldMap.get(order.id) || []].join("、")}` : undefined}
-                    >
-                      {isEditing ? (
-                        col.options ? (
-                          // 下拉选择（温层）
-                          <select
-                            value={displayValue}
-                            onChange={(e) => onUpdateOrder(order.id, col.key, e.target.value)}
-                            onBlur={handleCellBlur}
-                            onKeyDown={(e) => handleKeyDown(e, order.id, col.key, virtualRow.index)}
-                            className={cn(
-                              "w-full px-1.5 py-0.5 text-sm border rounded outline-none bg-white",
-                              hasFieldError
-                                ? "border-[#cf1322] bg-[#fff1f0]"
-                                : "border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
-                            )}
-                            autoFocus
-                          >
-                            <option value="">—</option>
-                            {col.options.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type={col.type === "number" ? "number" : "text"}
-                            value={displayValue}
-                            onChange={(e) => onUpdateOrder(order.id, col.key, e.target.value)}
-                            onBlur={handleCellBlur}
-                            onKeyDown={(e) => handleKeyDown(e, order.id, col.key, virtualRow.index)}
-                            className={cn(
-                              "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
-                              hasFieldError
-                                ? "border-[#cf1322] bg-[#fff1f0]"
-                                : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
-                            )}
-                            step={col.type === "number" ? "0.01" : undefined}
-                            min={col.type === "number" ? "0" : undefined}
-                            autoFocus
-                          />
-                        )
-                      ) : col.options ? (
-                        <span
-                          className={cn(
-                            "block truncate",
-                            hasFieldError && "text-[#cf1322] font-medium",
-                            !displayValue && "text-[#c9cdd4] italic"
-                          )}
-                          title={displayValue}
-                        >
-                          {displayValue || "—"}
-                        </span>
-                      ) : (
-                        <span
-                          className={cn(
-                            "block truncate",
-                            hasFieldError && "text-[#cf1322] font-medium",
-                            !displayValue && "text-[#c9cdd4] italic"
-                          )}
-                          title={displayValue}
-                        >
-                          {displayValue || "—"}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* 操作列 - 粘性右列 */}
-                <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
-                  <button
-                    onClick={() => onDeleteOrder(order.id)}
-                    className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                    title="删除行"
+                  {/* # 列 - 固定左侧 */}
+                  <td
+                    className={cn(
+                      "sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center border-r border-b border-[#f2f3f5] font-mono align-top",
+                      rowHasError
+                        ? "text-[#cf1322]"
+                        : "text-[#86909c]",
+                      rowBg
+                    )}
                   >
-                    删除
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                    {rowIdx + 1}
+                    {(rowHasError || isDup) && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#cf1322] ml-1 align-middle" />
+                    )}
+                  </td>
+
+                  {/* 数据列 */}
+                  {columns.map((col) => {
+                    const isEditing =
+                      editingCell?.id === order.id && editingCell?.field === col.key;
+                    const value = (order as unknown as Record<string, unknown>)[col.key];
+                    const displayValue = value === undefined || value === null ? "" : String(value);
+                    const hasFieldError = isFieldError(order.id, col.key);
+
+                    return (
+                      <td
+                        key={col.key}
+                        className={cn(
+                          "px-2.5 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top cursor-pointer",
+                          hasFieldError && "bg-[#fff1f0]"
+                        )}
+                        onClick={() => handleCellClick(order.id, col.key)}
+                        title={hasFieldError ? `错误：${[...(errorFieldMap.get(order.id) || [])].join("、")}` : undefined}
+                      >
+                        {isEditing ? (
+                          col.options ? (
+                            <select
+                              value={displayValue}
+                              onChange={(e) => onUpdateOrder(order.id, col.key, e.target.value)}
+                              onBlur={handleCellBlur}
+                              onKeyDown={(e) => handleKeyDown(e, order.id, col.key, rowIdx)}
+                              className={cn(
+                                "w-full px-1.5 py-0.5 text-sm border rounded outline-none bg-white",
+                                hasFieldError
+                                  ? "border-[#cf1322] bg-[#fff1f0]"
+                                  : "border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
+                              )}
+                              autoFocus
+                            >
+                              <option value="">—</option>
+                              {col.options.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={col.type === "number" ? "number" : "text"}
+                              value={displayValue}
+                              onChange={(e) => onUpdateOrder(order.id, col.key, e.target.value)}
+                              onBlur={handleCellBlur}
+                              onKeyDown={(e) => handleKeyDown(e, order.id, col.key, rowIdx)}
+                              className={cn(
+                                "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
+                                hasFieldError
+                                  ? "border-[#cf1322] bg-[#fff1f0]"
+                                  : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
+                              )}
+                              step={col.type === "number" ? "0.01" : undefined}
+                              min={col.type === "number" ? "0" : undefined}
+                              autoFocus
+                            />
+                          )
+                        ) : (
+                          <span
+                            className={cn(
+                              "block truncate",
+                              hasFieldError && "text-[#cf1322] font-medium",
+                              !displayValue && "text-[#c9cdd4] italic"
+                            )}
+                            title={displayValue}
+                          >
+                            {displayValue || "—"}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+
+                  {/* 操作列 - 固定右侧 */}
+                  <td className="sticky right-0 z-10 px-2 py-2.5 text-center border-b border-[#f2f3f5] align-top shadow-[-2px_0_4px_rgba(0,0,0,0.04)]" style={{ backgroundColor: rowBg }}>
+                    <button
+                      onClick={() => onDeleteOrder(order.id)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                      title="删除行"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* 错误汇总 - 全部错误一次性展示 */}
