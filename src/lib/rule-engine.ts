@@ -19,6 +19,20 @@ export async function executeRule(
   rule: ParseRule,
   fileName: string
 ): Promise<{ orders: OrderItem[]; errors: ValidationError[] }> {
+  // 自动检测：如果是卡片式文件（内容含 ▶ 标记），强制启用 cardMode
+  if (!rule.dataRegion.cardMode?.enabled) {
+    const allText = rawData.map((r) => Object.values(r.cells).join(" ")).join("\n");
+    if (allText.includes("▶") && (allText.includes("调拨记录") || allText.includes("配送记录") || allText.includes("记录"))) {
+      console.log(`[executeRule] Auto-detected card-style file, enabling cardMode with marker "▶"`);
+      rule = {
+        ...rule,
+        dataRegion: {
+          ...rule.dataRegion,
+          cardMode: { enabled: true, startMarker: "▶" },
+        },
+      };
+    }
+  }
   const startTime = performance.now();
   const orders: OrderItem[] = [];
   const errors: ValidationError[] = [];
