@@ -613,8 +613,8 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   ];
   const isStandardColumn = (name: string) => standardKeywords.some((kw) => name.includes(kw));
 
-  let storeIndices: number[] = [];
-  let storeNames: string[] = [];
+  const storeIndices: number[] = [];
+  const storeNames: string[] = [];
 
   // 优先使用配置中的 storeColumnNames
   const configuredNames = mode.storeColumnNames || [];
