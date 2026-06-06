@@ -46,6 +46,11 @@ export default function HomePage() {
   // 解析错误状态
   const [parseError, setParseError] = useState<ParseError | null>(null);
 
+  // 实时校验结果（来自 DataPreviewTable）
+  const [liveErrors, setLiveErrors] = useState<ValidationError[]>([]);
+  const [, setLiveErrorOrderIds] = useState<Set<string>>(new Set());
+  const [duplicateCodes, setDuplicateCodes] = useState<string[]>([]);
+
   // 提交按钮防重复
   const [submitting, setSubmitting] = useState(false);
 
@@ -349,16 +354,91 @@ export default function HomePage() {
             setParseMessage(`解析完成，共 ${result.totalCount} 条`);
             setStep("preview");
 
-            if (result.errorCount > 0) {
-              toast(`解析完成，${result.errorCount} 条数据存在错误`, {
-                id: toastId,
-                icon: "⚠️",
-              });
-            } else {
-              toast.success(
-                `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
-                { id: toastId }
-              );
+            // 解析完成后，异步检测外部编码是否在数据库已存在
+            try {
+              const codes = result.orders
+                .map((o) => (o.externalCode || "").trim())
+                .filter(Boolean);
+              if (codes.length > 0) {
+                const dupRes = await fetch("/api/orders/check-duplicate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ codes }),
+                });
+                const dupData = await dupRes.json();
+                if (dupData.success) {
+                  const dbDuplicates: string[] = Object.keys(dupData.data.duplicates);
+                  if (dbDuplicates.length > 0) {
+                    // 给数据库已存在的外部编码对应的行加错误
+                    const dbErrors: ValidationError[] = [];
+                    for (const o of result.orders) {
+                      if (o.externalCode && dbDuplicates.includes(o.externalCode.trim())) {
+                        dbErrors.push({
+                          row: o.sourceRow || 0,
+                          field: "externalCode",
+                          message: `外部编码「${o.externalCode}」在数据库已存在（提交时将覆盖）`,
+                          severity: "warning",
+                        });
+                      }
+                    }
+                    setErrors((prev) => [...prev, ...dbErrors]);
+                    toast(`检测到 ${dbDuplicates.length} 个外部编码在数据库已存在`, {
+                      id: toastId,
+                      icon: "⚠️",
+                    });
+                  } else {
+                    if (result.errorCount > 0) {
+                      toast(`解析完成，${result.errorCount} 条数据存在错误`, {
+                        id: toastId,
+                        icon: "⚠️",
+                      });
+                    } else {
+                      toast.success(
+                        `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
+                        { id: toastId }
+                      );
+                    }
+                  }
+                } else {
+                  // 检测失败不影响主流程
+                  if (result.errorCount > 0) {
+                    toast(`解析完成，${result.errorCount} 条数据存在错误`, {
+                      id: toastId,
+                      icon: "⚠️",
+                    });
+                  } else {
+                    toast.success(
+                      `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
+                      { id: toastId }
+                    );
+                  }
+                }
+              } else {
+                if (result.errorCount > 0) {
+                  toast(`解析完成，${result.errorCount} 条数据存在错误`, {
+                    id: toastId,
+                    icon: "⚠️",
+                  });
+                } else {
+                  toast.success(
+                    `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
+                    { id: toastId }
+                  );
+                }
+              }
+            } catch (e) {
+              console.error("DB duplicate check failed:", e);
+              if (result.errorCount > 0) {
+                toast(`解析完成，${result.errorCount} 条数据存在错误`, {
+                  id: toastId,
+                  icon: "⚠️",
+                });
+              } else {
+                toast.success(
+                  `解析完成！共 ${result.totalCount} 条数据 (${formatTime(performance.now() - startTime)})`,
+                  { id: toastId }
+                );
+              }
             }
           } else if (event.type === "error") {
             const pe: ParseError = {
@@ -393,17 +473,20 @@ export default function HomePage() {
   const handleUpdateOrder = useCallback(
     (id: string, field: string, value: string) => {
       setOrders((prev) =>
-        prev.map((order) =>
-          order.id === id
-            ? {
-                ...order,
-                [field]:
-                  field === "skuQuantity" ? parseFloat(value) || 0 : value,
-                errors: undefined,
-                status: "draft",
-              }
-            : order
-        )
+        prev.map((order) => {
+          if (order.id !== id) return order;
+          // 数字字段转换
+          let newValue: string | number = value;
+          if (field === "skuQuantity" || field === "weight") {
+            newValue = value === "" ? 0 : parseFloat(value) || 0;
+          }
+          return {
+            ...order,
+            [field]: newValue,
+            errors: undefined,
+            status: "draft",
+          };
+        })
       );
     },
     []
@@ -414,25 +497,33 @@ export default function HomePage() {
     setOrders((prev) => prev.filter((o) => o.id !== id));
   }, []);
 
-  // 新增行
+  // 新增行 - sourceRow 用当前最大行号+1，避免与已有行冲突
   const handleAddRow = useCallback(() => {
-    const newOrder: OrderItem = {
-      id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-      skuCode: "",
-      skuName: "",
-      skuQuantity: 0,
-      status: "draft",
-      sourceFile: file?.name || "",
-      createdAt: new Date().toISOString(),
-    };
-    setOrders((prev) => [...prev, newOrder]);
+    setOrders((prev) => {
+      const maxRow = prev.reduce((max, o) => Math.max(max, o.sourceRow || 0), 0);
+      const newOrder: OrderItem = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        skuCode: "",
+        skuName: "",
+        skuQuantity: 0,
+        temperatureLevel: "常温",
+        status: "draft",
+        sourceFile: file?.name || "",
+        sourceRow: maxRow + 1,
+        createdAt: new Date().toISOString(),
+      };
+      return [...prev, newOrder];
+    });
   }, [file]);
 
   // 提交下单
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
-    if (errors.length > 0) {
-      toast.error("请先修正所有错误后再提交");
+    // 校验：合并 parse 阶段错误 + 实时编辑错误
+    const allErrors = [...errors, ...liveErrors];
+    const hasBlockingError = allErrors.some((e) => e.severity === "error");
+    if (hasBlockingError) {
+      toast.error("请先修正所有错误（红色标记）后再提交");
       return;
     }
     if (orders.length === 0) {
@@ -466,24 +557,37 @@ export default function HomePage() {
     } finally {
       setSubmitting(false);
     }
-  }, [orders, errors, submitting]);
+  }, [orders, errors, liveErrors, submitting]);
 
-  // 导出 Excel
+  // 实时校验回调
+  const handleValidationChange = useCallback(
+    (result: { errors: ValidationError[]; errorOrderIds: Set<string>; duplicateCodes: string[] }) => {
+      setLiveErrors(result.errors);
+      setLiveErrorOrderIds(result.errorOrderIds);
+      setDuplicateCodes(result.duplicateCodes);
+    },
+    []
+  );
+
+  // 导出 Excel（含当前编辑状态）
   const handleExport = useCallback(() => {
-    const exportData = orders.map((order) => ({
+    const exportData = orders.map((order, idx) => ({
+      序号: idx + 1,
       外部编码: order.externalCode || "",
       收货门店: order.storeName || "",
       收件人: order.recipientName || "",
       电话: order.recipientPhone || "",
       地址: order.recipientAddress || "",
-      SKU编码: order.skuCode,
-      SKU名称: order.skuName,
-      发货数量: order.skuQuantity,
+      SKU编码: order.skuCode || "",
+      SKU名称: order.skuName || "",
+      发货数量: order.skuQuantity || 0,
       规格型号: order.skuSpec || "",
+      重量kg: order.weight ?? "",
+      温层: order.temperatureLevel || "",
       备注: order.remark || "",
     }));
-    exportToExcel(exportData, `出库单_${new Date().toLocaleDateString()}.xlsx`);
-    toast.success("导出成功");
+    exportToExcel(exportData, `出库单预览_${new Date().toLocaleDateString()}.xlsx`);
+    toast.success(`已导出 ${exportData.length} 条数据`);
   }, [orders]);
 
   // 重新上传
@@ -500,6 +604,9 @@ export default function HomePage() {
     setParseTime(0);
     setSubmittedCount(0);
     setParseError(null);
+    setLiveErrors([]);
+    setLiveErrorOrderIds(new Set());
+    setDuplicateCodes([]);
   }, []);
 
   return (
@@ -746,13 +853,24 @@ export default function HomePage() {
                   {formatTime(parseTime)}
                 </p>
               </div>
-              {errors.length > 0 && (
+              {(errors.length + liveErrors.length) > 0 && (
                 <>
                   <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
                   <div>
                     <p className="text-sm text-[#86909c] mb-1">校验错误</p>
                     <p className="text-2xl font-bold text-[#cf1322]">
-                      {errors.length} 个
+                      {errors.length + liveErrors.length} 个
+                    </p>
+                  </div>
+                </>
+              )}
+              {duplicateCodes.length > 0 && (
+                <>
+                  <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
+                  <div>
+                    <p className="text-sm text-[#86909c] mb-1">外部编码重复</p>
+                    <p className="text-2xl font-bold text-[#d97b00]">
+                      {duplicateCodes.length} 个
                     </p>
                   </div>
                 </>
@@ -769,6 +887,7 @@ export default function HomePage() {
                 onDeleteOrder={handleDeleteOrder}
                 onAddRow={handleAddRow}
                 errors={errors}
+                onValidationChange={handleValidationChange}
               />
             </div>
           ) : (
@@ -794,7 +913,7 @@ export default function HomePage() {
               <Button
                 onClick={handleSubmit}
                 loading={submitting}
-                disabled={errors.length > 0 || submitting}
+                disabled={(errors.length + liveErrors.filter((e) => e.severity === "error").length) > 0 || submitting}
               >
                 提交下单
               </Button>

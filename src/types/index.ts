@@ -115,6 +115,10 @@ export interface ParseRule {
   aiNotes?: string;             // AI 推测说明
 }
 
+// 温层允许值（业务约定）
+export const TEMPERATURE_LEVELS = ["常温", "冷藏", "冷冻", "冰温", "深冷"] as const;
+export type TemperatureLevel = typeof TEMPERATURE_LEVELS[number];
+
 // 运单数据（解析后的结构化数据，SKU 粒度：每个 SKU 一条记录）
 // 同一 externalCode 下的多条 OrderItem 共享父单（OutboundOrder）信息
 export interface OrderItem {
@@ -134,6 +138,9 @@ export interface OrderItem {
   skuName: string;
   skuQuantity: number;
   skuSpec?: string;
+  // 物理属性（可选，按业务需要填写）
+  weight?: number;                       // 重量（kg）
+  temperatureLevel?: TemperatureLevel;   // 温层
   // 备注
   remark?: string;
   // 元信息

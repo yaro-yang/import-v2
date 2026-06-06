@@ -753,40 +753,11 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
   }
 }
 
-// ====== 校验 ======
+// ====== 校验（委托给共享 validation 模块） ======
+import { validateOrderItem as _validateOrderItem } from "./validation";
+
 function validateOrder(order: OrderItem, _totalRows: number): ValidationError[] {
-  const errors: ValidationError[] = [];
-
-  const hasGroupA = !!order.storeName;
-  const hasGroupB = !!(order.recipientName && order.recipientPhone && order.recipientAddress);
-
-  if (!hasGroupA && !hasGroupB) {
-    errors.push({
-      row: order.sourceRow || 0,
-      field: "收货信息",
-      message: "收货门店和收件人信息至少填写一组",
-      severity: "error",
-    });
-  }
-
-  if (!order.skuCode) {
-    errors.push({ row: order.sourceRow || 0, field: "skuCode", message: "SKU物品编码为必填项", severity: "error" });
-  }
-  if (!order.skuName) {
-    errors.push({ row: order.sourceRow || 0, field: "skuName", message: "SKU物品名称为必填项", severity: "error" });
-  }
-  if (!order.skuQuantity || order.skuQuantity <= 0) {
-    errors.push({ row: order.sourceRow || 0, field: "skuQuantity", message: "SKU发货数量必须为正数", severity: "error" });
-  }
-
-  if (order.recipientPhone) {
-    const cleaned = order.recipientPhone.replace(/[\s\-()（）]/g, "");
-    if (!/^1[3-9]\d{9}$/.test(cleaned) && cleaned.length >= 10) {
-      errors.push({ row: order.sourceRow || 0, field: "recipientPhone", message: "收件人电话格式不正确", severity: "warning" });
-    }
-  }
-
-  return errors;
+  return _validateOrderItem(order);
 }
 
 // ====== Excel 数据转换 ======

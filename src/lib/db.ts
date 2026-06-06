@@ -419,7 +419,7 @@ export async function getOrderById(id: string): Promise<OutboundOrder | null> {
 }
 
 /**
- * 重复外部编码检查
+ * 重复外部编码检查（仅返回 boolean）
  */
 export async function checkDuplicateExternalCode(
   externalCode: string,
@@ -446,6 +446,47 @@ export async function checkDuplicateExternalCode(
   }
   const row = (result as Record<string, unknown>[])[0];
   return Number(row.cnt) > 0;
+}
+
+/**
+ * 查询已存在的外部编码完整信息（id + createdAt）
+ * 返回 Map<externalCode, {id, createdAt}>
+ */
+export async function findExternalCodesInDb(
+  codes: string[]
+): Promise<Map<string, { id: string; createdAt: string }>> {
+  const result = new Map<string, { id: string; createdAt: string }>();
+  if (codes.length === 0) return result;
+  const unique = Array.from(new Set(codes.map((c) => (c || "").trim()).filter(Boolean)));
+
+  if (!hasDatabase()) {
+    const store = await readLocalStore();
+    for (const code of unique) {
+      const ob = Object.values(store.orders).find((o) => o.externalCode === code);
+      if (ob) {
+        result.set(code, { id: ob.id, createdAt: ob.createdAt });
+      }
+    }
+    return result;
+  }
+
+  const sql = getSql();
+  // 一次查询所有候选 code
+  const rows = await sql`
+    SELECT id, external_code, created_at FROM outbound_orders
+    WHERE external_code = ANY(${unique})
+  ` as Record<string, unknown>[];
+
+  for (const row of rows) {
+    const code = (row.external_code as string) || "";
+    if (code) {
+      result.set(code, {
+        id: row.id as string,
+        createdAt: row.created_at as string,
+      });
+    }
+  }
+  return result;
 }
 
 /**
