@@ -21,7 +21,7 @@ function getAIConfig(): AIModelConfig {
 function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
   const contentPreview = request.fileContent.substring(0, 6000);
   const fileTypeHint = request.fileType === "excel"
-    ? "这是Excel表格。第1行可能是大标题(如公司名)不是表头。真正的表头行通常在第2-4行，包含编码、名称、数量、规格、门店、收件人、电话、地址、单号、备注等列名。请找到正确的表头行，输出表头中的原始列名文字。"
+    ? "这是Excel表格。第1行可能是大标题(如公司名)不是表头。真正的表头行通常在第2-4行，包含编码、名称、数量、规格、门店、收件人、电话、地址、单号、备注等列名。请找到正确的表头行，输出表头中的原始列名文字。注意：如果是卡片式布局(如'调拨单号：xxx'在顶部元数据区)，externalCode对应的列名应填'调拨单号'(不要冒号后的值)。"
     : request.fileType === "word"
       ? "Word纯文本段落。"
       : "PDF文本。";
@@ -314,6 +314,8 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
  * 从文本行中提取包含目标关键词的"列名"文字
  * 例如行内容: "行5: 调拨单号 | 调入门店 | 收货人 | 电话 | 地址"
  * keyword: "调入门店" → 返回 "调入门店"
+ * 例如行内容: "行2: 调拨单号：DB20260530001 | 调出仓库：武汉配送中心"
+ * keyword: "调拨单号" → 返回 "调拨单号"（去掉冒号后面的值）
  */
 function extractColumnText(lineText: string, keyword: string): string {
   // Excel 文本格式通常是 "行N: 值1 | 值2 | 值3" 或 tab 分隔
@@ -324,16 +326,35 @@ function extractColumnText(lineText: string, keyword: string): string {
       for (const part of parts) {
         // 去掉 "行N:" 前缀后检查
         const cleanPart = part.replace(/^行\d+:\s*/, "");
-        if (cleanPart.includes(keyword) && cleanPart.length <= 30 && cleanPart.length >= 1) {
-          return cleanPart;
+        if (cleanPart.includes(keyword)) {
+          // 如果这个部分以"keyword：值"形式出现（如"调拨单号：DB20260530001"），
+          // 截断冒号后的值，只返回关键词部分作为列名
+          const colonIdx = cleanPart.indexOf("：");
+          const semicIdx = cleanPart.indexOf(":");
+          const cutIdx = colonIdx >= 0 ? colonIdx : semicIdx >= 0 ? semicIdx : -1;
+          const namePart = cutIdx >= 0 ? cleanPart.substring(0, cutIdx).trim() : cleanPart.trim();
+          if (namePart.includes(keyword) && namePart.length <= 30 && namePart.length >= 1) {
+            return namePart;
+          }
+          // 如果截断后太短或太长了，直接返回关键词
+          if (cleanPart.includes(keyword)) {
+            return keyword;
+          }
         }
       }
     }
   }
   // 如果没有分隔符但包含关键词，直接返回整行清理后的结果
   const cleaned = lineText.replace(/^行\d+:\s*/, "").trim();
-  if (cleaned.includes(keyword) && cleaned.length <= 50) {
-    return cleaned;
+  if (cleaned.includes(keyword)) {
+    // 同样截断冒号
+    const colonIdx = cleaned.indexOf("：");
+    const semicIdx = cleaned.indexOf(":");
+    const cutIdx = colonIdx >= 0 ? colonIdx : semicIdx >= 0 ? semicIdx : -1;
+    const namePart = cutIdx >= 0 ? cleaned.substring(0, cutIdx).trim() : cleaned;
+    if (namePart.length <= 50 && namePart.includes(keyword)) {
+      return namePart;
+    }
   }
   return keyword; // fallback
 }
