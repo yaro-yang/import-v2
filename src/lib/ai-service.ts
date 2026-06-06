@@ -220,7 +220,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     recipientName: { keywords: ["收货人", "收件人", "收件人姓名", "联系人"], priority: 6 },
     recipientPhone: { keywords: ["收货电话", "收货人手机号", "联系电话", "收件人电话", "联系方式", "手机", "电话"], priority: 7 },
     recipientAddress: { keywords: ["收货地址", "收件人地址", "详细地址", "地址"], priority: 8 },
-    externalCode: { keywords: ["调拨单号", "配送单号", "单据编号", "单据号", "订单号", "外部编码", "运单号", "单号"], priority: 9 },
+    externalCode: { keywords: ["配送发货单", "发货单", "调拨单号", "配送单号", "单据编号", "单据号", "订单号", "外部编码", "运单号", "单号"], priority: 9 },
     remark: { keywords: ["备注", "说明", "附注"], priority: 10 },
   };
 
@@ -237,12 +237,14 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   // 1d) 合计行
   const hasTotalRow = content.includes("合计") || content.includes("小计");
 
-  // ===== 第二步：在所有行中搜索外部编码关键词 =====
+  // ===== 第二步：在所有行中搜索外部编码关键词（按 cell 精确/前缀匹配，避免子串误判） =====
   let externalCodeMatchedKeyword: string | null = null;
   let externalCodeMatchedLineIdx = -1;
   for (let i = 0; i < Math.min(lines.length, 12); i++) {
+    const lineCells = getDataCells(lines[i]);
     for (const kw of commonMappings.externalCode.keywords) {
-      if (lines[i].includes(kw)) {
+      if (lineCells.some((c) => isCellMatchKeyword(c, kw))) {
+        // 优先：更长的关键词（如"配送发货单"优先于"发货单"）；行号小的优先（与原行为一致）
         if (!externalCodeMatchedKeyword || kw.length > externalCodeMatchedKeyword.length) {
           externalCodeMatchedKeyword = kw;
           externalCodeMatchedLineIdx = i;
@@ -259,14 +261,14 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     const hasFullColon = /[：:]\S/.test(line);
     if (hasFullColon && !line.includes(" | ") && !line.includes("\t")) continue;
 
+    // 排除【...】元数据单元格（如【快递】物流单号、【自主】车牌号等）
+    const dataCells = getDataCells(line);
+
     let matches = 0;
     for (const [, info] of Object.entries(commonMappings)) {
-      for (const kw of info.keywords) {
-        if (line.includes(kw)) {
-          matches++;
-          break;
-        }
-      }
+      // 仅按 cell 精确/前缀匹配统计，避免"发货单价"误匹配"发货单"等子串误判
+      const fieldMatched = info.keywords.some((kw) => dataCells.some((c) => isCellMatchKeyword(c, kw)));
+      if (fieldMatched) matches++;
     }
     if (matches >= 2) {
       headerCandidates.push({ lineIdx: i, matches });
@@ -334,11 +336,20 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
 
   // 扩展检测：如果 headerParts 数量 >= 10，最后几列可能是不含关键词的门店名（如"银泰"已经被上面的 pattern 覆盖）
   // 如果矩阵列数量不足但列数多，再检查最后 1/4 的列中短小精悍的列名
+  // **严格条件：必须包含门店相关关键词（店/分店/广场/万象/万达/世纪等）才能被识别为矩阵列**，
+  // 否则容易误判"折前金额""促销折扣"等业务字段为门店。
   if (matrixStoreColumns.length < 2 && headerParts.length >= 12) {
     const lastQuarter = headerParts.slice(Math.floor(headerParts.length * 0.75));
     for (const col of lastQuarter) {
       const trimmed = col.trim();
-      if (trimmed && !standardHeaderKeywords.some((kw) => trimmed.includes(kw)) && trimmed.length <= 4 && trimmed.length >= 2) {
+      if (
+        trimmed &&
+        !standardHeaderKeywords.some((kw) => trimmed.includes(kw)) &&
+        trimmed.length <= 4 &&
+        trimmed.length >= 2 &&
+        // 关键：必须包含门店模式关键词，避免误判价格/折扣等业务字段
+        storeNamePatterns.some((kw) => trimmed.includes(kw))
+      ) {
         if (!matrixStoreColumns.includes(trimmed)) {
           matrixStoreColumns.push(trimmed);
         }
@@ -419,9 +430,11 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       }
     }
 
-    // 先在表头行搜索
+    // 先在表头行搜索（按 cell 精确匹配；忽略【...】元数据单元格；不做纯子串匹配以避免"发货单价"误匹配"发货单"）
+    const headerCells = getDataCells(headerLine);
     for (const keyword of info.keywords) {
-      if (headerLine.includes(keyword)) {
+      const match = headerCells.find((c) => isCellMatchKeyword(c, keyword));
+      if (match) {
         matchedKeyword = keyword;
         found = true;
         break;
@@ -434,11 +447,12 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       if ((field === "storeName" || field.startsWith("recipient")) && tailLines.length > 0) {
         const tailKw = field === "storeName" ? ["收货门店", "收货机构", "门店"]
           : field === "recipientName" ? ["收货人", "联系人"]
-          : field === "recipientPhone" ? ["电话", "联系电话", "手机"]
+          : field === "recipientPhone" ? ["电话", "联系电话", "收货电话", "手机"]
           : ["地址", "收货地址"];
         for (const tl of tailLines) {
+          const tailCells = getDataCells(tl.text);
           for (const kw of tailKw) {
-            if (tl.text.includes(kw)) {
+            if (tailCells.some((c) => isCellMatchKeyword(c, kw))) {
               matchedKeyword = kw;
               matchedLineIdx = tl.lineIdx;
               found = true;
@@ -453,8 +467,9 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       // 如果 tail 没找到，在表头附近搜索
       if (!found) {
         for (let i = Math.max(0, headerRow - 3); i <= Math.min(lines.length - 1, headerRow + 3); i++) {
+          const lineCells = getDataCells(lines[i]);
           for (const keyword of info.keywords) {
-            if (lines[i].includes(keyword)) {
+            if (lineCells.some((c) => isCellMatchKeyword(c, keyword))) {
               matchedKeyword = keyword;
               matchedLineIdx = i;
               found = true;
@@ -514,13 +529,16 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     { targetField: "recipientName", keywords: ["收货人", "联系人"] },
     { targetField: "recipientPhone", keywords: ["电话", "联系电话", "收货电话", "手机"] },
     { targetField: "recipientAddress", keywords: ["地址", "收货地址"] },
+    { targetField: "externalCode", keywords: ["单据号", "配送单号", "配送发货单", "调拨单号", "单号"] },
   ];
 
   if (tailLines.length > 0 && !isPureMatrixInventoryTable) {
     for (const tfd of tailFieldDefs) {
       for (const tl of tailLines) {
+        const tailCells = getDataCells(tl.text);
         for (const kw of tfd.keywords) {
-          if (tl.text.includes(kw)) {
+          // 只匹配完整 cell 或 cell 起始处的"key：value"形式，避免"收货机构备注"误匹配"收货机构"
+          if (tailCells.includes(kw) || tailCells.some((c) => c.startsWith(kw + "：") || c.startsWith(kw + ":"))) {
             tailFields.push({
               targetField: tfd.targetField,
               mode: "row_field",
@@ -569,7 +587,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
 
     return {
       targetField: m.targetField,
-      mode: (m.targetField === "storeName" || m.targetField.startsWith("recipient"))
+      mode: (m.targetField === "storeName" || m.targetField === "externalCode" || m.targetField.startsWith("recipient"))
              && tailFields.some((tf) => tf.targetField === m.targetField)
              ? "row_field" as FieldMapping["mode"]
              : "column_name" as FieldMapping["mode"],
@@ -621,6 +639,33 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
 }
 
 /**
+ * 从文本行中按" | "或"\t"分隔拆出 cell，并过滤掉【...】包裹的元数据单元格
+ * （如【快递】物流单号、【自主】车牌号）。这些是快递公司/自主字段的元数据，
+ * 不应作为数据表头参与匹配。
+ */
+function getDataCells(line: string): string[] {
+  // 兼容多种分隔符：" | "、"|"、"\t"
+  const parts = line.split(/\s*\|\s*|\t+/).map((p) => p.trim()).filter(Boolean);
+  // 去掉开头的"行N: "前缀
+  const cleaned = parts.map((p) => p.replace(/^行\d+:\s*/, "").trim()).filter(Boolean);
+  // 过滤掉【...】元数据单元格
+  return cleaned.filter((p) => !(p.startsWith("【") && p.includes("】")));
+}
+
+/**
+ * 检查 cell 是否匹配关键词（避免"发货单价"被"发货单"误匹配等子串误判）
+ * 匹配规则：
+ *   1) cell === keyword（精确匹配）
+ *   2) cell 以 keyword + 中文冒号/英文冒号 开头（label-value 格式，如"收货人：张三"）
+ * 不做纯子串匹配，因为中文字符没有空格分隔，子串匹配会误判。
+ */
+function isCellMatchKeyword(cell: string, keyword: string): boolean {
+  if (cell === keyword) return true;
+  if (cell.startsWith(keyword + "：") || cell.startsWith(keyword + ":")) return true;
+  return false;
+}
+
+/**
  * 从文本行中提取包含目标关键词的"列名"文字
  * 例如行内容: "行5: 调拨单号 | 调入门店 | 收货人 | 电话 | 地址"
  * keyword: "调入门店" → 返回 "调入门店"
@@ -635,9 +680,11 @@ function extractColumnText(lineText: string, keyword: string): string {
   for (const sep of separators) {
     if (lineText.includes(sep)) {
       const parts = lineText.split(sep).map((p) => p.trim());
+      // 过滤掉【...】元数据单元格，避免【快递】收货人手机号误匹配"收货人"
+      const dataParts = parts.filter((p) => !(p.startsWith("【") && p.includes("】")));
       // 收集所有包含关键词的候选列
       const candidates: string[] = [];
-      for (const part of parts) {
+      for (const part of dataParts) {
         const cleanPart = part.replace(/^行\d+:\s*/, "");
         if (cleanPart.includes(keyword)) {
           // 去掉冒号后面的值，只保留列名
