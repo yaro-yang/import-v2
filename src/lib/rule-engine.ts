@@ -918,9 +918,27 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
       return "";
     case "row_field":
       if (mapping.rowKeyPattern) {
-        const rowText = Object.values(row.cells).join(" ");
-        const match = rowText.match(new RegExp(`${mapping.rowKeyPattern}[：:]*\\s*(.+)`));
-        return match ? match[1].trim() : "";
+        // 按单元格提取：找到 key 所在的列，再取 key 后面第一个非空单元格
+        // 比按整行拼接文本再正则匹配更稳——避免贪婪匹配吞掉同行其他字段
+        for (const [key, value] of Object.entries(row.cells)) {
+          if (key.startsWith("col_") || key.startsWith("_transposed")) continue;
+          if (String(value ?? "").includes(mapping.rowKeyPattern)) {
+            // 用 rawData 行的 col_<n> 顺序拿 value
+            // row.cells 的命名 key（"序号"等）顺序与 col_<n> 一致，可以按 col_<n> 顺序找下一个
+            const colKeys = Object.keys(row.cells).filter((k) => k.startsWith("col_")).sort((a, b) => {
+              return parseInt(a.slice(4), 10) - parseInt(b.slice(4), 10);
+            });
+            const matchedColIdx = colKeys.findIndex((k) => String(row.cells[k] ?? "") === String(value ?? ""));
+            if (matchedColIdx >= 0) {
+              for (let i = matchedColIdx + 1; i < colKeys.length; i++) {
+                const v = String(row.cells[colKeys[i]] ?? "").trim();
+                if (v) return v;
+              }
+            }
+            return "";
+          }
+        }
+        return "";
       }
       return "";
     case "matrix_transpose":

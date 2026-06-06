@@ -95,6 +95,9 @@ export default function HistoryPage() {
   // 待删除的分组
   const [deletingGroup, setDeletingGroup] = useState<HistoryGroup | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // 批量删除
+  const [selectedGroupRootIds, setSelectedGroupRootIds] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const pageSize = 10;
 
   const loadOrders = useCallback(async () => {
@@ -606,6 +609,18 @@ export default function HistoryPage() {
           )}
         </div>
         <div className="flex items-center gap-2 ml-auto flex-wrap">
+          {selectedGroupRootIds.size > 0 && (
+            <Button
+              size="sm"
+              onClick={() => setBatchDeleting(true)}
+              className="!bg-[#cf1322] hover:!bg-[#a8071a] !text-white"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              </svg>
+              批量删除 ({selectedGroupRootIds.size})
+            </Button>
+          )}
           <Button size="sm" onClick={() => (window.location.href = "/")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -668,6 +683,7 @@ export default function HistoryPage() {
                 }}
               >
                 <colgroup>
+                  <col style={{ width: 36 }} />
                   <col style={{ width: COL_INDEX.width }} />
                   <col style={{ width: COL_EXTERNAL.width }} />
                   <col style={{ width: COL_STORE.width }} />
@@ -682,6 +698,23 @@ export default function HistoryPage() {
                 </colgroup>
                 <thead>
                   <tr>
+                    <th
+                      className="sticky top-0 left-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-1.5 py-2.5 text-center border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40"
+                      scope="col"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={groups.length > 0 && selectedGroupRootIds.size === groups.length}
+                        onChange={() => {
+                          if (selectedGroupRootIds.size === groups.length) {
+                            setSelectedGroupRootIds(new Set());
+                          } else {
+                            setSelectedGroupRootIds(new Set(groups.map((g) => g.rootId)));
+                          }
+                        }}
+                        className="accent-[#0fc6c2] w-3.5 h-3.5"
+                      />
+                    </th>
                     <th
                       className="sticky top-0 left-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 tracking-wide uppercase"
                       scope="col"
@@ -782,6 +815,30 @@ export default function HistoryPage() {
                         )}
                         onClick={isCollapsed && row.isFirstRowOfGroup ? () => toggleGroup(row.group.rootId) : undefined}
                       >
+                        {/* 复选框列 - 跨整组 */}
+                        {row.isFirstRowOfGroup && (
+                          <td
+                            rowSpan={isCollapsed ? 1 : row.groupTotalRows}
+                            className="sticky left-0 z-10 px-1.5 py-2.5 text-center border-r border-b border-[#f2f3f5] align-top"
+                            style={{ backgroundColor: "#ffffff" }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedGroupRootIds.has(row.group.rootId)}
+                              onChange={() => {
+                                setSelectedGroupRootIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(row.group.rootId)) next.delete(row.group.rootId);
+                                  else next.add(row.group.rootId);
+                                  return next;
+                                });
+                              }}
+                              className="accent-[#0fc6c2] w-3.5 h-3.5"
+                            />
+                          </td>
+                        )}
+
                         {/* # 列 - 跨整组 */}
                         {row.isFirstRowOfGroup && (
                           <td
@@ -1147,6 +1204,59 @@ export default function HistoryPage() {
         )}
       </div>
 
+  // 批量删除
+  const handleBatchDelete = async () => {
+    const idsToDelete = Array.from(selectedGroupRootIds);
+    if (idsToDelete.length === 0) return;
+    setBatchDeleting(false);
+
+    const toastId = toast.loading(`正在批量删除 ${idsToDelete.length} 个分组...`);
+    let deleted = 0;
+    let failed = 0;
+
+    for (const rootId of idsToDelete) {
+      try {
+        // 空编码聚合组：逐个删除子单
+        if (rootId === "__empty_code__") {
+          const emptyGroup = groups.find((g) => g.rootId === "__empty_code__");
+          if (emptyGroup) {
+            for (const detail of emptyGroup.details) {
+              try {
+                const res = await fetch(`/api/orders/${encodeURIComponent(detail.id)}`, { method: "DELETE" });
+                const data = await res.json();
+                if (data.success) deleted++;
+                else failed++;
+              } catch { failed++; }
+            }
+          }
+          continue;
+        }
+        // 正常分组
+        const group = groups.find((g) => g.rootId === rootId);
+        if (!group) { failed++; continue; }
+
+        const url = group.kind === "transfer"
+          ? `/api/transfer-orders/${encodeURIComponent(rootId)}`
+          : `/api/orders/${encodeURIComponent(rootId)}`;
+
+        const res = await fetch(url, { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) deleted++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    setSelectedGroupRootIds(new Set());
+    if (failed === 0) {
+      toast.success(`已删除 ${deleted} 个分组`, { id: toastId });
+    } else {
+      toast.error(`删除完成：${deleted} 成功，${failed} 失败`, { id: toastId });
+    }
+    loadOrders();
+  };
+
       {/* 删除确认弹窗 */}
       <Modal
         isOpen={!!deletingGroup}
@@ -1224,6 +1334,57 @@ export default function HistoryPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* 批量删除确认弹窗 */}
+      <Modal
+        isOpen={batchDeleting}
+        onClose={() => setBatchDeleting(false)}
+        title="确认批量删除"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#fff1f0] text-[#cf1322] flex items-center justify-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-[#1d2129] leading-relaxed">
+                确定要删除选中的 <span className="font-semibold text-[#cf1322]">{selectedGroupRootIds.size}</span> 个分组吗？此操作不可恢复。
+              </p>
+              <div className="mt-3 p-3 bg-[#fafbfc] rounded-lg border border-[#e5e6eb] text-xs text-[#4e5969] space-y-1">
+                <p>
+                  <span className="text-[#86909c]">选中分组：</span>
+                  <span className="font-medium text-[#1d2129]">{selectedGroupRootIds.size} 个</span>
+                </p>
+                <p>
+                  <span className="text-[#86909c]">包含明细：</span>
+                  <span className="font-medium text-[#1d2129]">
+                    {Array.from(selectedGroupRootIds).reduce((sum, id) => {
+                      const g = groups.find((x) => x.rootId === id);
+                      return sum + (g?.details.length || 0);
+                    }, 0)} 条
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" size="sm" onClick={() => setBatchDeleting(false)}>
+              取消
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleBatchDelete}
+              className="!bg-[#cf1322] hover:!bg-[#a8071a] !text-white"
+            >
+              确认删除
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
