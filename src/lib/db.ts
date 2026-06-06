@@ -510,11 +510,12 @@ export async function getOrders(params?: {
       all = all.filter((o) => (o.recipientName || "").includes(params.recipientName!));
     }
     if (params?.startDate) {
-      all = all.filter((o) => o.createdAt >= params.startDate!);
+      const start = new Date(params.startDate + "T00:00:00");
+      all = all.filter((o) => new Date(o.createdAt) >= start);
     }
     if (params?.endDate) {
-      const endDateEnd = params.endDate + "T23:59:59.999Z";
-      all = all.filter((o) => o.createdAt <= endDateEnd);
+      const end = new Date(params.endDate + "T23:59:59.999");
+      all = all.filter((o) => new Date(o.createdAt) <= end);
     }
     all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const transferIds = new Set(all.map((o) => o.transferOrderId).filter(Boolean));
@@ -546,8 +547,9 @@ export async function getOrders(params?: {
     whereParts.push(`created_at >= $${queryArgs.length}`);
   }
   if (params?.endDate) {
+    // 结束日期需要包含当天全天，所以使用 +1 day
     queryArgs.push(params.endDate);
-    whereParts.push(`created_at <= $${queryArgs.length}`);
+    whereParts.push(`created_at < ($${queryArgs.length}::date + interval '1 day')`);
   }
 
   const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";

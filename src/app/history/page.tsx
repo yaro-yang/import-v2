@@ -25,46 +25,6 @@ type HistoryGroup = {
   status: "draft" | "submitted" | "error";
 };
 
-// 表格行描述符：每条记录对应表里的一行
-type TableRow =
-  | {
-      kind: "sku";
-      key: string;
-      groupIdx: number;
-      groupTotalRows: number;
-      detailIdx: number;
-      detailSkuCount: number;
-      skuIdx: number;
-      group: HistoryGroup;
-      detail: OutboundOrder;
-      sku: OutboundOrder["items"][number];
-      isFirstRowOfGroup: boolean;
-      isFirstRowOfDetail: boolean;
-    }
-  | {
-      kind: "empty-store";
-      key: string;
-      groupIdx: number;
-      groupTotalRows: number;
-      detailIdx: number;
-      detailSkuCount: 1;
-      group: HistoryGroup;
-      detail: OutboundOrder;
-      isFirstRowOfGroup: boolean;
-      isFirstRowOfDetail: true;
-    }
-  | {
-      kind: "empty-group";
-      key: string;
-      groupIdx: number;
-      groupTotalRows: 1;
-      detailIdx: 0;
-      detailSkuCount: 1;
-      group: HistoryGroup;
-      isFirstRowOfGroup: true;
-      isFirstRowOfDetail: true;
-    };
-
 // 列定义（9 列 + # + 操作 = 11 列）
 const COL_INDEX = { width: 44 };
 const COL_EXTERNAL = { key: "externalCode", label: "外部编码", width: 150 };
@@ -84,8 +44,6 @@ export default function HistoryPage() {
   // DB 全量计数（用于"总数"/"调拨单"/"出库单" 角标）
   const [totalTransfers, setTotalTransfers] = useState(0);
   const [totalOutbounds, setTotalOutbounds] = useState(0);
-  // 调拨单展开/收起状态：默认全部收起（仅显示首行）
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [searchExternalCode, setSearchExternalCode] = useState("");
@@ -194,83 +152,9 @@ export default function HistoryPage() {
     return groups;
   }, [orders]);
 
-  // 把 groups 摊平成 table rows（每行 = 一个 SKU 行；空门店/空整组用占位行）
-  const tableRows = useMemo<TableRow[]>(() => {
-    const rows: TableRow[] = [];
-    for (const [gIdx, group] of groups.entries()) {
-      const totalSkuInGroup = group.details.reduce(
-        (s, d) => s + d.items.length,
-        0
-      );
-
-      // 空整组（极端情况）
-      if (totalSkuInGroup === 0) {
-        rows.push({
-          kind: "empty-group",
-          key: `g-${group.rootId}-empty`,
-          groupIdx: gIdx,
-          groupTotalRows: 1,
-          detailIdx: 0,
-          detailSkuCount: 1,
-          group,
-          isFirstRowOfGroup: true,
-          isFirstRowOfDetail: true,
-        });
-        continue;
-      }
-
-      for (const [dIdx, detail] of group.details.entries()) {
-        // 空门店（极端情况）
-        if (detail.items.length === 0) {
-          rows.push({
-            kind: "empty-store",
-            key: `s-${detail.id}-empty`,
-            groupIdx: gIdx,
-            groupTotalRows: totalSkuInGroup,
-            detailIdx: dIdx,
-            detailSkuCount: 1,
-            group,
-            detail,
-            isFirstRowOfGroup: dIdx === 0,
-            isFirstRowOfDetail: true,
-          });
-          continue;
-        }
-
-        for (const [sIdx, item] of detail.items.entries()) {
-          rows.push({
-            kind: "sku",
-            key: `k-${item.id}`,
-            groupIdx: gIdx,
-            groupTotalRows: totalSkuInGroup,
-            detailIdx: dIdx,
-            detailSkuCount: detail.items.length,
-            skuIdx: sIdx,
-            group,
-            detail,
-            sku: item,
-            isFirstRowOfGroup: dIdx === 0 && sIdx === 0,
-            isFirstRowOfDetail: sIdx === 0,
-          });
-        }
-      }
-    }
-    return rows;
-  }, [groups]);
-
   // 触发删除（弹出确认）
   const handleDeleteClick = (group: HistoryGroup) => {
     setDeletingGroup(group);
-  };
-
-  // 切换调拨单展开/收起
-  const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
   };
 
   // 确认删除
@@ -370,31 +254,6 @@ export default function HistoryPage() {
   const transferCount = groups.filter((g) => g.kind === "transfer").length;
   const outboundCount = groups.filter((g) => g.kind === "outbound").length;
 
-  // 单元格取值
-  const valueAt = (
-    row: TableRow,
-    key: "storeName" | "recipientName" | "recipientPhone" | "recipientAddress"
-  ): string => {
-    if (row.kind === "sku") {
-      const v = (row.detail as unknown as Record<string, unknown>)[key];
-      return v === undefined || v === null ? "" : String(v);
-    }
-    if (row.kind === "empty-store") {
-      const v = (row.detail as unknown as Record<string, unknown>)[key];
-      return v === undefined || v === null ? "" : String(v);
-    }
-    return "";
-  };
-
-  const skuValueAt = (
-    row: TableRow,
-    key: "skuCode" | "skuName" | "skuQuantity" | "skuSpec"
-  ): string => {
-    if (row.kind !== "sku") return "";
-    const v = (row.sku as unknown as Record<string, unknown>)[key];
-    return v === undefined || v === null ? "" : String(v);
-  };
-
   return (
     <div className="space-y-4 lg:space-y-5 page-container">
       {/* 吸顶操作区：标题 + 筛选 */}
@@ -414,7 +273,7 @@ export default function HistoryPage() {
             <div className="flex-1 min-w-0">
               <h1 className="text-lg font-semibold text-[#1d2129]">已导入运单</h1>
               <p className="text-sm text-[#86909c] mt-0.5">
-                调拨单按 1+N+M 合并展示：1 行外部编码 + N 行门店 + M 行 SKU
+                按外部编码分组展示，每条 SKU 一行
               </p>
             </div>
           </div>
@@ -669,369 +528,85 @@ export default function HistoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tableRows
-                    .filter((row) => expandedGroups.has(row.group.rootId) || row.isFirstRowOfGroup)
-                    .map((row, rowIdx) => {
-                    // 行底色
-                    let rowBg: string;
-                    if (row.kind === "empty-group") {
-                      rowBg = "bg-[#e8fafa]/60"; // 整组空 → code 色调
-                    } else if (row.kind === "empty-store") {
-                      rowBg = "bg-[#f7f8fa]"; // 门店空 → store 色调
-                    } else if (row.isFirstRowOfDetail) {
-                      rowBg = "bg-[#f7f8fa]"; // 门店首行 → store 色调
-                    } else {
-                      rowBg = "bg-white"; // 后续 SKU → 白
-                    }
-                    // 组首行顶部青色分隔线（除表首）
-                    const topBorder =
-                      row.isFirstRowOfGroup && rowIdx > 0
-                        ? "border-t-2 border-t-[#0fc6c2]/30"
-                        : "";
-
-                    const isCollapsed = !expandedGroups.has(row.group.rootId);
-                    return (
-                      <tr
-                        key={row.key}
-                        className={cn(
-                          "group transition-colors",
-                          topBorder,
-                          isCollapsed && row.isFirstRowOfGroup && "is-collapsed"
-                        )}
-                        onClick={isCollapsed && row.isFirstRowOfGroup ? () => toggleGroup(row.group.rootId) : undefined}
-                      >
-                        {/* # 列 - 跨整组 */}
-                        {row.isFirstRowOfGroup && (
-                          <td
-                            rowSpan={row.groupTotalRows}
+                  {groups.flatMap((group, gIdx) =>
+                    group.details.flatMap((detail, dIdx) =>
+                      detail.items.map((item, sIdx) => {
+                        const rowIdx = gIdx * 1000 + dIdx * 100 + sIdx;
+                        return (
+                          <tr
+                            key={item.id}
                             className={cn(
-                              "sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center border-r border-b border-[#f2f3f5] font-mono align-top",
-                              "bg-inherit",
-                              "text-[#0fc6c2] font-semibold"
+                              "hover:bg-[#fafbfc]/60 transition-colors",
+                              dIdx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"
                             )}
-                            style={{
-                              backgroundColor:
-                                row.kind === "empty-group"
-                                  ? "rgba(232, 250, 250, 0.6)"
-                                  : row.kind === "empty-store"
-                                    ? "#f7f8fa"
-                                    : row.isFirstRowOfDetail
-                                      ? "#f7f8fa"
-                                      : "#ffffff",
-                            }}
                           >
-                            {row.groupIdx + 1}
-                          </td>
-                        )}
-
-                        {/* 外部编码列 - 跨整组（运单号 + 摘要徽章） */}
-                        {row.isFirstRowOfGroup && (
-                          <td
-                            rowSpan={row.groupTotalRows}
-                            className="px-3 py-2.5 border-r border-b border-[#f2f3f5] align-top"
-                            style={{
-                              backgroundColor:
-                                row.kind === "empty-group"
-                                  ? "rgba(232, 250, 250, 0.6)"
-                                  : row.kind === "empty-store"
-                                    ? "#f7f8fa"
-                                    : row.isFirstRowOfDetail
-                                      ? "#f7f8fa"
-                                      : "#ffffff",
-                            }}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <StatusDot status={row.group.status} />
-                              {isCollapsed && row.group.totalSku > 1 && (
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="#0fc6c2"
-                                  strokeWidth="3"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="shrink-0"
-                                >
-                                  <polyline points="9 6 15 12 9 18" />
-                                </svg>
-                              )}
-                              <span
-                                className="block truncate font-mono font-semibold text-[#1d2129]"
-                                title={row.group.externalCode}
-                              >
-                                {row.group.externalCode || "—"}
-                              </span>
-                              {isCollapsed && row.group.totalSku > 1 && (
-                                <span
-                                  className="inline-flex shrink-0 items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-[#0bada9] bg-white border border-[#0fc6c2]/30 rounded"
-                                  title={`包含 ${row.group.details.length} 个门店 / ${row.group.totalSku} 条 SKU`}
-                                >
-                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                                    <line x1="9" y1="3" x2="9" y2="21" />
-                                    <line x1="15" y1="3" x2="15" y2="21" />
-                                    <line x1="3" y1="9" x2="21" y2="9" />
-                                    <line x1="3" y1="15" x2="21" y2="15" />
-                                  </svg>
-                                  {row.group.details.length} 门店 · {row.group.totalSku} SKU
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        )}
-
-                        {/* 门店信息 4 列 - 跨该门店的 SKU 行 */}
-                        {row.isFirstRowOfDetail && (
-                          <>
-                            <td
-                              rowSpan={row.detailSkuCount}
-                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
-                              style={{
-                                backgroundColor:
-                                  row.kind === "empty-store"
-                                    ? "#f7f8fa"
-                                    : "#f7f8fa",
-                              }}
-                            >
-                              <span
-                                className={cn(
-                                  "block truncate",
-                                  !valueAt(row, "storeName") &&
-                                    "text-[#c9cdd4] italic"
-                                )}
-                                title={valueAt(row, "storeName")}
-                              >
-                                {valueAt(row, "storeName") || "—"}
+                            <td className="sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center border-r border-b border-[#f2f3f5] font-mono text-[#86909c] align-top bg-inherit">
+                              {rowIdx + 1}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] font-mono font-semibold text-[#1d2129] align-top">
+                              <span className="block truncate" title={group.externalCode}>
+                                {group.externalCode || "—"}
                               </span>
                             </td>
-                            <td
-                              rowSpan={row.detailSkuCount}
-                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
-                              style={{ backgroundColor: "#f7f8fa" }}
-                            >
-                              <span
-                                className={cn(
-                                  "block truncate",
-                                  !valueAt(row, "recipientName") &&
-                                    "text-[#c9cdd4] italic"
-                                )}
-                                title={valueAt(row, "recipientName")}
-                              >
-                                {valueAt(row, "recipientName") || "—"}
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top">
+                              <span className="block truncate" title={detail.storeName || ""}>
+                                {detail.storeName || "—"}
                               </span>
                             </td>
-                            <td
-                              rowSpan={row.detailSkuCount}
-                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top font-mono"
-                              style={{ backgroundColor: "#f7f8fa" }}
-                            >
-                              <span
-                                className={cn(
-                                  "block truncate",
-                                  !valueAt(row, "recipientPhone") &&
-                                    "text-[#c9cdd4] italic"
-                                )}
-                                title={valueAt(row, "recipientPhone")}
-                              >
-                                {valueAt(row, "recipientPhone") || "—"}
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top">
+                              <span className="block truncate" title={detail.recipientName || ""}>
+                                {detail.recipientName || "—"}
                               </span>
                             </td>
-                            <td
-                              rowSpan={row.detailSkuCount}
-                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
-                              style={{ backgroundColor: "#f7f8fa" }}
-                            >
-                              <span
-                                className={cn(
-                                  "block truncate",
-                                  !valueAt(row, "recipientAddress") &&
-                                    "text-[#c9cdd4] italic"
-                                )}
-                                title={valueAt(row, "recipientAddress")}
-                              >
-                                {valueAt(row, "recipientAddress") || "—"}
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] font-mono align-top">
+                              <span className="block truncate" title={detail.recipientPhone || ""}>
+                                {detail.recipientPhone || "—"}
                               </span>
                             </td>
-                          </>
-                        )}
-
-                        {/* SKU 4 列 - 每行独立 */}
-                        <td
-                          className={cn(
-                            "px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] font-mono",
-                            rowBg,
-                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "block truncate",
-                              !skuValueAt(row, "skuCode") &&
-                                "text-[#c9cdd4] italic"
-                            )}
-                            title={skuValueAt(row, "skuCode")}
-                          >
-                            {skuValueAt(row, "skuCode") || "—"}
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            "px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5]",
-                            rowBg,
-                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "block truncate",
-                              !skuValueAt(row, "skuName") &&
-                                "text-[#c9cdd4] italic"
-                            )}
-                            title={skuValueAt(row, "skuName")}
-                          >
-                            {skuValueAt(row, "skuName") || "—"}
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            "px-3 py-2.5 text-sm text-right border-r border-b border-[#f2f3f5] tabular-nums",
-                            rowBg,
-                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "block truncate",
-                              !skuValueAt(row, "skuQuantity") &&
-                                "text-[#c9cdd4] italic"
-                            )}
-                            title={skuValueAt(row, "skuQuantity")}
-                          >
-                            {skuValueAt(row, "skuQuantity") || "—"}
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            "px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5]",
-                            rowBg,
-                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "block truncate",
-                              !skuValueAt(row, "skuSpec") &&
-                                "text-[#c9cdd4] italic"
-                            )}
-                            title={skuValueAt(row, "skuSpec")}
-                          >
-                            {skuValueAt(row, "skuSpec") || "—"}
-                          </span>
-                        </td>
-
-                        {/* 操作列 - 跨整组（chevron 展开/收起 + 删除） */}
-                        {row.isFirstRowOfGroup && (
-                          <td
-                            rowSpan={row.groupTotalRows}
-                            className={cn(
-                              "sticky right-0 z-10 px-2.5 py-2.5 text-sm border-b border-[#f2f3f5] align-top shadow-[-2px_0_4px_rgba(0,0,0,0.04)]",
-                              !isCollapsed && "bg-white"
-                            )}
-                            style={
-                              isCollapsed
-                                ? undefined
-                                : {
-                                    backgroundColor:
-                                      row.kind === "empty-group"
-                                        ? "rgba(232, 250, 250, 0.6)"
-                                        : row.kind === "empty-store"
-                                          ? "#f7f8fa"
-                                          : row.isFirstRowOfDetail
-                                            ? "#f7f8fa"
-                                            : "#ffffff",
-                                  }
-                            }
-                          >
-                            <div
-                              className="flex items-center justify-end gap-1.5"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {isCollapsed ? (
-                                <button
-                                  onClick={() => toggleGroup(row.group.rootId)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] hover:from-[#0bada9] hover:to-[#098f8b] rounded-md shadow-[0_2px_6px_rgba(15,198,194,0.3)] transition-all whitespace-nowrap"
-                                  title={`展开 ${row.group.details.length} 个门店 / ${row.group.totalSku} 条 SKU`}
-                                >
-                                  <svg
-                                    width="12"
-                                    height="12"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <polyline points="6 9 12 15 18 9" />
-                                  </svg>
-                                  展开
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => toggleGroup(row.group.rootId)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#0fc6c2] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap"
-                                  title="收起详情"
-                                >
-                                  <svg
-                                    width="11"
-                                    height="11"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <polyline points="6 9 12 15 18 9" />
-                                  </svg>
-                                  收起
-                                </button>
-                              )}
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top">
+                              <span className="block truncate" title={detail.recipientAddress || ""}>
+                                {detail.recipientAddress || "—"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] font-mono align-top">
+                              <span className="block truncate" title={item.skuCode}>
+                                {item.skuCode || "—"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top">
+                              <span className="block truncate" title={item.skuName}>
+                                {item.skuName || "—"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-right border-r border-b border-[#f2f3f5] tabular-nums align-top">
+                              <span className="block truncate" title={String(item.skuQuantity)}>
+                                {item.skuQuantity || "—"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top">
+                              <span className="block truncate" title={item.skuSpec || ""}>
+                                {item.skuSpec || "—"}
+                              </span>
+                            </td>
+                            <td className="sticky right-0 z-10 px-2.5 py-2.5 text-sm border-b border-[#f2f3f5] align-top bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)] text-center">
                               <button
-                                onClick={() => handleDeleteClick(row.group)}
+                                onClick={() => handleDeleteClick(group)}
                                 className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                                title={
-                                  row.group.kind === "transfer"
-                                    ? "删除整张调拨单"
-                                    : "删除该运单"
-                                }
+                                title="删除整张调拨单"
                               >
-                                <svg
-                                  width="11"
-                                  height="11"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="3 6 5 6 21 6" />
                                   <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                  <path d="M10 11v6" />
-                                  <path d="M14 11v6" />
-                                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                  <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                                 </svg>
                                 删除
                               </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )
+                  )}
                 </tbody>
               </table>
             </div>

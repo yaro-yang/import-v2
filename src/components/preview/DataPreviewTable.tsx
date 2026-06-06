@@ -83,6 +83,9 @@ export function DataPreviewTable({
     field: string;
   } | null>(null);
 
+  // 强制 useMemo 重新计算：每次编辑都会递增
+  const [revision, setRevision] = useState(0);
+
   // 用户修改过的字段：记录 (orderId, field) → 标记为 dirty，不再显示对应外部错误
   const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
 
@@ -166,7 +169,7 @@ export function DataPreviewTable({
       duplicateCodes: duplicateKeys,
       duplicateOrderIds,
     };
-  }, [orders, externalErrors, dirtyFields]);
+  }, [orders, externalErrors, dirtyFields, revision]);
 
   // 当 orders 数据源变更时（如重新解析），重置 dirtyFields
   // 仅在 orders 数据源变更时重置 dirtyFields（新增/替换，而非删除）
@@ -184,6 +187,7 @@ export function DataPreviewTable({
     prevOrderIdsRef.current = currentIds;
     if (hasNew) {
       setDirtyFields(new Set());
+      setRevision(0);
     }
   }, [orders]);
 
@@ -211,9 +215,10 @@ export function DataPreviewTable({
     setEditingCell(null);
   };
 
-  // 标记用户修改过的字段（修改后不再显示该字段的外部错误）
+  // 标记用户修改过的字段（修改后不再显示该字段的外部错误），同时递增 revision 强制重校验
   const markDirty = (id: string, field: string) => {
     setDirtyFields((prev) => new Set(prev).add(`${id}|${field}`));
+    setRevision((r) => r + 1);
   };
 
   // 删除行时标记整行所有字段为 dirty，确保外部错误被清除
