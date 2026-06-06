@@ -542,9 +542,8 @@ export default function HomePage() {
   // 提交下单
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
-    // 校验：合并 parse 阶段错误 + 实时编辑错误
-    const allErrors = [...errors, ...liveErrors];
-    const hasBlockingError = allErrors.some((e) => e.severity === "error");
+    // 校验：使用实时校验结果（已包含字段校验 + 过滤后的外部错误）
+    const hasBlockingError = liveErrors.some((e) => e.severity === "error");
     if (hasBlockingError) {
       toast.error("请先修正所有错误（红色标记）后再提交");
       return;
@@ -580,7 +579,7 @@ export default function HomePage() {
     } finally {
       setSubmitting(false);
     }
-  }, [orders, errors, liveErrors, submitting, currentRuleMode]);
+  }, [orders, liveErrors, submitting, currentRuleMode]);
 
   // 实时校验回调
   const handleValidationChange = useCallback(
@@ -894,7 +893,7 @@ export default function HomePage() {
                 value={formatTime(parseTime)}
                 tone="default"
               />
-              {(errors.length + liveErrors.length) > 0 && (
+              {liveErrors.length > 0 && (
                 <>
                   <Divider />
                   <StatBlock
@@ -906,7 +905,7 @@ export default function HomePage() {
                       </svg>
                     }
                     label="校验问题"
-                    value={errors.length + liveErrors.length}
+                    value={liveErrors.length}
                     tone="default"
                   />
                 </>
@@ -968,7 +967,7 @@ export default function HomePage() {
               <Button
                 onClick={handleSubmit}
                 loading={submitting}
-                disabled={(errors.length + liveErrors.filter((e) => e.severity === "error").length) > 0 || submitting}
+                disabled={liveErrors.some((e) => e.severity === "error") || submitting}
               >
                 提交下单
               </Button>

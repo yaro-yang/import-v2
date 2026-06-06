@@ -137,10 +137,12 @@ export function DataPreviewTable({
       }
     }
 
-    // 3. 合并外部传入的错误（忽略已经被用户修改过的字段）
+    // 3. 合并外部传入的错误（忽略已被用户修改或已删除的行）
     const allErrors: ValidationError[] = [...fieldErrors];
     for (const err of externalErrors) {
       const ordersAtRow = orders.filter((o) => (o.sourceRow || 0) === err.row);
+      // 行已被删除或修改了字段，跳过
+      if (ordersAtRow.length === 0) continue;
       let anyDirty = false;
       for (const o of ordersAtRow) {
         const dirtyKey = `${o.id}|${err.field}`;
@@ -149,7 +151,7 @@ export function DataPreviewTable({
           break;
         }
       }
-      if (anyDirty) continue; // 用户已修改该字段，跳过外部错误
+      if (anyDirty) continue;
 
       for (const o of ordersAtRow) {
         if (!errorFieldMap.has(o.id)) errorFieldMap.set(o.id, new Set());
@@ -203,6 +205,19 @@ export function DataPreviewTable({
   // 标记用户修改过的字段（修改后不再显示该字段的外部错误）
   const markDirty = (id: string, field: string) => {
     setDirtyFields((prev) => new Set(prev).add(`${id}|${field}`));
+  };
+
+  // 删除行时标记整行所有字段为 dirty，确保外部错误被清除
+  const handleDelete = (id: string) => {
+    const cols = mode === "transfer" ? transferColumns : columns;
+    setDirtyFields((prev) => {
+      const next = new Set(prev);
+      for (const col of cols) {
+        next.add(`${id}|${col.key}`);
+      }
+      return next;
+    });
+    onDeleteOrder(id);
   };
 
   const handleKeyDown = (
@@ -427,7 +442,7 @@ export function DataPreviewTable({
                     style={{ backgroundColor: rowBg }}
                   >
                     <button
-                      onClick={() => onDeleteOrder(order.id)}
+                      onClick={() => handleDelete(order.id)}
                       className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
                       title="删除行"
                     >
