@@ -147,8 +147,14 @@ export async function POST(request: NextRequest) {
             if (!sheetData) continue;
             try {
               const rawData = excelToRawData(sheetData, rule);
+              // 进度回调节流：每 10 行或进度变化 >5% 才推送，避免高频 SSE 写入撑爆流缓冲
+              let lastSentRatio = -1;
               const result = await executeRule(rawData, rule, file.name, (processed, total, msg) => {
-                send({ type: "progress", processed, total, message: `[${sheetName}] ${msg || ""}` });
+                const ratio = total > 0 ? Math.floor((processed / total) * 20) : -1; // 5% 粒度
+                if (ratio !== lastSentRatio) {
+                  lastSentRatio = ratio;
+                  send({ type: "progress", processed, total, message: `[${sheetName}] ${msg || ""}` });
+                }
               });
               for (const order of result.orders) {
                 order.sourceSheet = sheetName;
