@@ -365,6 +365,57 @@ export default function HistoryPage() {
     }
   };
 
+  // 批量删除
+  const handleBatchDelete = async () => {
+    const idsToDelete = Array.from(selectedGroupRootIds);
+    if (idsToDelete.length === 0) return;
+    setBatchDeleting(false);
+
+    const toastId = toast.loading(`正在批量删除 ${idsToDelete.length} 个分组...`);
+    let deleted = 0;
+    let failed = 0;
+
+    for (const rootId of idsToDelete) {
+      try {
+        if (rootId === "__empty_code__") {
+          const emptyGroup = groups.find((g) => g.rootId === "__empty_code__");
+          if (emptyGroup) {
+            for (const detail of emptyGroup.details) {
+              try {
+                const res = await fetch(`/api/orders/${encodeURIComponent(detail.id)}`, { method: "DELETE" });
+                const data = await res.json();
+                if (data.success) deleted++;
+                else failed++;
+              } catch { failed++; }
+            }
+          }
+          continue;
+        }
+        const group = groups.find((g) => g.rootId === rootId);
+        if (!group) { failed++; continue; }
+
+        const url = group.kind === "transfer"
+          ? `/api/transfer-orders/${encodeURIComponent(rootId)}`
+          : `/api/orders/${encodeURIComponent(rootId)}`;
+
+        const res = await fetch(url, { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) deleted++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    setSelectedGroupRootIds(new Set());
+    if (failed === 0) {
+      toast.success(`已删除 ${deleted} 个分组`, { id: toastId });
+    } else {
+      toast.error(`删除完成：${deleted} 成功，${failed} 失败`, { id: toastId });
+    }
+    loadOrders();
+  };
+
   // 导出：按行展开（1 调拨单 = 1+N+M 行）
   const handleExportAll = () => {
     try {
@@ -1203,60 +1254,6 @@ export default function HistoryPage() {
           </>
         )}
       </div>
-
-  // 批量删除
-  const handleBatchDelete = async () => {
-    const idsToDelete = Array.from(selectedGroupRootIds);
-    if (idsToDelete.length === 0) return;
-    setBatchDeleting(false);
-
-    const toastId = toast.loading(`正在批量删除 ${idsToDelete.length} 个分组...`);
-    let deleted = 0;
-    let failed = 0;
-
-    for (const rootId of idsToDelete) {
-      try {
-        // 空编码聚合组：逐个删除子单
-        if (rootId === "__empty_code__") {
-          const emptyGroup = groups.find((g) => g.rootId === "__empty_code__");
-          if (emptyGroup) {
-            for (const detail of emptyGroup.details) {
-              try {
-                const res = await fetch(`/api/orders/${encodeURIComponent(detail.id)}`, { method: "DELETE" });
-                const data = await res.json();
-                if (data.success) deleted++;
-                else failed++;
-              } catch { failed++; }
-            }
-          }
-          continue;
-        }
-        // 正常分组
-        const group = groups.find((g) => g.rootId === rootId);
-        if (!group) { failed++; continue; }
-
-        const url = group.kind === "transfer"
-          ? `/api/transfer-orders/${encodeURIComponent(rootId)}`
-          : `/api/orders/${encodeURIComponent(rootId)}`;
-
-        const res = await fetch(url, { method: "DELETE" });
-        const data = await res.json();
-        if (data.success) deleted++;
-        else failed++;
-      } catch {
-        failed++;
-      }
-    }
-
-    setSelectedGroupRootIds(new Set());
-    if (failed === 0) {
-      toast.success(`已删除 ${deleted} 个分组`, { id: toastId });
-    } else {
-      toast.error(`删除完成：${deleted} 成功，${failed} 失败`, { id: toastId });
-    }
-    loadOrders();
-  };
-
       {/* 删除确认弹窗 */}
       <Modal
         isOpen={!!deletingGroup}
