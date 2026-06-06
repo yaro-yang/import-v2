@@ -145,15 +145,15 @@ export default function HistoryPage() {
 
   // 把 OutboundOrder[] 聚合成 HistoryGroup[]
   // - transfer 模式：按 transferOrderId 聚合（同一调拨单的多门店归到一组）
-  // - outbound 模式（无 transferOrderId）：每个 OutboundOrder 自成一组
+  // - outbound 模式（无 transferOrderId）：按 externalCode 聚合
+  //   空外部编码的全部归为一组
   const groups = useMemo<HistoryGroup[]>(() => {
-    const groups: HistoryGroup[] = [];
-    const transferMap = new Map<string, HistoryGroup>();
+    const map = new Map<string, HistoryGroup>();
 
     for (const ob of orders) {
       if (ob.transferOrderId) {
         // 调拨单模式：按 transferOrderId 聚合
-        let g = transferMap.get(ob.transferOrderId);
+        let g = map.get(ob.transferOrderId);
         if (!g) {
           g = {
             kind: "transfer",
@@ -166,32 +166,68 @@ export default function HistoryPage() {
             createdAt: ob.createdAt,
             status: ob.status,
           };
-          transferMap.set(ob.transferOrderId, g);
-          groups.push(g);
+          map.set(ob.transferOrderId, g);
         }
         g.details.push(ob);
         g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
         g.totalSku += ob.items.length;
-        // 取最新提交时间
         if (ob.submittedAt && (!g.submittedAt || ob.submittedAt > g.submittedAt)) {
           g.submittedAt = ob.submittedAt;
         }
       } else {
-        // 出库单模式：每个 OutboundOrder 自成一组
-        groups.push({
-          kind: "outbound",
-          externalCode: ob.externalCode || "（无编码）",
-          rootId: ob.id,
-          details: [ob],
-          totalQty: ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0),
-          totalSku: ob.items.length,
-          submittedAt: ob.submittedAt,
-          createdAt: ob.createdAt,
-          status: ob.status,
-        });
+        // 出库单模式：按 externalCode 聚合（空编码归为一组）
+        const code = ob.externalCode || "";
+        if (!code) {
+          // 空外部编码：全部归为一组
+          const emptyKey = "__empty_code__";
+          let g = map.get(emptyKey);
+          if (!g) {
+            g = {
+              kind: "outbound",
+              externalCode: "（无编码）",
+              rootId: emptyKey,
+              details: [],
+              totalQty: 0,
+              totalSku: 0,
+              submittedAt: ob.submittedAt,
+              createdAt: ob.createdAt,
+              status: ob.status,
+            };
+            map.set(emptyKey, g);
+          }
+          g.details.push(ob);
+          g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
+          g.totalSku += ob.items.length;
+          if (ob.submittedAt && (!g.submittedAt || ob.submittedAt > g.submittedAt)) {
+            g.submittedAt = ob.submittedAt;
+          }
+        } else {
+          // 有外部编码：每个单独一组
+          let g = map.get(code);
+          if (!g) {
+            g = {
+              kind: "outbound",
+              externalCode: code,
+              rootId: ob.id,
+              details: [],
+              totalQty: 0,
+              totalSku: 0,
+              submittedAt: ob.submittedAt,
+              createdAt: ob.createdAt,
+              status: ob.status,
+            };
+            map.set(code, g);
+          }
+          g.details.push(ob);
+          g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
+          g.totalSku += ob.items.length;
+          if (ob.submittedAt && (!g.submittedAt || ob.submittedAt > g.submittedAt)) {
+            g.submittedAt = ob.submittedAt;
+          }
+        }
       }
     }
-    return groups;
+    return Array.from(map.values());
   }, [orders]);
 
   // 把 groups 摊平成 table rows（每行 = 一个 SKU 行；空门店/空整组用占位行）
@@ -279,24 +315,45 @@ export default function HistoryPage() {
     setDeleting(true);
     const toastId = toast.loading("正在删除...");
     try {
-      let url: string;
-      if (deletingGroup.kind === "transfer") {
-        url = `/api/transfer-orders/${encodeURIComponent(deletingGroup.rootId)}`;
+      // 空编码聚合组（rootId = "__empty_code__"）：逐个删除所有子单
+      if (deletingGroup.rootId === "__empty_code__") {
+        let deleted = 0;
+        let failed = 0;
+        for (const detail of deletingGroup.details) {
+          try {
+            const res = await fetch(`/api/orders/${encodeURIComponent(detail.id)}`, { method: "DELETE" });
+            const data = await res.json();
+            if (data.success) deleted++;
+            else failed++;
+          } catch {
+            failed++;
+          }
+        }
+        if (failed === 0) {
+          toast.success(`已删除 ${deleted} 条运单`, { id: toastId });
+        } else {
+          toast.error(`删除完成：${deleted} 条成功，${failed} 条失败`, { id: toastId });
+        }
       } else {
-        url = `/api/orders/${encodeURIComponent(deletingGroup.rootId)}`;
+        let url: string;
+        if (deletingGroup.kind === "transfer") {
+          url = `/api/transfer-orders/${encodeURIComponent(deletingGroup.rootId)}`;
+        } else {
+          url = `/api/orders/${encodeURIComponent(deletingGroup.rootId)}`;
+        }
+        const res = await fetch(url, { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) {
+          toast.success(
+            deletingGroup.kind === "transfer" ? "已删除整张调拨单" : "已删除",
+            { id: toastId }
+          );
+        } else {
+          toast.error(data.error || "删除失败", { id: toastId });
+        }
       }
-      const res = await fetch(url, { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(
-          deletingGroup.kind === "transfer" ? "已删除整张调拨单" : "已删除",
-          { id: toastId }
-        );
-        setDeletingGroup(null);
-        loadOrders();
-      } else {
-        toast.error(data.error || "删除失败", { id: toastId });
-      }
+      setDeletingGroup(null);
+      loadOrders();
     } catch (err) {
       console.error("Delete error:", err);
       toast.error("删除失败", { id: toastId });
@@ -369,6 +426,28 @@ export default function HistoryPage() {
   const totalPages = Math.ceil(total / pageSize);
   const transferCount = groups.filter((g) => g.kind === "transfer").length;
   const outboundCount = groups.filter((g) => g.kind === "outbound").length;
+
+  // 重复校验：同一外部编码（含空编码组）下，(SKU编码 + 收货门店) 不能重复
+  const duplicateWarnings = useMemo<string[]>(() => {
+    const warnings: string[] = [];
+    for (const group of groups) {
+      const seen = new Set<string>();
+      for (const detail of group.details) {
+        const storeKey = detail.storeName || "";
+        for (const item of detail.items) {
+          const uniqueKey = `${item.skuCode || "无SKU编码"}|${storeKey}`;
+          if (seen.has(uniqueKey)) {
+            warnings.push(
+              `⚠️ 外部编码「${group.externalCode}」下 SKU「${item.skuCode}」在门店「${storeKey || "（空）"}」重复`
+            );
+          } else {
+            seen.add(uniqueKey);
+          }
+        }
+      }
+    }
+    return warnings;
+  }, [groups]);
 
   // 单元格取值
   const valueAt = (
@@ -538,6 +617,18 @@ export default function HistoryPage() {
           )}
         </div>
       </div>
+
+      {/* 重复数据警告 */}
+      {duplicateWarnings.length > 0 && (
+        <div className="bg-[#fff7e6] border border-[#ffd591] rounded-xl px-4 py-3 space-y-1.5">
+          {duplicateWarnings.map((w, i) => (
+            <p key={i} className="text-sm text-[#d97b00] flex items-start gap-1.5">
+              <span className="flex-shrink-0 mt-0.5">⚠️</span>
+              <span>{w.replace("⚠️ ", "")}</span>
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* 数据列表 - Excel 风格合并单元格表格 */}
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
