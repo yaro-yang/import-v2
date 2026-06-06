@@ -236,6 +236,7 @@ function mapOutboundRow(row: Record<string, unknown>, items: OrderItem[]): Outbo
     sourceRow: row.source_row as number | undefined,
     ruleId: (row.rule_id as string) || undefined,
     status: (row.status as OutboundOrder["status"]) || "draft",
+    transferOrderId: (row.transfer_order_id as string) || undefined,
     items,
     createdAt: row.created_at as string,
     submittedAt: (row.submitted_at as string) || undefined,
