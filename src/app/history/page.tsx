@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import toast from "react-hot-toast";
 import { OutboundOrder } from "@/types";
 import { Button } from "@/components/ui/Button";
@@ -72,14 +72,78 @@ const COL_NAME = { key: "recipientName", label: "收件人", width: 100 };
 const COL_PHONE = { key: "recipientPhone", label: "电话", width: 130 };
 const COL_ADDR = { key: "recipientAddress", label: "地址", width: 220 };
 const COL_SKU_CODE = { key: "skuCode", label: "SKU编码", width: 130 };
+
+// 统计小方块（带 icon + 标签 + 数值）
+function StatBlock({
+  icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number | string;
+  tone?: "default" | "primary";
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div
+        className={cn(
+          "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+          tone === "primary"
+            ? "bg-[#e8fafa] text-[#0fc6c2]"
+            : "bg-[#f7f8fa] text-[#4e5969]"
+        )}
+      >
+        {icon}
+      </div>
+      <div>
+        <p className="text-[11px] text-[#86909c] leading-tight mb-0.5">{label}</p>
+        <p
+          className={cn(
+            "text-2xl font-bold tabular-nums leading-none",
+            tone === "primary" ? "text-[#0bada9]" : "text-[#1d2129]"
+          )}
+        >
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-8 bg-[#e5e6eb] hidden sm:block" />;
+}
+
+// 状态点：已提交 / 草稿 / 错误
+function StatusDot({ status }: { status: "draft" | "submitted" | "error" }) {
+  const config = {
+    submitted: { color: "#00b42a", label: "已提交" },
+    draft: { color: "#86909c", label: "草稿" },
+    error: { color: "#cf1322", label: "有错误" },
+  }[status];
+  return (
+    <span
+      className="inline-block w-2 h-2 rounded-full shrink-0"
+      style={{ backgroundColor: config.color, boxShadow: `0 0 0 3px ${config.color}1A` }}
+      title={config.label}
+    />
+  );
+}
 const COL_SKU_NAME = { key: "skuName", label: "SKU名称", width: 170 };
 const COL_SKU_QTY = { key: "skuQuantity", label: "数量", width: 80 };
 const COL_SKU_SPEC = { key: "skuSpec", label: "规格型号", width: 130 };
-const COL_ACTION = { width: 72 };
+const COL_ACTION = { width: 108 };
 
 export default function HistoryPage() {
   const [orders, setOrders] = useState<OutboundOrder[]>([]);
   const [total, setTotal] = useState(0);
+  // DB 全量计数（用于"总数"/"调拨单"/"出库单" 角标）
+  const [totalTransfers, setTotalTransfers] = useState(0);
+  const [totalOutbounds, setTotalOutbounds] = useState(0);
+  // 调拨单展开/收起状态：默认全部收起（仅显示首行）
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [searchExternalCode, setSearchExternalCode] = useState("");
@@ -104,15 +168,21 @@ export default function HistoryPage() {
       if (data.success) {
         setOrders(data.data.orders);
         setTotal(data.data.total);
+        setTotalTransfers(data.data.totalTransfers);
+        setTotalOutbounds(data.data.totalOutbounds);
       } else {
         console.error("API error:", data.error);
         setOrders([]);
         setTotal(0);
+        setTotalTransfers(0);
+        setTotalOutbounds(0);
       }
     } catch (err) {
       console.error("Failed to load orders:", err);
       setOrders([]);
       setTotal(0);
+      setTotalTransfers(0);
+      setTotalOutbounds(0);
     } finally {
       setLoading(false);
     }
@@ -245,6 +315,16 @@ export default function HistoryPage() {
   // 触发删除（弹出确认）
   const handleDeleteClick = (group: HistoryGroup) => {
     setDeletingGroup(group);
+  };
+
+  // 切换调拨单展开/收起
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
   };
 
   // 确认删除
@@ -422,43 +502,77 @@ export default function HistoryPage() {
       </div>
 
       {/* 统计 + 操作按钮行 */}
-      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-4.5 flex flex-wrap items-center gap-4 lg:gap-6">
-        <div className="flex items-center gap-4 lg:gap-6 flex-wrap">
-          <div>
-            <p className="text-xs text-[#86909c] mb-0.5">总数</p>
-            <p className="text-xl font-semibold text-[#1d2129]">{total}</p>
-          </div>
-          <div className="w-[1px] h-9 bg-[#e5e6eb] hidden sm:block" />
-          <div>
-            <p className="text-xs text-[#86909c] mb-0.5">当前页分组</p>
-            <p className="text-xl font-semibold text-[#1d2129]">{groups.length}</p>
-          </div>
-          <div className="w-[1px] h-9 bg-[#e5e6eb] hidden sm:block" />
-          <div>
-            <p className="text-xs text-[#86909c] mb-0.5">SKU 总数</p>
-            <p className="text-xl font-semibold text-[#0fc6c2]">{totalSkuCount}</p>
-          </div>
-          <div className="w-[1px] h-9 bg-[#e5e6eb] hidden sm:block" />
-          <div>
-            <p className="text-xs text-[#86909c] mb-0.5">发货总量</p>
-            <p className="text-xl font-semibold text-[#0fc6c2]">{totalQtyCount}</p>
-          </div>
-          {(transferCount > 0 || outboundCount > 0) && (
-            <>
-              <div className="w-[1px] h-9 bg-[#e5e6eb] hidden md:block" />
-              <div className="hidden md:flex items-center gap-2 text-xs">
-                {transferCount > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#e8fafa] text-[#0fc6c2] rounded">
-                    调拨单 {transferCount}
-                  </span>
-                )}
-                {outboundCount > 0 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#f2f3f5] text-[#86909c] rounded">
-                    出库单 {outboundCount}
-                  </span>
-                )}
-              </div>
-            </>
+      <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-5 py-4 flex flex-wrap items-center gap-5 lg:gap-7">
+        <div className="flex items-center gap-5 lg:gap-7 flex-wrap">
+          <StatBlock
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+                <line x1="15" y1="3" x2="15" y2="21" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="3" y1="15" x2="21" y2="15" />
+              </svg>
+            }
+            label="总数"
+            value={total}
+            tone="default"
+          />
+          <Divider />
+          <StatBlock
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z" />
+              </svg>
+            }
+            label="当前页分组"
+            value={groups.length}
+            tone="default"
+          />
+          <Divider />
+          <StatBlock
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+              </svg>
+            }
+            label="SKU 总数"
+            value={totalSkuCount}
+            tone="primary"
+          />
+          <Divider />
+          <StatBlock
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+                <circle cx="8" cy="6" r="1.2" fill="currentColor" />
+                <circle cx="14" cy="12" r="1.2" fill="currentColor" />
+                <circle cx="10" cy="18" r="1.2" fill="currentColor" />
+              </svg>
+            }
+            label="发货总量"
+            value={totalQtyCount}
+            tone="primary"
+          />
+          {(totalTransfers > 0 || totalOutbounds > 0) && (
+            <div className="hidden md:flex items-center gap-2 text-xs ml-1">
+              {totalTransfers > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#e8fafa] text-[#0bada9] font-medium rounded-md border border-[#0fc6c2]/15">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0fc6c2]" />
+                  调拨单 {totalTransfers}
+                </span>
+              )}
+              {totalOutbounds > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#f2f3f5] text-[#4e5969] font-medium rounded-md">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#86909c]" />
+                  出库单 {totalOutbounds}
+                </span>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2 ml-auto flex-wrap">
@@ -503,7 +617,7 @@ export default function HistoryPage() {
               style={{ maxHeight: "clamp(480px, 75vh, 760px)" }}
             >
               <table
-                className="min-w-max w-full text-sm"
+                className="history-table min-w-max w-full text-sm"
                 style={{ borderCollapse: "separate", borderSpacing: 0 }}
               >
                 <colgroup>
@@ -522,67 +636,67 @@ export default function HistoryPage() {
                 <thead>
                   <tr>
                     <th
-                      className="sticky top-0 left-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-b border-[#e5e6eb]"
+                      className="sticky top-0 left-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 tracking-wide uppercase"
                       scope="col"
                     >
                       #
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_EXTERNAL.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_STORE.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_NAME.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_PHONE.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_ADDR.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_SKU_CODE.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_SKU_NAME.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-right border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-right border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_SKU_QTY.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_SKU_SPEC.label}
                     </th>
                     <th
-                      className="sticky top-0 right-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-b border-[#e5e6eb] shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
+                      className="sticky top-0 right-0 z-30 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-2 py-2.5 text-[11px] font-semibold text-[#4e5969] text-center border-b-2 border-b-[#0fc6c2]/40 tracking-wide uppercase shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
                       scope="col"
                     >
                       操作
@@ -590,7 +704,9 @@ export default function HistoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tableRows.map((row, rowIdx) => {
+                  {tableRows
+                    .filter((row) => expandedGroups.has(row.group.rootId) || row.isFirstRowOfGroup)
+                    .map((row, rowIdx) => {
                     // 行底色
                     let rowBg: string;
                     if (row.kind === "empty-group") {
@@ -611,7 +727,10 @@ export default function HistoryPage() {
                     return (
                       <tr
                         key={row.key}
-                        className={cn("hover:bg-[#fafbfc]/60 transition-colors", topBorder)}
+                        className={cn(
+                          "group transition-colors",
+                          topBorder
+                        )}
                       >
                         {/* # 列 - 跨整组 */}
                         {row.isFirstRowOfGroup && (
@@ -637,7 +756,7 @@ export default function HistoryPage() {
                           </td>
                         )}
 
-                        {/* 外部编码列 - 跨整组（只显示运单号） */}
+                        {/* 外部编码列 - 跨整组（运单号 + 摘要徽章） */}
                         {row.isFirstRowOfGroup && (
                           <td
                             rowSpan={row.groupTotalRows}
@@ -653,12 +772,27 @@ export default function HistoryPage() {
                                       : "#ffffff",
                             }}
                           >
-                            <span
-                              className="block truncate font-mono font-semibold text-[#1d2129]"
-                              title={row.group.externalCode}
-                            >
-                              {row.group.externalCode || "—"}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <StatusDot status={row.group.status} />
+                              <span
+                                className="block truncate font-mono font-semibold text-[#1d2129]"
+                                title={row.group.externalCode}
+                              >
+                                {row.group.externalCode || "—"}
+                              </span>
+                              {!expandedGroups.has(row.group.rootId) &&
+                                row.group.totalSku > 1 && (
+                                  <span
+                                    className="inline-flex shrink-0 items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-[#0fc6c2] bg-[#e8fafa] rounded"
+                                    title={`包含 ${row.group.details.length} 个门店 / ${row.group.totalSku} 条 SKU`}
+                                  >
+                                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                    {row.group.totalSku} SKU
+                                  </span>
+                                )}
+                            </div>
                           </td>
                         )}
 
@@ -811,7 +945,7 @@ export default function HistoryPage() {
                           </span>
                         </td>
 
-                        {/* 操作列 - 跨整组（一个删除按钮） */}
+                        {/* 操作列 - 跨整组（chevron 展开/收起 + 删除） */}
                         {row.isFirstRowOfGroup && (
                           <td
                             rowSpan={row.groupTotalRows}
@@ -827,17 +961,63 @@ export default function HistoryPage() {
                                       : "#ffffff",
                             }}
                           >
-                            <button
-                              onClick={() => handleDeleteClick(row.group)}
-                              className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                              title={
-                                row.group.kind === "transfer"
-                                  ? "删除整张调拨单"
-                                  : "删除该运单"
-                              }
-                            >
-                              删除
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => toggleGroup(row.group.rootId)}
+                                className="w-6 h-6 flex items-center justify-center text-[#86909c] hover:text-[#0fc6c2] hover:bg-[#e8fafa] rounded transition-colors"
+                                title={
+                                  expandedGroups.has(row.group.rootId)
+                                    ? "收起详情"
+                                    : `展开 ${row.group.totalSku} 个 SKU`
+                                }
+                              >
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{
+                                    transform: expandedGroups.has(row.group.rootId)
+                                      ? "rotate(0deg)"
+                                      : "rotate(-90deg)",
+                                    transition: "transform 0.2s ease",
+                                  }}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClick(row.group)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                                title={
+                                  row.group.kind === "transfer"
+                                    ? "删除整张调拨单"
+                                    : "删除该运单"
+                                }
+                              >
+                                <svg
+                                  width="11"
+                                  height="11"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                  <path d="M10 11v6" />
+                                  <path d="M14 11v6" />
+                                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                </svg>
+                                删除
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>

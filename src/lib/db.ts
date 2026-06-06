@@ -495,13 +495,16 @@ export async function getOrders(params?: {
   endDate?: string;
   page?: number;
   pageSize?: number;
-}): Promise<{ orders: OutboundOrder[]; total: number }> {
+}): Promise<{ orders: OutboundOrder[]; total: number; totalTransfers: number; totalOutbounds: number }> {
   const page = params?.page || 1;
   const pageSize = params?.pageSize || 20;
   const offset = (page - 1) * pageSize;
 
   if (!hasDatabase()) {
     const store = await readLocalStore();
+    const transferIds = new Set(Object.values(store.orders).map((o) => o.transferOrderId).filter(Boolean));
+    const totalTransfers = transferIds.size;
+    const totalOutbounds = Object.values(store.orders).filter((o) => !o.transferOrderId).length;
     let all = Object.values(store.orders);
     if (params?.externalCode) {
       all = all.filter((o) => (o.externalCode || "").includes(params.externalCode!));
@@ -510,7 +513,12 @@ export async function getOrders(params?: {
       all = all.filter((o) => (o.recipientName || "").includes(params.recipientName!));
     }
     all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return { orders: all.slice(offset, offset + pageSize), total: all.length };
+    return {
+      orders: all.slice(offset, offset + pageSize),
+      total: totalTransfers + totalOutbounds,
+      totalTransfers,
+      totalOutbounds,
+    };
   }
 
   const sql = getSql();
@@ -537,12 +545,37 @@ export async function getOrders(params?: {
 
   const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
-  // 查询总数
-  const countSql = `SELECT COUNT(*) as total FROM outbound_orders ${whereClause}`;
-  const countResult = await sql(countSql, queryArgs) as Record<string, unknown>[];
-  const total = Number(countResult[0].total);
+  // === 调拨单（主表）计数：按 external_code 过滤；recipient_name 走子单 EXISTS ===
+  const transferConditions: string[] = [];
+  const transferArgs: unknown[] = [];
+  if (params?.externalCode) {
+    transferArgs.push(`%${params.externalCode}%`);
+    transferConditions.push(`external_code ILIKE $${transferArgs.length}`);
+  }
+  if (params?.recipientName) {
+    transferArgs.push(`%${params.recipientName}%`);
+    transferConditions.push(
+      `id IN (SELECT transfer_order_id FROM outbound_orders WHERE recipient_name ILIKE $${transferArgs.length})`
+    );
+  }
+  const transferWhereClause =
+    transferConditions.length > 0 ? `WHERE ${transferConditions.join(" AND ")}` : "";
+  const transferCountResult = await sql(
+    `SELECT COUNT(*) as cnt FROM transfer_orders ${transferWhereClause}`,
+    transferArgs
+  ) as Record<string, unknown>[];
+  const totalTransfers = Number(transferCountResult[0].cnt);
 
-  // 查询分页数据
+  // === 无主单出库单（独立父单）计数 ===
+  const orphanConditions = [...whereParts, "transfer_order_id IS NULL"];
+  const orphanWhereClause = `WHERE ${orphanConditions.join(" AND ")}`;
+  const orphanCountResult = await sql(
+    `SELECT COUNT(*) as cnt FROM outbound_orders ${orphanWhereClause}`,
+    queryArgs
+  ) as Record<string, unknown>[];
+  const totalOutbounds = Number(orphanCountResult[0].cnt);
+
+  // === 分页数据（仍按 outbound_orders 分页；客户端会聚合成调拨单） ===
   const pageArgs = [...queryArgs, pageSize, offset];
   const dataSql = `SELECT * FROM outbound_orders ${whereClause} ORDER BY created_at DESC LIMIT $${queryArgs.length + 1} OFFSET $${queryArgs.length + 2}`;
   const dataResult = await sql(dataSql, pageArgs) as Record<string, unknown>[];
@@ -572,7 +605,9 @@ export async function getOrders(params?: {
 
   return {
     orders: dataResult.map((r) => mapOutboundRow(r, itemsByParent.get(r.id as string) || [])),
-    total,
+    total: totalTransfers + totalOutbounds,
+    totalTransfers,
+    totalOutbounds,
   };
 }
 

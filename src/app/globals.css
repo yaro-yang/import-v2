@@ -252,6 +252,11 @@ body {
   background-color: #f0f9ff;
 }
 
+/* 历史页表格行 hover：teal 浅底 */
+.history-table tbody tr.group:hover > td {
+  background-color: #f0faf9 !important;
+}
+
 /* 输入框统一样式 */
 input:focus,
 select:focus,
