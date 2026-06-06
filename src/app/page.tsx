@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { FileUploader } from "@/components/upload/FileUploader";
 import { RuleSelector } from "@/components/upload/RuleSelector";
@@ -10,6 +10,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { StatBlock, Divider } from "@/components/ui/TableDecorations";
 import {
   ParseRule,
   OrderItem,
@@ -53,6 +54,25 @@ export default function HomePage() {
 
   // 当前选中规则的 mode（outbound/transfer）— 用于提交时告诉后端按哪种模式落库
   const [currentRuleMode, setCurrentRuleMode] = useState<"outbound" | "transfer">("outbound");
+
+  // 实际显示模式：根据数据结构自动检测
+  // - 若任一 externalCode 下有 ≥2 个不同 storeName → transfer（合并单元格展示）
+  // - 否则 → outbound（扁平展示）
+  // 注：currentRuleMode 只影响提交时落库方式，不影响预览表格的展示形式
+  const effectiveDisplayMode = useMemo<"outbound" | "transfer">(() => {
+    const codeStores = new Map<string, Set<string>>();
+    for (const o of orders) {
+      const code = (o.externalCode || "").trim();
+      if (!code) continue;
+      const store = (o.storeName || "").trim();
+      if (!codeStores.has(code)) codeStores.set(code, new Set());
+      codeStores.get(code)!.add(store);
+    }
+    for (const stores of codeStores.values()) {
+      if (stores.size >= 2) return "transfer";
+    }
+    return "outbound";
+  }, [orders]);
 
   // 提交按钮防重复
   const [submitting, setSubmitting] = useState(false);
@@ -845,43 +865,76 @@ export default function HomePage() {
       {/* 步骤 3: 预览编辑 */}
       {step === "preview" && (
         <div className="animate-fade-in space-y-4 lg:space-y-4.5">
-          {/* 统计信息卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
-            <div className="flex items-center gap-4 lg:gap-8 flex-wrap">
-              <div>
-                <p className="text-sm text-[#86909c] mb-1">总数据</p>
-                <p className="text-2xl font-semibold text-[#1d2129]">
-                  {orders.length} 条
-                </p>
-              </div>
-              <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
-              <div>
-                <p className="text-sm text-[#86909c] mb-1">解析耗时</p>
-                <p className="text-2xl font-semibold text-[#0fc6c2]">
-                  {formatTime(parseTime)}
-                </p>
-              </div>
+          {/* 统计信息卡片 - StatBlock 风格，与已导入运单页统一 */}
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-5 py-4 flex flex-wrap items-center gap-5 lg:gap-7">
+            <div className="flex items-center gap-5 lg:gap-7 flex-wrap">
+              <StatBlock
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="9" y1="3" x2="9" y2="21" />
+                    <line x1="15" y1="3" x2="15" y2="21" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="3" y1="15" x2="21" y2="15" />
+                  </svg>
+                }
+                label="总数据"
+                value={`${orders.length} 条`}
+                tone="primary"
+              />
+              <Divider />
+              <StatBlock
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                }
+                label="解析耗时"
+                value={formatTime(parseTime)}
+                tone="default"
+              />
               {(errors.length + liveErrors.length) > 0 && (
                 <>
-                  <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
-                  <div>
-                    <p className="text-sm text-[#86909c] mb-1">校验错误</p>
-                    <p className="text-2xl font-bold text-[#cf1322]">
-                      {errors.length + liveErrors.length} 个
-                    </p>
-                  </div>
+                  <Divider />
+                  <StatBlock
+                    icon={
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                    }
+                    label="校验问题"
+                    value={errors.length + liveErrors.length}
+                    tone="default"
+                  />
                 </>
               )}
               {duplicateCodes.length > 0 && (
                 <>
-                  <div className="w-[1px] h-12 bg-[#e5e6eb] hidden sm:block" />
-                  <div>
-                    <p className="text-sm text-[#86909c] mb-1">外部编码重复</p>
-                    <p className="text-2xl font-bold text-[#d97b00]">
-                      {duplicateCodes.length} 个
-                    </p>
-                  </div>
+                  <Divider />
+                  <StatBlock
+                    icon={
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6l3-3 3 3" />
+                        <path d="M6 3v12" />
+                        <rect x="3" y="14" width="18" height="6" rx="1" />
+                      </svg>
+                    }
+                    label="外部编码重复"
+                    value={duplicateCodes.length}
+                    tone="default"
+                  />
                 </>
+              )}
+            </div>
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              {effectiveDisplayMode === "transfer" && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#0bada9] bg-[#e8fafa] border border-[#0fc6c2]/15 rounded-md font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0fc6c2]" />
+                  调拨单模式 · 1+N+M 合并展示
+                </span>
               )}
             </div>
           </div>
@@ -895,7 +948,7 @@ export default function HomePage() {
                 onDeleteOrder={handleDeleteOrder}
                 onAddRow={handleAddRow}
                 errors={errors}
-                mode={currentRuleMode}
+                mode={effectiveDisplayMode}
                 onValidationChange={handleValidationChange}
               />
             </div>
