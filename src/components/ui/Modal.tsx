@@ -80,7 +80,7 @@ export function Modal({
           </button>
         </div>
         {/* 内容区 */}
-        <div className="px-5 lg:px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        <div className="px-6 lg:px-9 py-5 lg:py-7 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

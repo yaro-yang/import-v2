@@ -19,18 +19,21 @@ interface RuleEditorProps {
   }>;
 }
 
-// 字段定义：图标 + 中文名 + 必填 + placeholder
+// 字段定义：图标 + 中文名 + 必填 + placeholder + 分组
+// A组(门店模式): 只需填写"收货门店"
+// B组(收件人模式): 需填写"收件人姓名+收件人电话+收件人地址"三个
+// 两组至少填一组，两组都填也可以。必填项: SKU编码/SKU名称/SKU发货数量 + (A组 or B组)
 const FIELD_DEFS = [
-  { key: "skuCode", label: "物品编码", icon: "code", required: true, hint: "如: 物品编码、SKU、条码" },
-  { key: "skuName", label: "物品名称", icon: "box", required: true, hint: "如: 物品名称、品名" },
-  { key: "skuQuantity", label: "发货数量", icon: "count", required: true, hint: "如: 数量、件数" },
-  { key: "externalCode", label: "单据号", icon: "doc", required: false, hint: "如: 调拨单号、配送单号" },
-  { key: "storeName", label: "收货门店", icon: "store", required: false, hint: "如: 调入门店、收货方" },
-  { key: "recipientName", label: "收件人", icon: "user", required: false, hint: "如: 收货人、联系人" },
-  { key: "recipientPhone", label: "联系电话", icon: "phone", required: false, hint: "如: 电话、手机" },
-  { key: "recipientAddress", label: "收货地址", icon: "location", required: false, hint: "如: 收货地址、详细地址" },
-  { key: "skuSpec", label: "规格型号", icon: "spec", required: false, hint: "如: 规格、型号、单位" },
-  { key: "remark", label: "备注", icon: "note", required: false, hint: "如: 备注、说明" },
+  { key: "externalCode", label: "外部编码", icon: "doc", required: false, hint: "外部系统订单唯一编号，用于去重和聚合（如配送单号）", group: null as string | null },
+  { key: "storeName", label: "收货门店", icon: "store", required: false, hint: "收货门店/机构名称（如\"尹三顺自助烤肉（银泰店）\"）", group: "A" as string | null },
+  { key: "recipientName", label: "收件人姓名", icon: "user", required: false, hint: "收货人姓名", group: "B" as string | null },
+  { key: "recipientPhone", label: "收件人电话", icon: "phone", required: false, hint: "收货人联系方式", group: "B" as string | null },
+  { key: "recipientAddress", label: "收件人地址", icon: "location", required: false, hint: "收货人完整地址", group: "B" as string | null },
+  { key: "skuCode", label: "SKU物品编码", icon: "code", required: true, hint: "SKU 唯一编码", group: null as string | null },
+  { key: "skuName", label: "SKU物品名称", icon: "box", required: true, hint: "SKU 名称", group: null as string | null },
+  { key: "skuQuantity", label: "SKU发货数量", icon: "count", required: true, hint: "发货数量，必须为正数", group: null as string | null },
+  { key: "skuSpec", label: "SKU规格型号", icon: "spec", required: false, hint: "物品规格描述", group: null as string | null },
+  { key: "remark", label: "备注", icon: "note", required: false, hint: "附加说明", group: null as string | null },
 ];
 
 // 字段图标（统一 SVG 线条风格）
@@ -145,6 +148,13 @@ export function RuleEditor({
 
   // 统计
   const filledCount = mappings.filter((m) => m.columnName?.trim()).length;
+  // A组(门店模式): storeName
+  // B组(收件人模式): recipientName + recipientPhone + recipientAddress
+  const aGroupFilled = mappings.find((m) => m.targetField === "storeName")?.columnName?.trim() ? true : false;
+  const bGroupFields = ["recipientName", "recipientPhone", "recipientAddress"];
+  const bGroupFilled = bGroupFields.every((k) => mappings.find((m) => m.targetField === k)?.columnName?.trim());
+  const abGroupOk = aGroupFilled || bGroupFilled;
+
   const reqFields = FIELD_DEFS.filter((f) => f.required);
   const requiredFilled = mappings.filter(
     (m) => m.required && m.columnName?.trim()
@@ -185,7 +195,7 @@ export function RuleEditor({
   };
 
   return (
-    <div className="space-y-4 max-h-[70vh] overflow-y-auto -mx-1 px-1">
+    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
       {/* === 顶部提示横幅 === */}
       <div className="flex items-start gap-3 p-3.5 rounded-xl bg-gradient-to-r from-[#f0fdfd] to-[#e8fafa] border border-[#0fc6c2]/25">
         <div className="w-9 h-9 rounded-lg bg-[#0fc6c2]/10 flex items-center justify-center flex-shrink-0 text-[#0fc6c2]">
@@ -206,6 +216,11 @@ export function RuleEditor({
           <p className="text-xs text-[#4e5969] mt-1">
             已填 <span className="font-semibold text-[#0fc6c2]">{filledCount}</span>
             <span className="text-[#86909c]">/{mappings.length}</span> 个字段
+            {!abGroupOk && (
+              <span className="text-[#cf1322] ml-2">
+                · A组(收货门店)或B组(收件人信息)至少需填一组
+              </span>
+            )}
             {requiredFilled < reqFields.length && (
               <span className="text-[#cf1322] ml-2">
                 · 还有 {reqFields.length - requiredFilled} 个必填项未填
@@ -229,6 +244,15 @@ export function RuleEditor({
 
       {/* === 字段映射表格 === */}
       <div className="bg-white rounded-xl border border-[#e5e6eb] overflow-hidden">
+        {/* A组/B组说明 */}
+        <div className="px-4 py-3 bg-gradient-to-r from-[#fffbf0] to-[#fff8e6] border-b border-[#ffe7ba]/60">
+          <p className="text-xs font-semibold text-[#8c6a00] mb-1.5">A组 vs B组（二选一必填）</p>
+          <div className="space-y-1 text-xs text-[#8c6a00]">
+            <p><span className="font-semibold">A组（门店模式）</span>：只需填写"收货门店"，不要求收件人姓名/电话/地址</p>
+            <p><span className="font-semibold">B组（收件人模式）</span>：需填写"收件人姓名 + 收件人电话 + 收件人地址"三个字段，不要求收货门店</p>
+            <p className="text-[#b58b00] mt-1">两组都填也可以，但至少填一组。两组都没填则校验不通过。</p>
+          </div>
+        </div>
         {/* 表头 */}
         <div className="grid grid-cols-12 gap-3 px-4 py-2.5 bg-[#fafbfc] border-b border-[#e5e6eb]">
           <div className="col-span-4 text-xs font-semibold text-[#86909c]">目标字段</div>
@@ -252,7 +276,7 @@ export function RuleEditor({
                   fieldDef.required && !hasValue ? "bg-[#fffbfb]" : ""
                 }`}
               >
-                {/* 左侧：字段名 */}
+                {/* 左侧：字段名 + 分组标签 */}
                 <div className="col-span-4 flex items-center gap-2.5 min-w-0">
                   <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
                     fieldDef.required ? "bg-[#e8fafa] text-[#0fc6c2]" : "bg-[#f7f8fa] text-[#86909c]"
@@ -266,6 +290,12 @@ export function RuleEditor({
                       </span>
                       {fieldDef.required && (
                         <span className="text-[#cf1322] text-xs font-bold flex-shrink-0">*</span>
+                      )}
+                      {fieldDef.group === "A" && (
+                        <span className="text-[10px] font-medium bg-[#e8ffea] text-[#00b42a] px-1.5 py-px rounded flex-shrink-0">A组</span>
+                      )}
+                      {fieldDef.group === "B" && (
+                        <span className="text-[10px] font-medium bg-[#fff7e6] text-[#ff7d00] px-1.5 py-px rounded flex-shrink-0">B组</span>
                       )}
                     </div>
                   </div>
@@ -399,10 +429,12 @@ export function RuleEditor({
         <Button
           onClick={handleSave}
           loading={saving}
-          disabled={requiredFilled < reqFields.length}
+          disabled={requiredFilled < reqFields.length || !abGroupOk}
         >
           {requiredFilled < reqFields.length
             ? `还需填写 ${reqFields.length - requiredFilled} 个必填项`
+            : !abGroupOk
+            ? "A组或B组至少需填一组"
             : "保存规则"}
         </Button>
       </div>
