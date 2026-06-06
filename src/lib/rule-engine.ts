@@ -976,9 +976,51 @@ export function excelToRawData(
 ): RawDataRow[] {
   const rows: RawDataRow[] = [];
   const config = rule.dataRegion;
-  const headerRow = config.headerRow ?? 0;
+  let headerRow = config.headerRow ?? 0;
   const skipRows = config.skipRows ?? 0;
   const endRow = config.endRows ?? data.length;
+
+  // ===== headerRow 自我修正 =====
+  // 启发式/AI 偶尔会把 headerRow 偏 1 行（第一行被当表头，第二行是数据）
+  // 检测当前 headerRow 是否"像表头"：至少要有一个 cell 含中文字段关键词
+  const HEADER_HINT_KEYWORDS = [
+    "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "店", "门店", "仓库",
+    "日期", "价格", "金额", "分类", "品牌", "备注", "序号", "状态", "联系人",
+  ];
+  const looksLikeHeader = (row: (string | number | null | undefined)[] | undefined): boolean => {
+    if (!row || row.length === 0) return false;
+    let hints = 0;
+    for (const cell of row) {
+      const s = String(cell ?? "").trim();
+      if (!s) continue;
+      if (HEADER_HINT_KEYWORDS.some((kw) => s.includes(kw))) {
+        hints++;
+        if (hints >= 2) return true;
+      }
+    }
+    return false;
+  };
+  // 卡片模式下不修正（卡片有 ▶ 标记，headerRow 无意义）
+  const isCardModeForHeader = config.cardMode?.enabled === true;
+  if (!isCardModeForHeader && data.length > 1) {
+    const currentRow = data[headerRow];
+    if (!looksLikeHeader(currentRow)) {
+      // 在 [headerRow-3, headerRow+3] 范围内找第一个像表头的行
+      const searchRange = 3;
+      for (let delta = -searchRange; delta <= searchRange; delta++) {
+        if (delta === 0) continue;
+        const candidate = headerRow + delta;
+        if (candidate < 0 || candidate >= data.length) continue;
+        if (looksLikeHeader(data[candidate])) {
+          console.warn(
+            `[excelToRawData] headerRow=${headerRow} 看起来不像表头，自动修正为 ${candidate}`
+          );
+          headerRow = candidate;
+          break;
+        }
+      }
+    }
+  }
 
   // 提取表头
   const headers: string[] = [];
@@ -1027,7 +1069,10 @@ export function excelToRawData(
 
   // 尾部信息提取
   if (config.tailRegion && config.tailRegion.startRow !== undefined) {
-    const tailStart = config.tailRegion.startRow;
+    // 容错窗口：从配置的 startRow 向前最多 5 行开始搜索
+    // 防止启发式/AI 配置 startRow 略晚于实际尾部时漏掉关键字段
+    const configuredStart = config.tailRegion.startRow;
+    const tailStart = Math.max(0, configuredStart - 5);
     const tailFields: Record<string, string> = {};
 
     for (let r = tailStart; r < data.length; r++) {
@@ -1035,6 +1080,10 @@ export function excelToRawData(
       if (!rowData) continue;
 
       const rowText = rowData.map((c) => String(c ?? "")).join(" ");
+      // 跳过含"合计"等合计行，避免把合计值误当尾部字段
+      if (rule.postProcessing?.skipTotalRow && rowText.includes(rule.postProcessing.totalRowPattern || "合计")) {
+        continue;
+      }
 
       for (const field of config.tailRegion.fields) {
         if (field.mode === "tail_extract" && field.regexPattern) {
@@ -1044,9 +1093,20 @@ export function excelToRawData(
           }
         } else if (field.mode === "row_field" && field.rowKeyPattern) {
           if (rowText.includes(field.rowKeyPattern)) {
-            const valueMatch = rowText.match(new RegExp(`${field.rowKeyPattern}[：:]*\\s*(.+)`));
-            if (valueMatch && !tailFields[field.targetField]) {
-              tailFields[field.targetField] = valueMatch[1].trim();
+            // 按单元格提取：找到 key 所在 col_ 索引，取下一个非空单元格
+            // 避免贪婪正则吞掉同行其他字段
+            for (let n = 0; n < 200; n++) {
+              const cellVal = String(rowData[n] ?? "");
+              if (cellVal.includes(field.rowKeyPattern)) {
+                for (let m = n + 1; m < rowData.length; m++) {
+                  const v = String(rowData[m] ?? "").trim();
+                  if (v) {
+                    if (!tailFields[field.targetField]) tailFields[field.targetField] = v;
+                    break;
+                  }
+                }
+                break;
+              }
             }
           }
         }
