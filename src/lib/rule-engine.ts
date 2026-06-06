@@ -1043,6 +1043,19 @@ export function excelToRawData(
   const startRow = isCardMode
     ? 0
     : Math.max(skipRows, headerRow + 1);
+
+  // 尾部/info 行的特征词——含这些词的非空行不当作数据行
+  // （这些行的内容是"收货门店：xxx"等键值对，会由 tailRegion 单独处理）
+  const TAIL_ROW_PATTERNS = [
+    "收货门店", "收货人", "收货电话", "收货地址", "收货机构",
+    "联系电话", "联系人", "审核人", "审核：", "审核:",
+    "制单人", "制单：", "制单:",
+    "经办人", "经办：", "经办:",
+    "打印时间", "打印日期", "打印：", "打印:",
+    "调拨日期", "调拨单号", "配送日期",
+    "门店名称", "门店编号",
+  ];
+
   for (let r = startRow; r < Math.min(endRow, data.length); r++) {
     const rowData = data[r];
     if (!rowData || rowData.length === 0) continue;
@@ -1055,6 +1068,15 @@ export function excelToRawData(
     if (rule.postProcessing?.skipTotalRow) {
       const rowText = rowData.map((c) => String(c ?? "")).join(" ");
       if (rowText.includes(rule.postProcessing.totalRowPattern || "合计")) continue;
+    }
+
+    // 检查是否尾部/info 行（"收货门店：xxx" 等键值对格式）
+    // 避免尾部行被当作数据行保留
+    if (!isCardMode) {
+      const firstColText = String(rowData[0] ?? "").trim();
+      if (firstColText && TAIL_ROW_PATTERNS.some((p) => firstColText.includes(p))) {
+        continue;
+      }
     }
 
     const cells: Record<string, string> = {};
