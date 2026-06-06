@@ -569,7 +569,7 @@ export default function HomePage() {
         setStep("submitted");
         const okMsg = currentRuleMode === "transfer"
           ? `成功提交 ${data.data.savedTransfers ?? 0} 张调拨单（${data.data.savedOutbounds ?? 0} 个调拨明细，${data.data.savedCount} 条 SKU）！`
-          : `成功提交 ${data.data.savedOutbounds ?? 0} 张出库单（${data.data.savedCount} 条 SKU）！`;
+          : `成功提交 ${data.data.savedOutbounds ?? 0} 张单据（${data.data.savedCount} 条货品）！`;
         toast.success(okMsg, { id: toastId });
       } else {
         toast.error(data.error || "提交失败", { id: toastId });
@@ -1024,14 +1024,14 @@ export default function HomePage() {
                 </svg>
                 <span className="text-sm text-[#4e5969]">已成功提交</span>
                 <span className="text-xl font-bold text-[#0fc6c2] leading-none">{submittedCount}</span>
-                <span className="text-sm text-[#4e5969]">条 SKU 数据</span>
+                <span className="text-sm text-[#4e5969]">条货品数据</span>
               </div>
 
               {/* 聚合说明 */}
               <p className="text-sm text-[#86909c] mb-8 leading-relaxed">
                 {currentRuleMode === "transfer"
                   ? "已按 调拨单 → 调拨明细 → SKU 三级聚合落库"
-                  : "已按外部编码自动聚合成出库单"}
+                  : "已按外部编码自动聚合成单据"}
               </p>
 
               {/* 操作按钮 */}

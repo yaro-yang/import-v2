@@ -29,16 +29,17 @@ export async function POST(request: NextRequest) {
     //   - outbound: 1 外部编码 = 1 父单（兼容旧行为）
     //   - transfer: 1 外部编码 = 1 调拨单 + N 调拨明细（按 externalCode+storeName 拆分）
     const { savedOutbounds, savedTransfers } = await saveOrders(submittedItems, mode || "outbound");
-    // 同时返回保存的 SKU 行数
     const savedSkuCount = submittedItems.length;
+    // 按外部编码去重计数（真正有多少张单据）
+    const uniqueDocCount = new Set(submittedItems.map((o) => o.externalCode || "__no_code__")).size;
 
     const message = mode === "transfer"
       ? `成功提交 ${savedTransfers} 张调拨单（${savedOutbounds} 个调拨明细，${savedSkuCount} 条 SKU）`
-      : `成功提交 ${savedOutbounds} 张出库单（${savedSkuCount} 条 SKU）`;
+      : `成功提交 ${uniqueDocCount} 张单据（${savedSkuCount} 条货品）`;
 
     return NextResponse.json({
       success: true,
-      data: { savedCount: savedSkuCount, savedOutbounds, savedTransfers },
+      data: { savedCount: savedSkuCount, savedOutbounds: uniqueDocCount, savedTransfers },
       message,
     } as ApiResponse<{ savedCount: number; savedOutbounds: number; savedTransfers: number }>);
   } catch (error) {
