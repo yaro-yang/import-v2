@@ -210,17 +210,17 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   const lines = content.split("\n").filter((l) => l.trim());
   const mappings: AIAnalyzeResponse["fieldMappings"] = [];
 
-  // 扩展关键词映射
+  // 扩展关键词映射（精确匹配关键词排在前面，宽泛的兜底关键词排最后）
   const commonMappings: Record<string, { keywords: string[]; priority: number }> = {
-    skuCode: { keywords: ["编码", "物品编码", "SKU", "产品编码", "商品编码", "货号", "条码", "SKU条码"], priority: 1 },
-    skuName: { keywords: ["名称", "物品名称", "品名", "产品名称", "商品名称", "SKU名称"], priority: 2 },
-    skuQuantity: { keywords: ["数量", "发货数量", "件数", "出库数量", "配送数量", "订货数量"], priority: 3 },
-    skuSpec: { keywords: ["规格", "型号", "规格型号", "单位", "库存单位"], priority: 4 },
-    storeName: { keywords: ["调入门店", "调入方", "收货门店", "门店", "店铺", "客户名称", "收货单位", "收货机构"], priority: 5 },
-    recipientName: { keywords: ["收件人", "收货人", "联系人", "收件人姓名"], priority: 6 },
-    recipientPhone: { keywords: ["电话", "手机", "联系方式", "收件人电话", "联系电话", "收货人手机号"], priority: 7 },
-    recipientAddress: { keywords: ["地址", "收货地址", "收件人地址", "详细地址"], priority: 8 },
-    externalCode: { keywords: ["调拨单号", "配送单号", "单据号", "单据编号", "订单号", "外部编码", "运单号", "单号"], priority: 9 },
+    skuCode: { keywords: ["SKU条码", "外部商品编码", "物品编码", "产品编码", "商品编码", "货号", "条码", "SKU", "编码"], priority: 1 },
+    skuName: { keywords: ["SKU名称", "物品名称", "产品名称", "商品名称", "品名", "名称"], priority: 2 },
+    skuQuantity: { keywords: ["发货数量", "出库数量", "配送数量", "订货数量", "件数", "数量"], priority: 3 },
+    skuSpec: { keywords: ["规格型号", "规格", "型号", "库存单位", "单位"], priority: 4 },
+    storeName: { keywords: ["调入门店", "收货门店", "调入方", "收货机构", "客户名称", "收货单位", "店铺", "门店"], priority: 5 },
+    recipientName: { keywords: ["收货人", "收件人", "收件人姓名", "联系人"], priority: 6 },
+    recipientPhone: { keywords: ["收货人手机号", "联系电话", "收件人电话", "联系方式", "手机", "电话"], priority: 7 },
+    recipientAddress: { keywords: ["收货地址", "收件人地址", "详细地址", "地址"], priority: 8 },
+    externalCode: { keywords: ["调拨单号", "配送单号", "单据编号", "单据号", "订单号", "外部编码", "运单号", "单号"], priority: 9 },
     remark: { keywords: ["备注", "说明", "附注"], priority: 10 },
   };
 
@@ -620,38 +620,58 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
  * keyword: "调入门店" → 返回 "调入门店"
  * 例如行内容: "行2: 调拨单号：DB20260530001 | 调出仓库：武汉配送中心"
  * keyword: "调拨单号" → 返回 "调拨单号"（去掉冒号后面的值）
+ *
+ * 当宽泛关键词（如"名称"、"编码"）匹配到多个候选列时，优先返回包含
+ * SKU/物品/商品 等关键词的列，而非 仓库/货主/库存 等元数据列。
  */
 function extractColumnText(lineText: string, keyword: string): string {
-  // Excel 文本格式通常是 "行N: 值1 | 值2 | 值3" 或 tab 分隔
   const separators = [" | ", "\t", "|", ","];
   for (const sep of separators) {
     if (lineText.includes(sep)) {
       const parts = lineText.split(sep).map((p) => p.trim());
+      // 收集所有包含关键词的候选列
+      const candidates: string[] = [];
       for (const part of parts) {
-        // 去掉 "行N:" 前缀后检查
         const cleanPart = part.replace(/^行\d+:\s*/, "");
         if (cleanPart.includes(keyword)) {
-          // 如果这个部分以"keyword：值"形式出现（如"调拨单号：DB20260530001"），
-          // 截断冒号后的值，只返回关键词部分作为列名
+          // 去掉冒号后面的值，只保留列名
           const colonIdx = cleanPart.indexOf("：");
           const semicIdx = cleanPart.indexOf(":");
           const cutIdx = colonIdx >= 0 ? colonIdx : semicIdx >= 0 ? semicIdx : -1;
           const namePart = cutIdx >= 0 ? cleanPart.substring(0, cutIdx).trim() : cleanPart.trim();
           if (namePart.includes(keyword) && namePart.length <= 30 && namePart.length >= 1) {
-            return namePart;
-          }
-          // 如果截断后太短或太长了，直接返回关键词
-          if (cleanPart.includes(keyword)) {
-            return keyword;
+            candidates.push(namePart);
           }
         }
       }
+
+      if (candidates.length === 0) continue;
+      if (candidates.length === 1) return candidates[0];
+
+      // 多个候选：优先返回 SKU 相关的列名
+      // SKU 相关关键词：SKU、物品、商品、产品
+      // 非 SKU 关键词：仓库、货主、库存、在库、可用、冻结、分配、下单
+      const skuRelevant = ["SKU", "物品", "商品", "产品", "条码", "发货", "出库", "数量"];
+      const skuIrrelevant = ["仓库", "货主", "库存", "在库", "可用", "冻结", "分配", "下单", "结余", "待移"];
+
+      for (const candidate of candidates) {
+        if (skuRelevant.some((kw) => candidate.includes(kw))) {
+          return candidate;
+        }
+      }
+      // 没有明显 SKU 相关的，返回第一个非无关的
+      for (const candidate of candidates) {
+        if (!skuIrrelevant.some((kw) => candidate.includes(kw))) {
+          return candidate;
+        }
+      }
+      // 全是不相关的，返回第一个
+      return candidates[0];
     }
   }
   // 如果没有分隔符但包含关键词，直接返回整行清理后的结果
   const cleaned = lineText.replace(/^行\d+:\s*/, "").trim();
   if (cleaned.includes(keyword)) {
-    // 同样截断冒号
     const colonIdx = cleaned.indexOf("：");
     const semicIdx = cleaned.indexOf(":");
     const cutIdx = colonIdx >= 0 ? colonIdx : semicIdx >= 0 ? semicIdx : -1;
