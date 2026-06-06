@@ -690,6 +690,27 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   const storeNames: string[] = mode.storeColumnNames || [];
   const storeIndices: number[] = mode.storeColumnIndices || [];
 
+  // 收件人/订单级字段名（绝不应该被当成门店列）—— 防止旧规则误配
+  const recipientColumnPatterns = [
+    "收货人", "收件人", "联系人", "收货电话", "收件人电话", "联系电话", "电话", "手机",
+    "收货地址", "收件人地址", "收货机构", "收货门店", "门店名称", "门店编号",
+    "调拨单号", "配送单号", "单据号", "订单号", "运单号", "配送汇总单号", "单号",
+    "经办人", "制单人", "操作人", "司机", "车牌",
+  ];
+
+  // 如果配置中的"门店列名"实际是收件人/订单级字段，全部过滤掉（视为无有效矩阵配置）
+  const validStoreNames = storeNames.filter(
+    (n) => !recipientColumnPatterns.some((p) => n.includes(p))
+  );
+  if (validStoreNames.length === 0 && storeNames.length > 0) {
+    console.warn(
+      `[transposeMatrix] 配置的 storeColumnNames 全部为收件人/订单级字段 (${storeNames.join("/")})，已全部过滤。规则可能配置错误。`
+    );
+    return rawData; // 回退到标准处理
+  }
+  storeNames.length = 0;
+  storeNames.push(...validStoreNames);
+
   // 如果配置中已有有效的索引和名称，直接使用
   const hasValidConfig = storeIndices.length > 0 && storeNames.length === storeIndices.length;
 

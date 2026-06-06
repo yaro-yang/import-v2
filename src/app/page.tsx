@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import { FileUploader } from "@/components/upload/FileUploader";
 import { RuleSelector } from "@/components/upload/RuleSelector";
@@ -130,7 +130,7 @@ export default function HomePage() {
     // 先尝试 AI 分析
     setAiAnalyzing(true);
     setAiAnalysisResult(null);
-    const toastId = toast.loading("🤖 DeepSeek 正在分析文件结构...");
+    const toastId = toast.loading("🤖 AI 正在分析文件结构...");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -175,7 +175,7 @@ export default function HomePage() {
     setAiAnalyzing(true);
     setAiAnalysisResult(null);
     setParseError(null);
-    const toastId = toast.loading("🤖 DeepSeek 正在分析文件结构，生成推荐解析规则...");
+    const toastId = toast.loading("🤖 AI 正在分析文件结构，生成推荐解析规则...");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -336,6 +336,8 @@ export default function HomePage() {
       const decoder = new TextDecoder();
       let buffer = "";
       let doneReceived = false;
+      // 同步标记：error/done 已被处理（避免 React state 异步更新导致后续误判）
+      let finished: "done" | "error" | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -373,6 +375,7 @@ export default function HomePage() {
             if (event.message) setParseMessage(event.message as string);
           } else if (event.type === "done") {
             doneReceived = true;
+            finished = "done";
             const result = event.result as ParseResult;
             setOrders(result.orders);
             setErrors(result.errors || []);
@@ -468,6 +471,7 @@ export default function HomePage() {
               }
             }
           } else if (event.type === "error") {
+            finished = "error";
             const pe: ParseError = {
               code: event.code as string,
               message: event.message as string,
@@ -479,8 +483,8 @@ export default function HomePage() {
         }
       }
 
-      if (!doneReceived && !parseError) {
-        // 流意外关闭
+      if (finished !== "done" && finished !== "error") {
+        // 流意外关闭（done/error 都没收到）
         throw new Error("解析流意外中断，请重试");
       }
     } catch (err) {
@@ -494,7 +498,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [file, selectedRuleId, parseError]);
+  }, [file, selectedRuleId]);
 
   // 更新订单数据
   const handleUpdateOrder = useCallback(
@@ -768,7 +772,7 @@ export default function HomePage() {
           </div>
 
           {/* 规则选择卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5 mt-3 lg:mt-4">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5 mt-5 lg:mt-6">
             <RuleSelector
               rules={rules}
               selectedRuleId={selectedRuleId}

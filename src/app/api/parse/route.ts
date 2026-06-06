@@ -263,7 +263,17 @@ export async function POST(request: NextRequest) {
         send({ type: "done", result });
         safeClose();
       } catch (error) {
-        console.error("[Parse] Fatal error:", error);
+        // 兜底：把异常也推给客户端，便于排查 "解析流意外中断" 类问题
+        const msg = error instanceof Error ? `${error.message}\n${error.stack || ""}` : "未知错误";
+        console.error("[Parse] Fatal error:", msg);
+        try {
+          send({
+            type: "error",
+            code: "INTERNAL_ERROR",
+            message: `解析过程中发生未捕获异常：${msg}`.slice(0, 1500),
+            fileInfo: { name: "?", size: 0, type: "?" },
+          });
+        } catch { /* 流已关闭 */ }
         safeClose();
       }
     },

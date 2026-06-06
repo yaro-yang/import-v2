@@ -219,7 +219,7 @@ export function RuleEditor({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-[#0d3a2c]">
-            {isAI ? "DeepSeek 已分析文件并预填字段映射，请检查确认" : "请为每个目标字段选择对应的源列名"}
+            {isAI ? "AI 已分析文件并预填字段映射，请检查确认" : "请为每个目标字段选择对应的源列名"}
           </p>
           <p className="text-xs text-[#4e5969] mt-1">
             已填 <span className="font-semibold text-[#0fc6c2]">{filledCount}</span>
