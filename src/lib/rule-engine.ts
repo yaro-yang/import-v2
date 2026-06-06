@@ -51,10 +51,17 @@ export async function executeRule(
   }
   // 1. 卡片模式处理
   else if (rule.dataRegion.cardMode?.enabled) {
-    const cardGroups = splitByCards(rawData, rule);
+    const { groups: cardGroups, preCardRows } = splitByCards(rawData, rule);
+    // 从第一个标记前的行中提取订单级字段（如 externalCode）
+    const orderLevelFields = extractOrderLevelFields(preCardRows);
     for (const group of cardGroups) {
       const order = buildOrderFromCard(group, rule, fileName);
       if (order) {
+        // 合并订单级字段（如未在卡片中提取到）
+        for (const [k, v] of Object.entries(orderLevelFields)) {
+          const current = (order as unknown as Record<string, unknown>)[k];
+          if (!current) (order as unknown as Record<string, unknown>)[k] = v;
+        }
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
@@ -208,15 +215,22 @@ function buildOrderFromCard(
   };
 
   // 在卡片所有行中查找 "标签|值" 或 "标签：值" 形式
+  // 只用 col_N 键取单元格值，避免表头名与列索引重复
+  const getCardCells = (row: RawDataRow): string[] => {
+    return Object.entries(row.cells)
+      .filter(([k]) => k.startsWith("col_"))
+      .sort((a, b) => parseInt(a[0].slice(4)) - parseInt(b[0].slice(4)))
+      .map(([, v]) => (v || "").trim());
+  };
+
   const extractFromCardHeader = (keywords: string[]): string => {
     for (const row of cardRows) {
-      const cells = Object.values(row.cells);
+      const cells = getCardCells(row);
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i] || "";
         for (const kw of keywords) {
-          // 单元格本身就是 "标签|值"（如 "收货地址 | 武汉..."） - 取 | 后面的值
+          // 单元格本身就是标签（如 "调入门店"），取下一个非空单元格
           if (cell === kw) {
-            // 找下一个非空单元格
             for (let j = i + 1; j < cells.length; j++) {
               const v = (cells[j] || "").trim();
               if (v && v !== "·" && v !== "-") return v;
@@ -226,7 +240,6 @@ function buildOrderFromCard(
           if (cell.includes(kw)) {
             const kwIdx = cell.indexOf(kw);
             const after = cell.substring(kwIdx + kw.length);
-            // 找第一个分隔符
             const sepMatch = after.match(/^\s*[|｜：:]\s*(.+?)(?:\s*[|｜]|$)/);
             if (sepMatch) {
               const v = sepMatch[1].trim();
@@ -261,10 +274,24 @@ function buildOrderFromCard(
   }
 
   // 提取 SKU 数据（卡片内的小表）
+  // 先收集所有已知的卡片头部 label 关键词，用于识别 key-value 配对行
+  const labelKeywords = new Set<string>();
+  for (const kws of Object.values(cardHeaderDefaults)) {
+    for (const kw of kws) labelKeywords.add(kw);
+  }
+  // 通用 SKU 表头 / 标记
+  ["物品编码", "物品名称", "规格", "数量", "SKU编码", "SKU名称", "SKU数量"].forEach((s) => labelKeywords.add(s));
+
   const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
   let totalQty = 0;
 
   for (const row of cardRows) {
+    const cells = getCardCells(row);
+    if (cells.length === 0) continue;
+    const firstCell = (cells[0] || "").trim();
+    // 跳过 key-value 配对行（col_0 是 label）和 SKU 表头 / 卡片标记
+    if (!firstCell || labelKeywords.has(firstCell) || firstCell.includes("▶")) continue;
+
     const skuCodeMapping = rule.fieldMappings.find((m) => m.targetField === "skuCode");
     const skuNameMapping = rule.fieldMappings.find((m) => m.targetField === "skuName");
     const skuQtyMapping = rule.fieldMappings.find((m) => m.targetField === "skuQuantity");
@@ -334,22 +361,66 @@ function processRows(
 }
 
 // ====== 卡片拆分 ======
-function splitByCards(rawData: RawDataRow[], rule: ParseRule): RawDataRow[][] {
+function splitByCards(
+  rawData: RawDataRow[],
+  rule: ParseRule
+): { groups: RawDataRow[][]; preCardRows: RawDataRow[] } {
   const groups: RawDataRow[][] = [];
+  const preCardRows: RawDataRow[] = [];
   let currentGroup: RawDataRow[] = [];
   const marker = rule.dataRegion.cardMode?.startMarker || "";
+  let foundFirstMarker = false;
 
   for (const row of rawData) {
     const rowText = Object.values(row.cells).join(" ");
     if (rowText.includes(marker)) {
       if (currentGroup.length > 0) groups.push(currentGroup);
       currentGroup = [row];
-    } else {
+      foundFirstMarker = true;
+    } else if (foundFirstMarker) {
       currentGroup.push(row);
+    } else {
+      // 标记前的行（如标题、订单头）单独收集，用于提取订单级字段
+      preCardRows.push(row);
     }
   }
   if (currentGroup.length > 0) groups.push(currentGroup);
-  return groups;
+  return { groups, preCardRows };
+}
+
+// ====== 从订单头中提取订单级字段（如 externalCode） ======
+function extractOrderLevelFields(preCardRows: RawDataRow[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (preCardRows.length === 0) return result;
+
+  // 合并所有行的文本
+  const combinedText = preCardRows
+    .map((r) => Object.values(r.cells).filter((v) => v && v.trim()).join(" "))
+    .join("\n");
+
+  // 字段关键词 → 订单字段映射
+  const fieldMap: Array<{ keywords: string[]; target: string }> = [
+    { keywords: ["调拨单号", "配送单号", "单据号", "外部编码", "运单号", "订单号"], target: "externalCode" },
+    { keywords: ["调出仓库", "仓库", "出货仓"], target: "warehouse" },
+    { keywords: ["调拨日期", "配送日期", "日期"], target: "transferDate" },
+    { keywords: ["经办人", "制单人", "操作人"], target: "operator" },
+  ];
+
+  // 用 | 或 ｜ 或 换行 分段
+  const segments = combinedText.split(/[|｜\n]/);
+  for (const seg of segments) {
+    const m = seg.match(/^\s*([^：:]+?)\s*[：:]\s*(.+?)\s*$/);
+    if (!m) continue;
+    const key = m[1].trim();
+    const value = m[2].trim();
+    for (const fm of fieldMap) {
+      if (fm.keywords.some((kw) => key.includes(kw))) {
+        if (!result[fm.target]) result[fm.target] = value;
+        break;
+      }
+    }
+  }
+  return result;
 }
 
 // ====== 复合单元格拆分 ======
