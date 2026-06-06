@@ -933,35 +933,82 @@ export default function HomePage() {
 
       {/* 步骤 4: 提交完成 */}
       {step === "submitted" && (
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-10 lg:p-14 animate-fade-in">
-          <div className="text-center max-w-md mx-auto">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#e8fafa] to-[#d4f5f3] flex items-center justify-center mx-auto mb-4 shadow-[0_4px_16px_rgba(15,198,194,0.2)]">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-[#1d2129] mb-2">
-              提交成功！
-            </h2>
-            <p className="text-sm text-[#4e5969] mb-6 leading-relaxed">
-              已成功提交{" "}
-              <span className="font-semibold text-[#0fc6c2] text-base">{submittedCount}</span>{" "}
-              条 SKU 数据
-              {currentRuleMode === "transfer" ? "（已按调拨单 → 调拨明细 → SKU 三级聚合）" : "（按外部编码已自动聚合成出库单）"}
-            </p>
-            <div className="flex justify-center gap-2.5 flex-wrap">
-              <Button onClick={handleReset}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] animate-fade-in overflow-hidden">
+          {/* 顶部带渐变背景的成功区域 */}
+          <div className="relative px-6 py-12 lg:py-16 bg-gradient-to-b from-[#f0fcfb] via-[#fafefe] to-white">
+            {/* 装饰光晕（绝对定位，居中） */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[520px] h-[220px] rounded-full bg-[#0fc6c2]/[0.08] blur-3xl"
+            />
+
+            {/* 内容区：明确 flex 居中 */}
+            <div className="relative flex flex-col items-center text-center mx-auto" style={{ maxWidth: 520 }}>
+              {/* 成功图标 - 渐变填充 + 阴影 */}
+              <div className="relative mb-6">
+                {/* 外层柔和环 */}
+                <div className="absolute inset-0 rounded-full bg-[#0fc6c2]/15 scale-125 blur-md" />
+                {/* 主图标 */}
+                <div className="relative w-[88px] h-[88px] rounded-full bg-gradient-to-br from-[#1ed7d4] to-[#0bada9] flex items-center justify-center shadow-[0_10px_28px_rgba(15,198,194,0.38),inset_0_1px_0_rgba(255,255,255,0.3)]">
+                  <svg
+                    width="44"
+                    height="44"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* 标题 */}
+              <h2 className="text-2xl lg:text-[26px] font-bold text-[#1d2129] mb-3 tracking-tight">
+                提交成功
+              </h2>
+
+              {/* 数据徽章 */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-[#d4f5f3] shadow-[0_2px_8px_rgba(15,198,194,0.10)] mb-3">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                 </svg>
-                继续导入
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => (window.location.href = "/history")}
-              >
-                查看运单列表
-              </Button>
+                <span className="text-sm text-[#4e5969]">已成功提交</span>
+                <span className="text-xl font-bold text-[#0fc6c2] leading-none">{submittedCount}</span>
+                <span className="text-sm text-[#4e5969]">条 SKU 数据</span>
+              </div>
+
+              {/* 聚合说明 */}
+              <p className="text-sm text-[#86909c] mb-8 leading-relaxed">
+                {currentRuleMode === "transfer"
+                  ? "已按 调拨单 → 调拨明细 → SKU 三级聚合落库"
+                  : "已按外部编码自动聚合成出库单"}
+              </p>
+
+              {/* 操作按钮 */}
+              <div className="flex justify-center gap-3 flex-wrap">
+                <Button onClick={handleReset}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  继续导入
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => (window.location.href = "/history")}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  查看运单列表
+                </Button>
+              </div>
             </div>
           </div>
         </div>

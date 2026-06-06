@@ -244,26 +244,100 @@ export function DataPreviewTable({
     });
   }, [orders, mode]);
 
-  // ============ 调拨单模式：3 级层级预览 ============
+  // ============ 调拨单模式：扁平表格（1 调拨单 = 1 外部编码行 + N 收货门店行 + M SKU 行） ============
   if (mode === "transfer") {
     const totalDetails = transferGroups.reduce((s, g) => s + g.details.length, 0);
+
+    // 字段归属
+    const codeFields = new Set(["externalCode"]);
+    const storeFields = new Set(["storeName", "recipientName", "recipientPhone", "recipientAddress"]);
+    const skuFields = new Set(["skuCode", "skuName", "skuQuantity", "skuSpec", "weight", "temperatureLevel", "remark"]);
+
+    // 构造扁平行
+    type CodeRow = { kind: "code"; key: string; groupIdx: number; group: typeof transferGroups[number] };
+    type StoreRow = { kind: "store"; key: string; groupIdx: number; group: typeof transferGroups[number]; detail: typeof transferGroups[number]["details"][number]; storeIdx: number };
+    type SkuRow = { kind: "sku"; key: string; groupIdx: number; group: typeof transferGroups[number]; sku: OrderItem; skuIdx: number };
+    type TRow = CodeRow | StoreRow | SkuRow;
+
+    const flatRows: TRow[] = [];
+    for (const [gIdx, group] of transferGroups.entries()) {
+      flatRows.push({ kind: "code", key: `c-${gIdx}`, groupIdx: gIdx, group });
+      for (const [dIdx, detail] of group.details.entries()) {
+        flatRows.push({ kind: "store", key: `s-${gIdx}-${dIdx}`, groupIdx: gIdx, group, detail, storeIdx: dIdx });
+      }
+      let sIdx = 0;
+      for (const detail of group.details) {
+        for (const sku of detail.skus) {
+          flatRows.push({ kind: "sku", key: `k-${sku.id}`, groupIdx: gIdx, group, sku, skuIdx: sIdx++ });
+        }
+      }
+    }
+
+    // 编辑路由：根据 row.kind 把更新广播到对应 SKU
+    const updateForRow = (row: TRow, field: string, value: string) => {
+      if (row.kind === "code") {
+        for (const detail of row.group.details) {
+          for (const sku of detail.skus) onUpdateOrder(sku.id, field, value);
+        }
+      } else if (row.kind === "store") {
+        for (const sku of row.detail.skus) onUpdateOrder(sku.id, field, value);
+      } else {
+        onUpdateOrder(row.sku.id, field, value);
+      }
+    };
+
+    // 取值：单元格当前展示值
+    const valueForCell = (row: TRow, key: string): string => {
+      let v: unknown;
+      if (row.kind === "code") {
+        if (!codeFields.has(key)) return "";
+        v = row.group.externalCode;
+      } else if (row.kind === "store") {
+        if (!storeFields.has(key)) return "";
+        v = (row.detail as unknown as Record<string, unknown>)[key];
+      } else {
+        if (!skuFields.has(key)) return "";
+        v = (row.sku as unknown as Record<string, unknown>)[key];
+      }
+      return v === undefined || v === null ? "" : String(v);
+    };
+
+    // 单元格是否属于该行
+    const cellApplicable = (row: TRow, key: string): boolean => {
+      if (row.kind === "code") return codeFields.has(key);
+      if (row.kind === "store") return storeFields.has(key);
+      return skuFields.has(key);
+    };
+
+    // 行级错误聚合
+    const rowHasAnyError = (row: TRow): boolean => {
+      if (row.kind === "sku") return errorFieldMap.has(row.sku.id);
+      const skus = row.kind === "code"
+        ? row.group.details.flatMap((d) => d.skus)
+        : row.detail.skus;
+      return skus.some((s) => errorFieldMap.has(s.id));
+    };
+    const cellHasError = (row: TRow, key: string): boolean => {
+      if (!cellApplicable(row, key)) return false;
+      if (row.kind === "sku") {
+        const set = errorFieldMap.get(row.sku.id);
+        return !!set && set.has(key);
+      }
+      const skus = row.kind === "code"
+        ? row.group.details.flatMap((d) => d.skus)
+        : row.detail.skus;
+      return skus.some((s) => errorFieldMap.get(s.id)?.has(key));
+    };
+
     return (
       <div className="flex flex-col h-full">
         {/* 工具栏 */}
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="text-sm text-[#4e5969] flex items-center gap-3 flex-wrap">
             <span>
-              共 <span className="font-semibold text-[#1d2129]">{orders.length}</span> 条 SKU
-              {transferGroups.length > 0 && (
-                <>
-                  ·<span className="font-semibold text-[#1d2129]">{transferGroups.length}</span> 个调拨单
-                </>
-              )}
-              {totalDetails > 0 && (
-                <>
-                  ·<span className="font-semibold text-[#1d2129]">{totalDetails}</span> 个调拨明细
-                </>
-              )}
+              共 <span className="font-semibold text-[#1d2129]">{transferGroups.length}</span> 个调拨单
+              ·<span className="font-semibold text-[#1d2129]">{totalDetails}</span> 个调拨明细
+              ·<span className="font-semibold text-[#1d2129]">{orders.length}</span> 条 SKU
             </span>
             {errorFieldMap.size > 0 && (
               <span className="text-[#cf1322] flex items-center gap-1">
@@ -282,32 +356,208 @@ export function DataPreviewTable({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            新增行
+            新增 SKU
           </Button>
         </div>
 
-        {/* 调拨单卡片列表 */}
-        <div className="space-y-4 overflow-auto" style={{ maxHeight: "60vh" }}>
-          {transferGroups.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#86909c] bg-[#fafbfc] rounded-xl border border-dashed border-[#e5e6eb]">
-              暂无数据，请先上传文件并解析
+        {/* 扁平表格 */}
+        {flatRows.length === 0 ? (
+          <div className="p-8 text-center text-sm text-[#86909c] bg-[#fafbfc] rounded-xl border border-dashed border-[#e5e6eb]">
+            暂无数据，请先上传文件并解析
+          </div>
+        ) : (
+          <div className="border border-[#e5e6eb] rounded-xl overflow-auto" style={{ maxHeight: "clamp(360px, 65vh, 640px)" }}>
+            {/* 表头 - 吸顶 */}
+            <div className="sticky top-0 z-10 flex bg-[#fafbfc] border-b border-[#e5e6eb] min-w-max shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+              <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#fafbfc] z-20">
+                #
+              </div>
+              {columns.map((col) => (
+                <div
+                  key={col.key}
+                  className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb] whitespace-nowrap"
+                  style={{ width: col.width }}
+                >
+                  {col.label}
+                  {col.required && <span className="text-[#cf1322] ml-0.5">*</span>}
+                </div>
+              ))}
+              <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#fafbfc] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
+                操作
+              </div>
             </div>
-          ) : (
-            transferGroups.map((group) => (
-              <TransferGroupCard
-                key={group.externalCode}
-                group={group}
-                errorFieldMap={errorFieldMap}
-                editingCell={editingCell}
-                onUpdateOrder={onUpdateOrder}
-                onDeleteOrder={onDeleteOrder}
-                handleKeyDown={handleKeyDown}
-                handleCellClick={handleCellClick}
-                handleCellBlur={handleCellBlur}
-              />
-            ))
-          )}
-        </div>
+
+            {/* 行 */}
+            <div className="min-w-max">
+              {flatRows.map((row, rowIdx) => {
+                const isCode = row.kind === "code";
+                const isStore = row.kind === "store";
+                const isSku = row.kind === "sku";
+                const hasErr = rowHasAnyError(row);
+
+                // 行底色（区分行类型 + 分组首行加顶部边框）
+                const bgClass = isCode
+                  ? "bg-[#e8fafa]/60"
+                  : isStore
+                    ? "bg-[#f7f8fa]"
+                    : "bg-white";
+                const groupTopBorder = isCode && rowIdx > 0 ? "border-t-2 border-t-[#0fc6c2]/30" : "";
+
+                // 当前行序号显示
+                const rowLabel = isCode
+                  ? `${row.groupIdx + 1}`
+                  : isStore
+                    ? `${row.groupIdx + 1}.${row.storeIdx + 1}`
+                    : `${row.groupIdx + 1}.S${row.skuIdx + 1}`;
+
+                return (
+                  <div
+                    key={row.key}
+                    className={cn(
+                      "flex border-b border-[#f2f3f5] min-w-max hover:bg-[#fafbfc]/60 transition-colors",
+                      bgClass,
+                      groupTopBorder,
+                      hasErr && "ring-1 ring-inset ring-[#ffccc7]/60"
+                    )}
+                  >
+                    {/* 行号 - 粘性左列 */}
+                    <div
+                      className={cn(
+                        "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-[11px] text-center border-r border-[#f2f3f5] sticky left-0 z-10 bg-inherit font-mono",
+                        isCode ? "text-[#0fc6c2] font-semibold" : "text-[#86909c]",
+                        hasErr && "text-[#cf1322]"
+                      )}
+                    >
+                      {rowLabel}
+                    </div>
+
+                    {/* 数据列 */}
+                    {columns.map((col) => {
+                      const applicable = cellApplicable(row, col.key);
+                      if (!applicable) {
+                        return (
+                          <div
+                            key={col.key}
+                            className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 border-r border-[#f2f3f5]"
+                            style={{ width: col.width }}
+                          />
+                        );
+                      }
+
+                      const isEditing = editingCell?.id === row.key && editingCell?.field === col.key;
+                      const displayValue = valueForCell(row, col.key);
+                      const hasFieldError = cellHasError(row, col.key);
+
+                      return (
+                        <div
+                          key={col.key}
+                          className={cn(
+                            "flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-sm border-r border-[#f2f3f5] cursor-pointer relative group",
+                            hasFieldError && "bg-[#fff1f0]"
+                          )}
+                          style={{ width: col.width }}
+                          onClick={() => setEditingCell({ id: row.key, field: col.key })}
+                        >
+                          {isEditing ? (
+                            col.options ? (
+                              <select
+                                value={displayValue}
+                                onChange={(e) => updateForRow(row, col.key, e.target.value)}
+                                onBlur={handleCellBlur}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") handleCellBlur();
+                                  else if (e.key === "Enter") handleCellBlur();
+                                }}
+                                className={cn(
+                                  "w-full px-1.5 py-0.5 text-sm border rounded outline-none bg-white",
+                                  hasFieldError ? "border-[#cf1322] bg-[#fff1f0]" : "border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
+                                )}
+                                autoFocus
+                              >
+                                <option value="">—</option>
+                                {col.options.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type={col.type === "number" ? "number" : "text"}
+                                value={displayValue}
+                                onChange={(e) => updateForRow(row, col.key, e.target.value)}
+                                onBlur={handleCellBlur}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") handleCellBlur();
+                                  else if (e.key === "Enter") handleCellBlur();
+                                }}
+                                className={cn(
+                                  "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
+                                  hasFieldError ? "border-[#cf1322] bg-[#fff1f0]" : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
+                                )}
+                                step={col.type === "number" ? "0.01" : undefined}
+                                min={col.type === "number" ? "0" : undefined}
+                                autoFocus
+                              />
+                            )
+                          ) : (
+                            <span
+                              className={cn(
+                                "block truncate",
+                                hasFieldError && "text-[#cf1322] font-medium",
+                                !displayValue && "text-[#c9cdd4] italic",
+                                isCode && col.key === "externalCode" && "font-mono font-semibold text-[#1d2129]"
+                              )}
+                              title={displayValue}
+                            >
+                              {displayValue || "—"}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* 操作列 - 粘性右列 */}
+                    <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
+                      {isSku ? (
+                        <button
+                          onClick={() => onDeleteOrder(row.sku.id)}
+                          className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                          title="删除该 SKU"
+                        >
+                          删除
+                        </button>
+                      ) : isCode ? (
+                        <button
+                          onClick={() => {
+                            // 删除整张调拨单：移除该 group 下所有 SKU
+                            for (const detail of row.group.details) {
+                              for (const sku of detail.skus) onDeleteOrder(sku.id);
+                            }
+                          }}
+                          className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                          title="删除整张调拨单"
+                        >
+                          删除
+                        </button>
+                      ) : (
+                        // store 行
+                        <button
+                          onClick={() => {
+                            // 删除该明细：移除该 detail 下所有 SKU
+                            for (const sku of row.detail.skus) onDeleteOrder(sku.id);
+                          }}
+                          className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                          title="删除该调拨明细"
+                        >
+                          删除
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 错误汇总（同 outbound 模式） */}
         {errors.length > 0 && (
@@ -603,305 +853,6 @@ export function DataPreviewTable({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ==================== 调拨单层级卡片 ====================
-// 1 externalCode → N stores（调拨明细）→ M SKUs
-
-interface TransferDetailGroup {
-  storeName: string;
-  recipientName: string;
-  recipientPhone: string;
-  recipientAddress: string;
-  totalQty: number;
-  skus: OrderItem[];
-}
-
-interface TransferGroupShape {
-  externalCode: string;
-  totalQty: number;
-  details: TransferDetailGroup[];
-}
-
-interface TransferGroupCardProps {
-  group: TransferGroupShape;
-  errorFieldMap: Map<string, Set<string>>;
-  editingCell: { id: string; field: string } | null;
-  onUpdateOrder: (id: string, field: string, value: string) => void;
-  onDeleteOrder: (id: string) => void;
-  handleKeyDown: (e: React.KeyboardEvent, id: string, field: string, currentIndex: number) => void;
-  handleCellClick: (id: string, field: string) => void;
-  handleCellBlur: () => void;
-}
-
-// SKU 子表的列定义（不含身份/收货信息，那些上抬到 store 头部）
-const skuColumns: Array<{
-  key: string;
-  label: string;
-  width: number;
-  required?: boolean;
-  type?: "text" | "number";
-  options?: readonly string[];
-}> = [
-  { key: "skuCode", label: "SKU编码", width: 130, required: true },
-  { key: "skuName", label: "SKU名称", width: 200, required: true },
-  { key: "skuQuantity", label: "数量", width: 80, required: true, type: "number" },
-  { key: "skuSpec", label: "规格型号", width: 130 },
-  { key: "weight", label: "重量(kg)", width: 100, type: "number" },
-  { key: "temperatureLevel", label: "温层", width: 90, options: TEMPERATURE_LEVELS },
-  { key: "remark", label: "备注", width: 160 },
-];
-
-function TransferGroupCard({
-  group,
-  errorFieldMap,
-  editingCell,
-  onUpdateOrder,
-  onDeleteOrder,
-  handleKeyDown,
-  handleCellClick,
-  handleCellBlur,
-}: TransferGroupCardProps) {
-  const skuCount = group.details.reduce((s, d) => s + d.skus.length, 0);
-  const codeHasError = group.details.some((d) =>
-    d.skus.some((s) => errorFieldMap.get(s.id)?.has("externalCode"))
-  );
-
-  return (
-    <div
-      className={cn(
-        "border rounded-xl overflow-hidden bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]",
-        codeHasError ? "border-[#ffccc7]" : "border-[#e5e6eb]"
-      )}
-    >
-      {/* === 第 1 层：调拨单号头 === */}
-      <div
-        className={cn(
-          "px-4 py-2.5 flex items-center gap-3 flex-wrap border-b",
-          codeHasError
-            ? "bg-gradient-to-r from-[#fff1f0] to-[#fff7f6] border-[#ffccc7]"
-            : "bg-gradient-to-r from-[#e8fafa] to-[#f0fcfb] border-[#d4f5f3]"
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold",
-              codeHasError ? "bg-[#ffccc7] text-[#cf1322]" : "bg-[#0fc6c2] text-white"
-            )}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            </svg>
-            调拨单
-          </span>
-          <span className="font-mono text-base font-semibold text-[#1d2129]">
-            {group.externalCode}
-          </span>
-        </div>
-        <span className="text-xs text-[#86909c]">
-          ·<span className="font-medium text-[#4e5969] ml-1">{group.details.length}</span> 个明细
-          ·<span className="font-medium text-[#4e5969] ml-1">{skuCount}</span> 条 SKU
-          ·总数量 <span className="font-semibold text-[#0fc6c2] ml-1">{group.totalQty}</span>
-        </span>
-      </div>
-
-      {/* === 第 2 层：调拨明细（按门店分组）=== */}
-      <div className="divide-y divide-[#f2f3f5]">
-        {group.details.map((detail, idx) => {
-          const detailHasError = detail.skus.some((s) => errorFieldMap.has(s.id));
-          return (
-            <div key={`${detail.storeName}-${idx}`}>
-              {/* 收货门店头 */}
-              <div
-                className={cn(
-                  "px-4 py-2 flex items-start gap-3 flex-wrap text-sm",
-                  detailHasError ? "bg-[#fff7e8]/60" : "bg-[#fafbfc]"
-                )}
-              >
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#0fc6c2]/15 text-[#0fc6c2] text-xs font-semibold">
-                    {idx + 1}
-                  </span>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 10c0 7-8 13-8 13s-8-6-8-13a8 8 0 0 1 16 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                  </svg>
-                  <span className="font-medium text-[#1d2129] whitespace-nowrap">
-                    {detail.storeName || <span className="text-[#c9cdd4] italic">未填写门店</span>}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap text-xs text-[#4e5969]">
-                  {detail.recipientName && (
-                    <span>
-                      <span className="text-[#86909c]">收件人：</span>
-                      {detail.recipientName}
-                    </span>
-                  )}
-                  {detail.recipientPhone && (
-                    <span>
-                      <span className="text-[#86909c]">电话：</span>
-                      <span className="font-mono">{detail.recipientPhone}</span>
-                    </span>
-                  )}
-                  {detail.recipientAddress && (
-                    <span className="max-w-[420px] truncate" title={detail.recipientAddress}>
-                      <span className="text-[#86909c]">地址：</span>
-                      {detail.recipientAddress}
-                    </span>
-                  )}
-                </div>
-                <span className="ml-auto text-xs text-[#86909c]">
-                  <span className="font-semibold text-[#4e5969]">{detail.skus.length}</span> 条 SKU · 合计{" "}
-                  <span className="font-semibold text-[#0fc6c2]">{detail.totalQty}</span>
-                </span>
-              </div>
-
-              {/* === 第 3 层：SKU 子表 === */}
-              <div className="overflow-x-auto">
-                <div className="min-w-max">
-                  {/* SKU 表头 */}
-                  <div className="flex bg-[#fafbfc] border-b border-[#f2f3f5]">
-                    <div className="flex-shrink-0 w-10 px-2 py-2 text-xs font-semibold text-[#86909c] text-center border-r border-[#f2f3f5]">
-                      #
-                    </div>
-                    {skuColumns.map((col) => (
-                      <div
-                        key={col.key}
-                        className="flex-shrink-0 px-2.5 py-2 text-xs font-semibold text-[#4e5969] border-r border-[#f2f3f5] whitespace-nowrap"
-                        style={{ width: col.width }}
-                      >
-                        {col.label}
-                        {col.required && <span className="text-[#cf1322] ml-0.5">*</span>}
-                      </div>
-                    ))}
-                    <div className="flex-shrink-0 w-14 px-2 py-2 text-xs font-semibold text-[#86909c] text-center">
-                      操作
-                    </div>
-                  </div>
-
-                  {/* SKU 数据行 */}
-                  {detail.skus.map((sku, skuIdx) => {
-                    const skuErrors = errorFieldMap.get(sku.id);
-                    const rowHasError = !!skuErrors;
-                    return (
-                      <div
-                        key={sku.id}
-                        className={cn(
-                          "flex border-b border-[#f7f8fa] hover:bg-[#fafbfc] transition-colors",
-                          rowHasError && "bg-[#fff7e8]/40"
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "flex-shrink-0 w-10 px-2 py-2 text-xs text-center border-r border-[#f7f8fa]",
-                            rowHasError ? "text-[#cf1322] font-medium" : "text-[#86909c]"
-                          )}
-                        >
-                          {skuIdx + 1}
-                        </div>
-                        {skuColumns.map((col) => {
-                          const isEditing =
-                            editingCell?.id === sku.id && editingCell?.field === col.key;
-                          const value = (sku as unknown as Record<string, unknown>)[col.key];
-                          const displayValue =
-                            value === undefined || value === null ? "" : String(value);
-                          const hasFieldError = skuErrors?.has(col.key) || false;
-
-                          return (
-                            <div
-                              key={col.key}
-                              className={cn(
-                                "flex-shrink-0 px-2.5 py-2 text-sm border-r border-[#f7f8fa] cursor-pointer relative",
-                                hasFieldError && "bg-[#fff1f0]"
-                              )}
-                              style={{ width: col.width }}
-                              onClick={() => handleCellClick(sku.id, col.key)}
-                              title={
-                                hasFieldError
-                                  ? `本单元格有错误：${[...(skuErrors || [])].join("、")}`
-                                  : undefined
-                              }
-                            >
-                              {isEditing ? (
-                                col.options ? (
-                                  <select
-                                    value={displayValue}
-                                    onChange={(e) => onUpdateOrder(sku.id, col.key, e.target.value)}
-                                    onBlur={handleCellBlur}
-                                    onKeyDown={(e) =>
-                                      handleKeyDown(e, sku.id, col.key, skuIdx)
-                                    }
-                                    className={cn(
-                                      "w-full px-1.5 py-0.5 text-sm border rounded outline-none bg-white",
-                                      hasFieldError
-                                        ? "border-[#cf1322] bg-[#fff1f0]"
-                                        : "border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
-                                    )}
-                                    autoFocus
-                                  >
-                                    <option value="">—</option>
-                                    {col.options.map((opt) => (
-                                      <option key={opt} value={opt}>
-                                        {opt}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <input
-                                    type={col.type === "number" ? "number" : "text"}
-                                    value={displayValue}
-                                    onChange={(e) => onUpdateOrder(sku.id, col.key, e.target.value)}
-                                    onBlur={handleCellBlur}
-                                    onKeyDown={(e) =>
-                                      handleKeyDown(e, sku.id, col.key, skuIdx)
-                                    }
-                                    className={cn(
-                                      "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
-                                      hasFieldError
-                                        ? "border-[#cf1322] bg-[#fff1f0]"
-                                        : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
-                                    )}
-                                    step={col.type === "number" ? "0.01" : undefined}
-                                    min={col.type === "number" ? "0" : undefined}
-                                    autoFocus
-                                  />
-                                )
-                              ) : (
-                                <span
-                                  className={cn(
-                                    "block truncate",
-                                    hasFieldError && "text-[#cf1322] font-medium",
-                                    !displayValue && "text-[#c9cdd4] italic"
-                                  )}
-                                  title={displayValue}
-                                >
-                                  {displayValue || "—"}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                        <div className="flex-shrink-0 w-14 px-2 py-2 flex items-center justify-center">
-                          <button
-                            onClick={() => onDeleteOrder(sku.id)}
-                            className="px-2 py-0.5 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                            title="删除该 SKU"
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

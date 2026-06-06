@@ -743,6 +743,35 @@ export async function deleteOrder(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * 删除调拨单（CASCADE 自动删除所有调拨明细 + SKU）
+ * transfer_order_id = ? 的 outbound_orders + 它们的 order_items 都会被级联删除
+ */
+export async function deleteTransferOrder(id: string): Promise<boolean> {
+  if (!hasDatabase()) {
+    const store = await readLocalStore();
+    // 1. 删除调拨单头
+    const hadTransfer = !!store.transfers[id];
+    if (hadTransfer) {
+      delete store.transfers[id];
+    }
+    // 2. 级联删除所有属于该调拨单的明细
+    let removed = 0;
+    for (const ob of Object.values(store.orders)) {
+      if (ob.transferOrderId === id) {
+        delete store.orders[ob.id];
+        removed++;
+      }
+    }
+    await writeLocalStore(store);
+    return hadTransfer || removed > 0;
+  }
+  const sql = getSql();
+  const result = await sql`DELETE FROM transfer_orders WHERE id = ${id}`;
+  // 始终返回 true（幂等：不存在也视为成功）
+  return true;
+}
+
 // ====== 解析规则相关操作 ======
 
 function mapRuleRow(row: Record<string, unknown>): ParseRule {
