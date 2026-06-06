@@ -59,7 +59,7 @@ const transferColumns: Array<{
   type?: "text" | "number";
   options?: readonly string[];
 }> = [
-  { key: "externalCode", label: "外部编码", width: 140 },
+  { key: "externalCode", label: "外部编码", width: 170 },
   { key: "storeName", label: "收货门店", width: 160, required: true },
   { key: "recipientName", label: "收件人", width: 100, required: true },
   { key: "recipientPhone", label: "电话", width: 130, required: true },
@@ -817,26 +817,28 @@ export function DataPreviewTable({
                             {isEditing ? (
                               renderInput()
                             ) : col.key === "externalCode" ? (
-                              // 外部编码单元格：运单号 + 摘要徽章
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <StatusDot status="draft" />
-                                <span
-                                  className={cn(
-                                    "block truncate flex-1 min-w-0",
-                                    hasFieldError && "text-[#cf1322] font-medium",
-                                    !displayValue && "text-[#c9cdd4] italic"
-                                  )}
-                                  title={displayValue}
-                                >
-                                  {row.kind === "empty-group" && (isStore || isSku)
-                                    ? "—"
-                                    : displayValue || "—"}
-                                </span>
+                              // 外部编码单元格：运单号 + 摘要徽章（徽章放在第二行，避免单行过宽）
+                              <div className="flex flex-col gap-1 min-w-0">
+                                <div className="flex items-center gap-1.5 min-w-0 whitespace-nowrap">
+                                  <StatusDot status="draft" />
+                                  <span
+                                    className={cn(
+                                      "block truncate flex-1 min-w-0",
+                                      hasFieldError && "text-[#cf1322] font-medium",
+                                      !displayValue && "text-[#c9cdd4] italic"
+                                    )}
+                                    title={displayValue}
+                                  >
+                                    {row.kind === "empty-group" && (isStore || isSku)
+                                      ? "—"
+                                      : displayValue || "—"}
+                                  </span>
+                                </div>
                                 {row.kind !== "empty-group" &&
                                   (row.group.details.length > 1 ||
                                     (row.group.details[0]?.skus.length ?? 0) > 1) && (
                                     <span
-                                      className="inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-[#0bada9] bg-white border border-[#0fc6c2]/30 rounded whitespace-nowrap"
+                                      className="inline-flex self-start shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-[#0bada9] bg-white border border-[#0fc6c2]/30 rounded whitespace-nowrap"
                                       title={`包含 ${row.group.details.length} 个门店 / ${row.group.details.reduce(
                                         (s, d) => s + d.skus.length,
                                         0
