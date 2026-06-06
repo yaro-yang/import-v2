@@ -322,10 +322,13 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     if (trimmed.length >= 2 && trimmed.length <= 4 && headerParts.length >= 10) return false; // 太短且无关键词的不确定
     return false;
   };
+  // 同时记录门店列索引（0-based）
+  const matrixStoreIndices: number[] = [];
 
-  for (const part of headerParts) {
-    if (isLikelyStoreName(part)) {
-      matrixStoreColumns.push(part);
+  for (let i = 0; i < headerParts.length; i++) {
+    if (isLikelyStoreName(headerParts[i])) {
+      matrixStoreColumns.push(headerParts[i]);
+      matrixStoreIndices.push(i);
     }
   }
 
@@ -591,7 +594,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
           ? { enabled: true, startMarker: "▶" }
           : undefined,
         matrixMode: isMatrixMode
-          ? { enabled: true, valueColumnNamesRow: headerRow, storeColumnNames: matrixStoreColumns }
+          ? { enabled: true, valueColumnNamesRow: headerRow, storeColumnNames: matrixStoreColumns, storeColumnIndices: matrixStoreIndices }
           : undefined,
       },
       postProcessing: {

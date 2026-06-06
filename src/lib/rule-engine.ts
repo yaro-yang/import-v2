@@ -686,62 +686,59 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   if (!mode) return rawData;
   if (rawData.length === 0) return [];
 
-  const firstDataRow = rawData[0];
+  // ===== 第一步：确定门店列名和索引 =====
+  let storeNames: string[] = mode.storeColumnNames || [];
+  let storeIndices: number[] = mode.storeColumnIndices || [];
 
-  // ===== 第一步：从 cells 的命名 key 中构建 colIndex → colName 映射 =====
-  // excelToRawData 按列顺序依次写入命名 key 和 col_N key，
-  // 因此过滤掉 col_ 前缀后，namedKeys 的下标就是真实的列索引。
-  // 注意：不能用"按值匹配"的方式找对应关系——第一行数据若存在重复值
-  // （如 SKU条码 与 外部商品编码 都是 "07010747"，或门店列都是空字符串），
-  // 会导致多个命名 key 全部映射到同一个 col_N，门店列识别失败。
-  const namedKeys = Object.keys(firstDataRow.cells).filter(
-    (k) => !k.startsWith("col_") && !k.startsWith("_transposed")
-  );
-  const colNameByIndex = new Map<number, string>();
-  namedKeys.forEach((name, idx) => {
-    colNameByIndex.set(idx, name);
-  });
+  // 如果配置中已有有效的索引和名称，直接使用
+  const hasValidConfig = storeIndices.length > 0 && storeNames.length === storeIndices.length;
 
-  // ===== 第二步：确定门店列 =====
-  const standardKeywords = [
-    "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类",
-    "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结",
-    "单品", "价格", "金额", "总价",
-  ];
-  const isStandardColumn = (name: string) => standardKeywords.some((kw) => name.includes(kw));
+  if (!hasValidConfig) {
+    // 兜底：从 cells 命名 key 中推断索引
+    const firstDataRow = rawData[0];
+    const namedKeys = Object.keys(firstDataRow.cells).filter(
+      (k) => !k.startsWith("col_") && !k.startsWith("_transposed")
+    );
 
-  const storeIndices: number[] = [];
-  const storeNames: string[] = [];
+    if (storeNames.length > 0) {
+      // 有名称没索引：按名匹配（注意同名会映射多个）
+      for (const name of storeNames) {
+        for (let c = 0; c < 200; c++) {
+          if (firstDataRow.cells[`col_${c}`] === firstDataRow.cells[name] && firstDataRow.cells[name] !== "") {
+            storeIndices.push(c);
+            break;
+          }
+        }
+      }
+    }
 
-  // 优先使用配置中的 storeColumnNames
-  const configuredNames = mode.storeColumnNames || [];
-  if (configuredNames.length > 0) {
-    for (const name of configuredNames) {
-      for (const [idx, colName] of colNameByIndex) {
-        if (colName === name) {
-          storeIndices.push(idx);
+    if (storeIndices.length === 0) {
+      const standardKeywords = [
+        "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类",
+        "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结",
+        "单品", "价格", "金额", "总价",
+      ];
+      const isStandard = (n: string) => standardKeywords.some((kw) => n.includes(kw));
+      for (const name of namedKeys) {
+        if (name && !isStandard(name) && name.length <= 30) {
           storeNames.push(name);
-          break;
+          for (let c = 0; c < 200; c++) {
+            if (firstDataRow.cells[`col_${c}`] === firstDataRow.cells[name]) {
+              storeIndices.push(c);
+              break;
+            }
+          }
         }
       }
     }
   }
 
-  // 兜底：自动检测非标准列作为门店列
-  if (storeIndices.length === 0) {
-    const sorted = Array.from(colNameByIndex.entries()).sort(([a], [b]) => a - b);
-    for (const [idx, name] of sorted) {
-      if (name && !isStandardColumn(name) && name.length <= 30) {
-        storeIndices.push(idx);
-        storeNames.push(name);
-      }
-    }
-  }
-
-  // ===== 第三步：转置 =====
+  // ===== 第二步：转置 =====
   const transposed: RawDataRow[] = [];
+  const len = Math.min(storeNames.length, storeIndices.length);
+
   for (const row of rawData) {
-    for (let i = 0; i < storeIndices.length; i++) {
+    for (let i = 0; i < len; i++) {
       const colIdx = storeIndices[i];
       const colName = storeNames[i];
       const cellValue = row.cells[`col_${colIdx}`];

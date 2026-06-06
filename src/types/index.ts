@@ -68,6 +68,7 @@ export interface DataRegionConfig {
     valueColumnsEnd?: number;   // 数值列结束索引
     valueColumnNamesRow?: number; // 列名所在行
     storeColumnNames?: string[];  // 门店列名列表（如 ["银泰", "金银潭", "金桥"]）
+    storeColumnIndices?: number[]; // 门店列索引（0-based，如 [13, 14, 15, 16, 17]）
   };
   // 复合单元格模式
   compositeMode?: {
