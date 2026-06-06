@@ -257,14 +257,7 @@ export async function POST(request: NextRequest) {
         send({ type: "done", result });
         safeClose();
       } catch (error) {
-        console.error("Parse error:", error);
-        const fileName = (request as unknown as { _fileName?: string })._fileName || "unknown";
-        send({
-          type: "error",
-          code: "INTERNAL_ERROR",
-          message: `服务器内部错误：${error instanceof Error ? error.message : "未知错误"}`,
-          fileInfo: { name: fileName, size: 0, type: "" },
-        });
+        console.error("[Parse] Fatal error:", error);
         safeClose();
       }
     },
