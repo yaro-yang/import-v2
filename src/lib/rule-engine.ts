@@ -12,6 +12,86 @@ interface RawDataRow {
   tailFields?: Record<string, string>;
 }
 
+// ====== 矩阵模式自动检测（executeRule 入口处使用） ======
+
+const MATRIX_STANDARD_KEYWORDS = [
+  "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类",
+  "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结",
+  "单品", "价格", "金额", "总价",
+];
+const MATRIX_STORE_PATTERNS = ["店", "门店", "分店", "商场", "银泰", "金桥", "金银潭", "万象", "万达", "广场", "世纪"];
+
+function isStandardHeader(name: string): boolean {
+  return MATRIX_STANDARD_KEYWORDS.some((kw) => name.includes(kw));
+}
+
+function isLikelyStoreColumnName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  if (isStandardHeader(trimmed)) return false;
+  return MATRIX_STORE_PATTERNS.some((kw) => trimmed.includes(kw));
+}
+
+/**
+ * 自动检测矩阵布局：
+ * - 取首行作为表头，识别其中所有非标准字段的"门店列"
+ * - 至少需要识别到 2 个门店列
+ * - 数据中前 30 行内不能出现"调拨单号/收货人/电话/地址"等单据/收件人关键词
+ * 返回 { headerRow, storeColumnNames } 或 null
+ */
+function autoDetectMatrixMode(rawData: RawDataRow[]): { headerRow: number; storeColumnNames: string[] } | null {
+  if (rawData.length === 0) return null;
+  const firstRow = rawData[0];
+  const namedKeys = Object.keys(firstRow.cells).filter(
+    (k) => !k.startsWith("col_") && !k.startsWith("_transposed")
+  );
+  if (namedKeys.length === 0) return null;
+
+  const storeColumns = namedKeys.filter(isLikelyStoreColumnName);
+  if (storeColumns.length < 2) return null;
+
+  // 确认不是卡片/标准单据布局
+  const allText = rawData.slice(0, 30).map((r) => Object.values(r.cells).join(" ")).join("\n");
+  const docLikeKeywords = ["调拨单号", "配送单号", "单据号", "订单号", "运单号", "收货人", "收件人", "联系电话", "收货地址", "收货门店"];
+  if (docLikeKeywords.some((kw) => allText.includes(kw))) return null;
+
+  return { headerRow: 0, storeColumnNames: storeColumns };
+}
+
+/**
+ * 自动启用 matrixMode 时，确保 fieldMappings 里有 storeName/skuQuantity 的 matrix_transpose 映射，
+ * 以及 externalCode 的 static_value="" 映射。
+ * 已存在的映射不会被覆盖。
+ */
+function ensureMatrixFieldMappings(mappings: FieldMapping[], storeColumnNames: string[]): FieldMapping[] {
+  const result = [...mappings];
+  const has = (tf: string) => result.some((m) => m.targetField === tf);
+
+  if (!has("storeName")) {
+    result.push({
+      targetField: "storeName",
+      mode: "matrix_transpose",
+      columnName: `矩阵门店列(${storeColumnNames.join("/")})`,
+    });
+  }
+  if (!has("skuQuantity")) {
+    result.push({
+      targetField: "skuQuantity",
+      mode: "matrix_transpose",
+      columnName: "矩阵门店列值(转置后自动填充)",
+    });
+  }
+  if (!has("externalCode")) {
+    result.push({
+      targetField: "externalCode",
+      mode: "static_value",
+      staticValue: "",
+      defaultValue: "",
+    });
+  }
+  return result;
+}
+
 // ====== 主入口 ======
 
 export type ProgressCallback = (
@@ -37,6 +117,27 @@ export async function executeRule(
           ...rule.dataRegion,
           cardMode: { enabled: true, startMarker: "▶" },
         },
+      };
+    }
+  }
+
+  // 自动检测：如果是矩阵分配表（表头含≥2个门店列、且无外部单号/收件人字段），强制启用 matrixMode
+  // 这是对已保存规则的兜底——即使旧规则没有 matrixMode，只要数据本身是矩阵布局就转置
+  if (!rule.dataRegion.matrixMode?.enabled) {
+    const autoMatrix = autoDetectMatrixMode(rawData);
+    if (autoMatrix) {
+      console.log(`[executeRule] Auto-detected matrix layout (${autoMatrix.storeColumnNames.length} store columns), enabling matrixMode`);
+      rule = {
+        ...rule,
+        dataRegion: {
+          ...rule.dataRegion,
+          matrixMode: {
+            enabled: true,
+            valueColumnNamesRow: autoMatrix.headerRow,
+            storeColumnNames: autoMatrix.storeColumnNames,
+          },
+        },
+        fieldMappings: ensureMatrixFieldMappings(rule.fieldMappings, autoMatrix.storeColumnNames),
       };
     }
   }
