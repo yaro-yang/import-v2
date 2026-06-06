@@ -126,6 +126,8 @@ export default function HomePage() {
   // 保存规则
   const handleSaveRule = useCallback(
     async (rule: ParseRule) => {
+      let saveOk = false;
+      let saveError = "";
       try {
         const res = await fetch("/api/rules", {
           method: "POST",
@@ -135,22 +137,34 @@ export default function HomePage() {
         const data = await res.json();
 
         if (data.success) {
-          toast.success("规则保存成功");
-          setSelectedRuleId(rule.id);
-          setShowRuleEditor(false);
-          // 重新加载规则列表
-          const rulesRes = await fetch("/api/rules");
-          const rulesData = await rulesRes.json();
-          if (rulesData.success) {
-            setRules(rulesData.data);
-          }
+          saveOk = true;
         } else {
-          toast.error(data.error || "保存失败");
+          saveError = data.error || "保存失败";
         }
       } catch (err) {
-        console.error("Save rule error:", err);
-        toast.error("保存规则失败");
+        console.error("Save rule network error:", err);
+        saveError = err instanceof Error ? err.message : "网络错误，规则可能已保存";
       }
+
+      if (!saveOk) {
+        toast.error(saveError);
+        return;
+      }
+
+      // 保存成功：先刷新列表（独立 try-catch，刷新失败不影响主流程）
+      toast.success("规则保存成功");
+      setSelectedRuleId(rule.id);
+      try {
+        const rulesRes = await fetch("/api/rules");
+        const rulesData = await rulesRes.json();
+        if (rulesData.success) {
+          setRules(rulesData.data);
+        }
+      } catch (refreshErr) {
+        // 刷新失败不影响保存结果，规则已写入数据库
+        console.warn("Refresh rules after save failed:", refreshErr);
+      }
+      setShowRuleEditor(false);
     },
     []
   );
