@@ -23,21 +23,20 @@ function getAIConfig(): AIModelConfig {
 }
 
 // 构建 Prompt（引导 AI 输出精确的列名匹配）
+// 注：prompt 越短 AI 响应越快（7000->4000 字符，约省 40% token）
 function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
-  const contentPreview = request.fileContent.substring(0, 7000);
+  const contentPreview = request.fileContent.substring(0, 4000);
   const fileTypeHint = request.fileType === "excel"
-    ? `这是Excel表格。注意以下多种布局模式：
-   - 标准表：表头行含\u201c物品编码\u201d、\u201c名称\u201d、\u201c数量\u201d等列名，数据行紧接其后
-   - 多区域布局：顶部元数据行（如\u201c调拨单号：xxx\u201d、\u201c收货机构：xxx\u201d），中间数据表，底部尾部信息（如\u201c收货人：xxx\u201d、\u201c电话：xxx\u201d）
-   - 卡片式布局：由多个卡片组成，每张卡片以\u201c\u25b6 调拨记录 #N\u201d开头，卡片内包含门店/收货人信息+一张小数据表
-   - 矩阵布局：前几列是SKU/物品信息（如仓库名称、货主名称、SKU名称、SKU条码等），后几列是门店名（如银泰、金银潭、金桥等），每个单元格是门店对应的数量。常见于库存分配表/配货表。
-     * **矩阵库分配表重要特征：表头既没有"调拨单号/配送单号"，也没有"收货人/电话/地址"，文件本身就是货主对各门店的分配数量清单**
-   - 复合单元格：一个单元格含\u201c\\n\u201d分隔的复合信息（如\u201c规格\u00d7数量\u201d）`
+    ? `Excel布局（识别其中一种）：
+   - 标准表：表头含"物品编码/名称/数量"等，数据紧接其后
+   - 多区域：表前/表后有key:value元数据（"收货机构"、"单据号"、"收货人"、"收货电话"、"收货地址"），中间数据表
+   - 卡片式：含"▶ 调拨记录"等分隔符
+   - 矩阵式：表头含≥2个门店列（"银泰"等）且无"收货人/电话"，是库存分配表`
     : request.fileType === "word"
-      ? "Word纯文本段落，注意段落间的结构化信息（收货人、地址、电话等）。"
-      : "PDF文本。注意：可能是多页PDF，每页可能包含多个订单。注意文本中key: value对格式的信息。";
+      ? "Word纯文本段落。"
+      : "PDF文本。多页PDF每页可能含多个订单。注意key: value对。";
 
-  return `你是出库单解析专家。分析以下${request.fileType.toUpperCase()}文件结构，输出JSON。
+  return `你是出库单解析专家。分析${request.fileType.toUpperCase()}文件，输出JSON。
 
 文件名: ${request.fileName}
 
@@ -46,55 +45,30 @@ ${fileTypeHint}
 内容:
 ${contentPreview}
 
-重要规则：
+规则：
+1. headerRow: 表头0-based行号。卡片式 headerRow=0, skipRows=0
+2. skipRows: headerRow之前的行数。卡片式为0
+3. fieldMappings.columnName: 表头原始列名（如"物品编码"），若表头无则填null
+4. 关键模式：
+   - 卡片式：cardMode=true, startMarker="▶"，不要 tailRegion
+   - 矩阵式：matrixMode=true，storeName/skuQuantity 由矩阵自动处理
+   - 表前/表后元数据：externalCode/storeName/recipient* 字段在表头找不到时，**用 mode="row_field" + rowKeyPattern="收货机构|单据号|收货人|收货电话|收货地址"**，后处理会自动从表前/表后key:value行提取填入（不要用文件名兜底）
+5. tailRegion：仅标准表有效。元数据在表后时用 [{targetField, mode:"row_field", rowKeyPattern:"收货人|收货人姓名"}] 格式
 
-1. headerRow: 表头所在行号(0-based)。
-   - 标准表：表头行包含"物品编码/物品名称/规格/数量"等
-   - **卡片式布局：必须设置 headerRow=0, skipRows=0**（由卡片分隔符 ▶ 决定结构，表头行不适用）
-
-2. skipRows: headerRow之前需要跳过的行数。**卡片式必须为 0**。
-
-3. fieldMappings: 每个字段的映射。columnName必须是表头行中的原始列名文字。
-   - 标准表：从表头行找对应的列名，如"物品编码"、"SKU名称"、"调入门店"
-   - **卡片式：SKU 字段的 columnName 直接填卡片内 SKU 小表的列名（如"物品编码"、"物品名称"、"数量"）**
-   - 卡片式/多区域：如果在表头找不到，检查内容中是否有key:value对，如"调拨单号：xxx"，则columnName填"调拨单号"
-   - 矩阵布局：SKU字段从前面标准列中映射；storeName由矩阵转置自动填充门店列名；**externalCode如果表中找不到任何单号字段，confidence填0.1，columnName填null，staticValue填空字符串"", defaultValue填空字符串""，不要用文件名替代——矩阵分配表本身就是货主对各门店的分配清单，没有外部单号**
-
-4. 特殊模式检测（非常重要）：
-   a) cardMode: true —— 如果内容包含"▶ 调拨记录"、"▶ 配送记录"等卡片分隔符
-      - **卡片式必须将 cardMode.enabled 设为 true, startMarker 设为 "▶"**
-      - **卡片式不要设置 tailRegion（每张卡片内部已含收货门店/收货人/电话/地址信息，由卡片解析器自动提取）**
-   b) matrixMode: true —— 表头包含≥2个门店名（如"银泰"、"金桥"、"金银潭"），且这些列在表头靠后位置
-      - **矩阵模式如果表中完全找不到 externalCode、recipientName、recipientPhone、recipientAddress 的对应列，confidence 设为 0.1，columnName 设为 null，不要强行猜测**
-   c) compositeMode: true —— 如果表格单元格包含"\n"换行分隔的复合信息
-   d) groupByExternalCode: true —— 如果多个仓库配送单合并到一个文件中
-   e) mergeSheets: true —— 如果有多个结构相同的Sheet
-
-5. 尾部信息区（tailRegion）——**仅对标准表有效，卡片式和矩阵式不需要**:
-   - 如果数据表下方有额外的信息行（如"收货人：xxx"、"电话：xxx"、"地址：xxx"、"收货门店：xxx"、"单据号：xxx"），
-     这些应提取到tailFields中
-   - tailFields格式：[{targetField, mode: "row_field", rowKeyPattern: "收货人|收货人姓名", staticValue: null, confidence: 0.8}]
-   - tailStartRow: 尾部信息起始行号。如果有合计行，tailStartRow在合计行之后
-
-6. storeName(收货门店)优先匹配含"调入/门店/收货店/店铺/客户/收货机构"等关键词的列名
-   - **矩阵模式：storeName来自矩阵列名转置，columnName可填null，由矩阵转置自动处理**
-7. recipientName/recipientPhone/recipientAddress优先从尾部信息区提取（卡片式则由卡片解析器自动处理）
-   - **矩阵库存分配表通常没有收件人信息，这三项直接填null，confidence=0.1**
-
-输出纯JSON,不要markdown代码块,不要解释:
+输出纯JSON,不要markdown:
 {
-  "headerRow": 数字,
-  "skipRows": 数字,
+  "headerRow": 0,
+  "skipRows": 0,
   "fieldMappings": [
-    {"targetField": "skuCode", "mode": "column_name", "columnName": "...", "confidence": 0.8},
-    {"targetField": "skuName", "mode": "column_name", "columnName": "...", "confidence": 0.8},
-    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "...", "confidence": 0.8},
-    {"targetField": "skuSpec", "mode": "column_name", "columnName": null, "confidence": 0.3},
-    {"targetField": "storeName", "mode": "column_name", "columnName": null, "confidence": 0.3},
-    {"targetField": "externalCode", "mode": "column_name", "columnName": null, "confidence": 0.3},
-    {"targetField": "recipientName", "mode": "column_name", "columnName": null, "confidence": 0.2},
-    {"targetField": "recipientPhone", "mode": "column_name", "columnName": null, "confidence": 0.2},
-    {"targetField": "recipientAddress", "mode": "column_name", "columnName": null, "confidence": 0.2},
+    {"targetField": "skuCode", "mode": "column_name", "columnName": "物品编码", "confidence": 0.8},
+    {"targetField": "skuName", "mode": "column_name", "columnName": "物品名称", "confidence": 0.8},
+    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "发货数量", "confidence": 0.8},
+    {"targetField": "skuSpec", "mode": "column_name", "columnName": "规格型号", "confidence": 0.3},
+    {"targetField": "storeName", "mode": "row_field", "rowKeyPattern": "收货机构|收货门店", "confidence": 0.6},
+    {"targetField": "externalCode", "mode": "row_field", "rowKeyPattern": "单据号|配送单号", "confidence": 0.6},
+    {"targetField": "recipientName", "mode": "row_field", "rowKeyPattern": "收货人", "confidence": 0.6},
+    {"targetField": "recipientPhone", "mode": "row_field", "rowKeyPattern": "收货电话", "confidence": 0.6},
+    {"targetField": "recipientAddress", "mode": "row_field", "rowKeyPattern": "收货地址", "confidence": 0.6},
     {"targetField": "remark", "mode": "column_name", "columnName": null, "confidence": 0.2}
   ],
   "tailFields": [],
@@ -107,7 +81,7 @@ ${contentPreview}
   "compositeMode": false,
   "cardStartMarker": "▶ 调拨记录",
   "confidence": 0.7,
-  "notes": "简要说明文件布局模式和关键发现"
+  "notes": "简要说明文件布局模式"
 }`;
 }
 
@@ -590,7 +564,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     const isMetaField = m.targetField === "storeName" || m.targetField === "externalCode" || m.targetField.startsWith("recipient");
     const inTail = tailFields.some((tf) => tf.targetField === m.targetField);
     const mode: FieldMapping["mode"] = isMetaField
-      ? (inTail ? "row_field" : colIdx >= 0 ? "column_name" : "tail_extract")
+      ? (inTail ? "row_field" : colIdx >= 0 ? "column_name" : "row_field")
       : "column_name";
 
     return {
