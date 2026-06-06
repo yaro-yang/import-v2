@@ -19,15 +19,19 @@ function getAIConfig(): AIModelConfig {
 
 // 构建 Prompt（引导 AI 输出精确的列名匹配）
 function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
-  const contentPreview = request.fileContent.substring(0, 6000);
+  const contentPreview = request.fileContent.substring(0, 7000);
   const fileTypeHint = request.fileType === "excel"
-    ? "这是Excel表格。第1行可能是大标题(如公司名)不是表头。真正的表头行通常在第2-4行，包含编码、名称、数量、规格、门店、收件人、电话、地址、单号、备注等列名。请找到正确的表头行，输出表头中的原始列名文字。注意：如果是卡片式布局(如'调拨单号：xxx'在顶部元数据区)，externalCode对应的列名应填'调拨单号'(不要冒号后的值)。"
+    ? `这是Excel表格。注意以下多种布局模式：
+   - 标准表：表头行含\u201c物品编码\u201d、\u201c名称\u201d、\u201c数量\u201d等列名，数据行紧接其后
+   - 多区域布局：顶部元数据行（如\u201c调拨单号：xxx\u201d、\u201c收货机构：xxx\u201d），中间数据表，底部尾部信息（如\u201c收货人：xxx\u201d、\u201c电话：xxx\u201d）
+   - 卡片式布局：由多个卡片组成，每张卡片以\u201c\u25b6 调拨记录 #N\u201d开头，卡片内包含门店/收货人信息+一张小数据表
+   - 矩阵布局：前几列是SKU/物品信息，后几列是门店名，每个单元格是门店对应的数量
+   - 复合单元格：一个单元格含\u201c\\n\u201d分隔的复合信息（如\u201c规格\u00d7数量\u201d）`
     : request.fileType === "word"
-      ? "Word纯文本段落。"
-      : "PDF文本。";
+      ? "Word纯文本段落，注意段落间的结构化信息（收货人、地址、电话等）。"
+      : "PDF文本。注意：可能是多页PDF，每页可能包含多个订单。注意文本中key: value对格式的信息。";
 
-  return `你是出库单解析专家。分析以下${request.fileType.toUpperCase()}文件表头，输出JSON。
-重要：columnName必须填写Excel表头行中的原始列名文字。
+  return `你是出库单解析专家。分析以下${request.fileType.toUpperCase()}文件结构，输出JSON。
 
 文件名: ${request.fileName}
 
@@ -36,38 +40,67 @@ ${fileTypeHint}
 内容:
 ${contentPreview}
 
-规则:
-1. headerRow: 表头所在行号(从0开始数)。如果第1行是公司名称/标题则headerRow至少为1
+重要规则：
+
+1. headerRow: 表头所在行号(0-based)。如果第1行是公司名称/标题则headerRow>=1。
+   - 标准表：表头行包含"物品编码/物品名称/规格/数量"等
+   - 如果表头行不存在（如卡片式、纯文本），headerRow设大一点如99
+
 2. skipRows: headerRow之前需要跳过的行数
-3. fieldMappings中每个字段的columnName必须是表头行中的原始列名文字,例如"物品编码"、"SKU名称"、"调入门店"、"收货人姓名"、"联系电话"
-4. 如果某个字段在表头中找不到对应列,columnName填null或空字符串
-5. storeName(收货门店)字段优先匹配含"调入/门店/收货店/店铺/客户"等关键词的列名，如"调入门店"
-6. recipientName/recipientPhone/recipientAddress只在表头明确存在时才映射,不要瞎猜
+
+3. fieldMappings: 每个字段的映射。columnName必须是表头行中的原始列名文字。
+   - 标准表：从表头行找对应的列名，如"物品编码"、"SKU名称"、"调入门店"
+   - 卡片式/多区域：如果在表头找不到，检查内容中是否有key:value对，如"调拨单号：xxx"，则columnName填"调拨单号"
+   - 矩阵布局：standardFields中填skuCode/skuName等标准列的映射；matrixStoreColumns中填门店名列表
+
+4. 特殊模式检测（非常重要）：
+   a) cardMode: true —— 如果内容包含"▶ 调拨记录"、"▶ 配送记录"等卡片分隔符
+   b) matrixMode: true —— 如果表头行包含门店/分店名作为列（如"银泰"、"金桥"、"金银潭"）
+   c) compositeMode: true —— 如果表格单元格包含"\n"换行分隔的复合信息
+   d) groupByExternalCode: true —— 如果多个仓库配送单合并到一个文件中
+   e) mergeSheets: true —— 如果有多个结构相同的Sheet
+
+5. 尾部信息区（tailRegion）:
+   - 如果数据表下方有额外的信息行（如"收货人：xxx"、"电话：xxx"、"地址：xxx"、"收货门店：xxx"、"单据号：xxx"），
+     这些应提取到tailFields中
+   - tailFields格式：[{targetField, mode: "row_field", rowKeyPattern: "收货人|收货人姓名", staticValue: null, confidence: 0.8}]
+   - tailStartRow: 尾部信息起始行号。如果有合计行，tailStartRow在合计行之后
+
+6. storeName(收货门店)优先匹配含"调入/门店/收货店/店铺/客户/收货机构"等关键词的列名
+7. recipientName/recipientPhone/recipientAddress优先从尾部信息区提取
 
 输出纯JSON,不要markdown代码块,不要解释:
 {
   "headerRow": 数字,
   "skipRows": 数字,
   "fieldMappings": [
-    {"targetField": "skuCode", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.8},
-    {"targetField": "skuName", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.8},
-    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.8},
+    {"targetField": "skuCode", "mode": "column_name", "columnName": "...", "confidence": 0.8},
+    {"targetField": "skuName", "mode": "column_name", "columnName": "...", "confidence": 0.8},
+    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "...", "confidence": 0.8},
     {"targetField": "skuSpec", "mode": "column_name", "columnName": null, "confidence": 0.3},
-    {"targetField": "storeName", "mode": "column_name", "columnName": "表头原始列名或null", "confidence": 0.6},
+    {"targetField": "storeName", "mode": "column_name", "columnName": null, "confidence": 0.3},
     {"targetField": "externalCode", "mode": "column_name", "columnName": null, "confidence": 0.3},
     {"targetField": "recipientName", "mode": "column_name", "columnName": null, "confidence": 0.2},
     {"targetField": "recipientPhone", "mode": "column_name", "columnName": null, "confidence": 0.2},
     {"targetField": "recipientAddress", "mode": "column_name", "columnName": null, "confidence": 0.2},
     {"targetField": "remark", "mode": "column_name", "columnName": null, "confidence": 0.2}
   ],
+  "tailFields": [
+    {"targetField": "recipientName", "mode": "row_field", "rowKeyPattern": "收货人|收货人姓名", "confidence": 0.8},
+    {"targetField": "recipientPhone", "mode": "row_field", "rowKeyPattern": "电话|收货电话|联系电话", "confidence": 0.8},
+    {"targetField": "recipientAddress", "mode": "row_field", "rowKeyPattern": "地址|收货地址", "confidence": 0.8},
+    {"targetField": "storeName", "mode": "row_field", "rowKeyPattern": "收货门店|收货机构", "confidence": 0.8}
+  ],
+  "tailStartRow": 数字,
   "groupByExternalCode": false,
   "skipTotalRow": false,
   "mergeSheets": false,
   "matrixMode": false,
   "cardMode": false,
   "compositeMode": false,
+  "cardStartMarker": "▶ 调拨记录",
   "confidence": 0.7,
-  "notes": "简要说明"
+  "notes": "简要说明文件布局模式和关键发现"
 }`;
 }
 
@@ -170,7 +203,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   const lines = content.split("\n").filter((l) => l.trim());
   const mappings: AIAnalyzeResponse["fieldMappings"] = [];
 
-  // 扩展关键词映射 — externalCode 优先匹配"调拨单号/配送单号"等精确词
+  // 扩展关键词映射
   const commonMappings: Record<string, { keywords: string[]; priority: number }> = {
     skuCode: { keywords: ["编码", "物品编码", "SKU", "产品编码", "商品编码", "货号", "条码", "SKU条码"], priority: 1 },
     skuName: { keywords: ["名称", "物品名称", "品名", "产品名称", "商品名称", "SKU名称"], priority: 2 },
@@ -184,13 +217,26 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     remark: { keywords: ["备注", "说明", "附注"], priority: 10 },
   };
 
-  // ===== 第一步：在所有行中搜索"调拨单号/配送单号"等，优先匹配到 externalCode =====
+  // ===== 第一步：检测文件结构模式 =====
+  // 1a) 卡片模式：包含 ▶ 标记
+  const isCardMode = content.includes("▶") && (content.includes("调拨记录") || content.includes("配送记录"));
+
+  // 1b) 多Sheet：内容包含2个以上 "--- Sheet:"
+  const sheetCount = (content.match(/--- Sheet:/g) || []).length;
+  const isMultiSheet = request.fileType === "excel" && sheetCount >= 2;
+
+  // 1c) 矩阵模式：表头行含2个以上门店名（如"银泰"、"金桥"、"金银潭"等）
+  const storeNameKeywords = ["店", "门店", "分店", "银泰", "金桥", "金银潭"];
+
+  // 1d) 合计行
+  const hasTotalRow = content.includes("合计") || content.includes("小计");
+
+  // ===== 第二步：在所有行中搜索外部编码关键词 =====
   let externalCodeMatchedKeyword: string | null = null;
   let externalCodeMatchedLineIdx = -1;
-  for (let i = 0; i < Math.min(lines.length, 8); i++) {
+  for (let i = 0; i < Math.min(lines.length, 12); i++) {
     for (const kw of commonMappings.externalCode.keywords) {
       if (lines[i].includes(kw)) {
-        // 找到更精确的匹配就更新
         if (!externalCodeMatchedKeyword || kw.length > externalCodeMatchedKeyword.length) {
           externalCodeMatchedKeyword = kw;
           externalCodeMatchedLineIdx = i;
@@ -199,10 +245,14 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     }
   }
 
-  // ===== 第二步：分析表头行（找包含最多关键词的行）=====
+  // ===== 第三步：检测表头行 =====
   const headerCandidates: { lineIdx: number; matches: number }[] = [];
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+  for (let i = 0; i < Math.min(lines.length, 12); i++) {
     const line = lines[i];
+    // 跳过非表头行：包含 "："/":" 的元数据行（如"调拨单号：xxx"）
+    const hasFullColon = /[：:]\S/.test(line);
+    if (hasFullColon && !line.includes(" | ") && !line.includes("\t")) continue;
+
     let matches = 0;
     for (const [, info] of Object.entries(commonMappings)) {
       for (const kw of info.keywords) {
@@ -220,19 +270,52 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   headerCandidates.sort((a, b) => b.matches - a.matches);
   const headerRow = headerCandidates.length > 0 ? headerCandidates[0].lineIdx : 0;
   const skipRows = headerRow > 0 ? headerRow : 0;
-
-  // 分析特殊格式
-  const isCardMode = content.includes("调拨记录");
-  const isMultiSheet = request.fileType === "excel" && content.includes("Sheet");
-  const hasTotalRow = content.includes("合计") || content.includes("小计");
-
-  // ===== 第三步：生成字段映射 + 提取实际列名文字填入 columnName =====
   const headerLine = lines[headerRow] || "";
 
+  // ===== 第四步：检测尾部信息区（合计行之后含收货人/店等key:value对的行）=====
+  let tailStartRow = -1;
+  const tailLines: { lineIdx: number; text: string }[] = [];
+
+  if (hasTotalRow) {
+    // 在合计行之后找 tail 信息
+    let foundTotal = false;
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+      if (lines[i].includes("合计") || lines[i].includes("小计")) {
+        foundTotal = true;
+        continue;
+      }
+      if (foundTotal && lines[i].trim()) {
+        // 检查是否包含收货人/电话/地址/门店等关键信息
+        const hasTailInfo = ["收货人", "电话", "地址", "收货门店", "单据", "联系", "收货机构", "备注", "签字"].some(
+          (kw) => lines[i].includes(kw)
+        );
+        if (hasTailInfo) {
+          if (tailStartRow < 0) tailStartRow = i;
+          tailLines.push({ lineIdx: i, text: lines[i] });
+        }
+      }
+    }
+  }
+
+  // 检测矩阵模式的数量列（表头行中超出标准字段的列名可能是门店名）
+  const headerParts = headerLine.split(" | ").map((p) => p.trim());
+  const standardHeaderKeywords = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期"];
+  let matrixStoreColumns: string[] = [];
+  if (headerParts.length >= 8) {
+    // 后半部分列如果看起来是门店名，则为矩阵模式
+    const secondHalf = headerParts.slice(Math.floor(headerParts.length / 2));
+    matrixStoreColumns = secondHalf.filter((col) =>
+      storeNameKeywords.some((kw) => col.includes(kw)) &&
+      !standardHeaderKeywords.some((kw) => col.includes(kw))
+    );
+  }
+
+  // ===== 第五步：生成字段映射 =====
   for (const [field, info] of Object.entries(commonMappings)) {
     let found = false;
     let matchedKeyword = "";
     let matchedLineIdx = headerRow;
+    let matchMode: "header" | "nearby" | "tail" | "externalCode" = "header";
 
     // 先在表头行搜索
     for (const keyword of info.keywords) {
@@ -245,36 +328,111 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
 
     // 表头行没找到，在周围行搜索
     if (!found) {
-      for (let i = Math.max(0, headerRow - 3); i <= Math.min(lines.length - 1, headerRow + 3); i++) {
-        for (const keyword of info.keywords) {
-          if (lines[i].includes(keyword)) {
-            matchedKeyword = keyword;
-            matchedLineIdx = i;
-            found = true;
-            break;
+      // 对 storeName/recipient fields 优先搜索尾部的 key:value 对
+      if ((field === "storeName" || field.startsWith("recipient")) && tailLines.length > 0) {
+        const tailKw = field === "storeName" ? ["收货门店", "收货机构", "门店"]
+          : field === "recipientName" ? ["收货人", "联系人"]
+          : field === "recipientPhone" ? ["电话", "联系电话", "手机"]
+          : ["地址", "收货地址"];
+        for (const tl of tailLines) {
+          for (const kw of tailKw) {
+            if (tl.text.includes(kw)) {
+              matchedKeyword = kw;
+              matchedLineIdx = tl.lineIdx;
+              found = true;
+              matchMode = "tail";
+              break;
+            }
           }
+          if (found) break;
         }
-        if (found) break;
+      }
+
+      // 如果 tail 没找到，在表头附近搜索
+      if (!found) {
+        for (let i = Math.max(0, headerRow - 3); i <= Math.min(lines.length - 1, headerRow + 3); i++) {
+          for (const keyword of info.keywords) {
+            if (lines[i].includes(keyword)) {
+              matchedKeyword = keyword;
+              matchedLineIdx = i;
+              found = true;
+              matchMode = "nearby";
+              break;
+            }
+          }
+          if (found) break;
+        }
       }
     }
 
-    // 提取列名文字 — 从原始文本行中找到匹配关键词所在的完整"列名"
+    // externalCode 特殊处理：如果所有搜索都没找到，使用 step 1 结果
+    if (!found && field === "externalCode" && externalCodeMatchedKeyword) {
+      matchedKeyword = externalCodeMatchedKeyword;
+      matchedLineIdx = externalCodeMatchedLineIdx;
+      found = true;
+      matchMode = "externalCode";
+    }
+
+    // 提取列名文字
     let extractedColumnName: string | undefined;
     if (matchedKeyword) {
       extractedColumnName = extractColumnText(lines[matchedLineIdx], matchedKeyword);
     }
 
+    // 通过尾部和外部编码模式找到的字段，用 row_field 模式（key:value）
+    const isKeyValueMode = matchMode === "tail" || matchMode === "externalCode";
+
     mappings.push({
       targetField: field,
-      suggestedSource: extractedColumnName || `匹配: "${matchedKeyword}"`,
-      confidence: found ? (matchedLineIdx === headerRow ? 0.6 : 0.4) : 0.25,
-      note: extractedColumnName
-        ? `从${matchedLineIdx + 1}行列头提取"${extractedColumnName}"`
-        : `基于关键词"${matchedKeyword}"推测(行${matchedLineIdx + 1})`,
+      suggestedSource: extractedColumnName || (matchedKeyword ? `匹配: "${matchedKeyword}"` : ""),
+      confidence: found ? (matchMode === "header" ? 0.7 : matchMode === "nearby" ? 0.4 : 0.5) : 0.25,
+      note: isKeyValueMode
+        ? `从行${matchedLineIdx + 1}提取"${extractedColumnName || matchedKeyword}"`
+        : extractedColumnName
+          ? `从${matchedLineIdx + 1}行列头提取"${extractedColumnName}"`
+          : `基于关键词"${matchedKeyword}"推测(行${matchedLineIdx + 1})`,
     });
   }
 
-  // ===== 第四步：构建带 fieldMappingsFull 的 suggestedRule（关键！让 RuleEditor 能预填值）=====
+  // ===== 第六步：构建 tailRegion 的 fields 配置 =====
+  const tailFields: FieldMapping[] = [];
+  const tailFieldDefs: { targetField: string; keywords: string[] }[] = [
+    { targetField: "storeName", keywords: ["收货门店", "收货机构", "门店"] },
+    { targetField: "recipientName", keywords: ["收货人", "联系人"] },
+    { targetField: "recipientPhone", keywords: ["电话", "联系电话", "收货电话", "手机"] },
+    { targetField: "recipientAddress", keywords: ["地址", "收货地址"] },
+  ];
+
+  if (tailLines.length > 0) {
+    for (const tfd of tailFieldDefs) {
+      for (const tl of tailLines) {
+        for (const kw of tfd.keywords) {
+          if (tl.text.includes(kw)) {
+            tailFields.push({
+              targetField: tfd.targetField,
+              mode: "row_field",
+              rowKeyPattern: kw,
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // ===== 第七步：构建建议的解析规则 =====
+  const suggestedRuleFieldMappings: FieldMapping[] = mappings.map((m) => ({
+    targetField: m.targetField,
+    mode: (m.targetField === "storeName" || m.targetField.startsWith("recipient"))
+           && tailFields.some((tf) => tf.targetField === m.targetField)
+           ? "row_field" as FieldMapping["mode"]
+           : "column_name" as FieldMapping["mode"],
+    columnName: extractCleanColumnName(m.suggestedSource),
+  }));
+
+  // 检测是否为矩阵模式
+  const isMatrixMode = matrixStoreColumns.length >= 2;
+
   return {
     suggestedRule: {
       name: `${request.fileName} - 解析规则`,
@@ -284,17 +442,19 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
         externalCodeField: "externalCode",
         mergeSheets: isMultiSheet,
       },
-      // 核心！将启发式提取的列名作为 FieldMapping[] 填入，RuleEditor 就能预填了
-      fieldMappings: mappings.map((m) => ({
-        targetField: m.targetField,
-        mode: "column_name" as FieldMapping["mode"],
-        // 从 suggestedSource 中提取列名文字（去掉前缀）
-        columnName: extractCleanColumnName(m.suggestedSource),
-      })),
+      fieldMappings: suggestedRuleFieldMappings,
       dataRegion: {
         skipRows,
         headerRow,
-        cardMode: isCardMode ? { enabled: true, startMarker: "" } : undefined,
+        tailRegion: tailLines.length > 0
+          ? { startRow: tailStartRow, fields: tailFields }
+          : undefined,
+        cardMode: isCardMode
+          ? { enabled: true, startMarker: "▶" }
+          : undefined,
+        matrixMode: isMatrixMode
+          ? { enabled: true }
+          : undefined,
       },
       postProcessing: {
         skipTotalRow: hasTotalRow,
@@ -302,10 +462,10 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       },
       aiGenerated: false,
       aiConfidence: 0.4,
-      aiNotes: `启发式分析：表头行${headerRow + 1}`,
+      aiNotes: `启发式分析：表头行${headerRow + 1}${tailLines.length > 0 ? `，尾部信息行${tailStartRow + 1}` : ""}${isCardMode ? "，卡片模式" : ""}${isMatrixMode ? "，矩阵模式" : ""}`,
     },
     confidence: 0.4,
-    notes: `基于启发式规则分析，识别到表头行${headerRow + 1}，建议手动调整字段映射`,
+    notes: `基于启发式规则分析，识别到表头行${headerRow + 1}${tailLines.length > 0 ? `，尾部信息行${tailStartRow + 1}` : ""}${isCardMode ? "，卡片模式" : ""}`,
     fieldMappings: mappings,
   };
 }
