@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { OutboundOrder } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Modal } from "@/components/ui/Modal";
 import { formatDate, exportToExcel } from "@/lib/utils";
 
 export default function HistoryPage() {
@@ -15,6 +16,9 @@ export default function HistoryPage() {
   const [searchExternalCode, setSearchExternalCode] = useState("");
   const [searchRecipientName, setSearchRecipientName] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // 待删除的运单
+  const [deletingOrder, setDeletingOrder] = useState<OutboundOrder | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const pageSize = 20;
 
   const loadOrders = useCallback(async () => {
@@ -64,6 +68,38 @@ export default function HistoryPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  // 触发删除（弹出确认）
+  const handleDeleteClick = (e: React.MouseEvent, ob: OutboundOrder) => {
+    e.stopPropagation(); // 防止冒泡到展开/折叠
+    setDeletingOrder(ob);
+  };
+
+  // 确认删除
+  const handleConfirmDelete = async () => {
+    if (!deletingOrder) return;
+    setDeleting(true);
+    const toastId = toast.loading("正在删除...");
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(deletingOrder.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("已删除", { id: toastId });
+        setDeletingOrder(null);
+        // 重新加载列表
+        loadOrders();
+      } else {
+        toast.error(data.error || "删除失败", { id: toastId });
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast.error("删除失败", { id: toastId });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // 导出：把每个出库单展开为多行（每条 SKU 一行）
@@ -245,7 +281,7 @@ export default function HistoryPage() {
                         </div>
                       </div>
                       {/* 状态标签 */}
-                      <div className="flex-shrink-0">
+                      <div className="flex-shrink-0 flex items-center gap-2">
                         <span
                           className={`inline-block px-2 py-0.5 text-xs rounded whitespace-nowrap ${
                             ob.status === "submitted"
@@ -261,6 +297,20 @@ export default function HistoryPage() {
                               ? "有错误"
                               : "草稿"}
                         </span>
+                        {/* 删除按钮 */}
+                        <button
+                          onClick={(e) => handleDeleteClick(e, ob)}
+                          className="flex-shrink-0 p-1 text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors"
+                          title="删除该运单"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
 
@@ -350,6 +400,64 @@ export default function HistoryPage() {
           </>
         )}
       </div>
+
+      {/* 删除确认弹窗 */}
+      <Modal
+        isOpen={!!deletingOrder}
+        onClose={() => !deleting && setDeletingOrder(null)}
+        title="确认删除"
+        size="sm"
+      >
+        {deletingOrder && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#fff1f0] text-[#cf1322] flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-[#1d2129] leading-relaxed">
+                  确定要删除该运单吗？此操作不可恢复。
+                </p>
+                <div className="mt-3 p-3 bg-[#fafbfc] rounded-lg border border-[#e5e6eb] text-xs text-[#4e5969] space-y-1">
+                  <p>
+                    <span className="text-[#86909c]">外部编码：</span>
+                    <span className="font-mono font-medium text-[#1d2129]">{deletingOrder.externalCode || "—"}</span>
+                  </p>
+                  <p>
+                    <span className="text-[#86909c]">收货门店：</span>
+                    <span>{deletingOrder.storeName || "—"}</span>
+                  </p>
+                  <p>
+                    <span className="text-[#86909c]">SKU 数：</span>
+                    <span className="font-medium text-[#1d2129]">{deletingOrder.items.length} 条</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeletingOrder(null)}
+                disabled={deleting}
+              >
+                取消
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmDelete}
+                loading={deleting}
+                className="!bg-[#cf1322] hover:!bg-[#a8071a] !text-white"
+              >
+                确认删除
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

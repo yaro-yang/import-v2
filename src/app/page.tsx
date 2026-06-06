@@ -895,6 +895,7 @@ export default function HomePage() {
                 onDeleteOrder={handleDeleteOrder}
                 onAddRow={handleAddRow}
                 errors={errors}
+                mode={currentRuleMode}
                 onValidationChange={handleValidationChange}
               />
             </div>
