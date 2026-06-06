@@ -2,6 +2,22 @@
 
 import * as XLSX from "xlsx";
 
+// pdfjs-dist 4.x 内部使用了 Promise.withResolvers()（ES2024 API），
+// 在某些 JS 引擎（老版本 Node、Webpack 沙箱、Edge Runtime 早期版本）下可能不存在，
+// 导致解析 PDF 时报 "Promise.withResolvers is not a function"。
+// 这里加一个防御性 polyfill：仅在缺失时注入，实现与规范一致。
+if (typeof (Promise as any).withResolvers !== "function") {
+  (Promise as any).withResolvers = function withResolvers<T>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 // 解析 Excel 文件
 export async function parseExcel(
   buffer: ArrayBuffer
@@ -50,10 +66,24 @@ export async function parsePDF(
 ): Promise<{ pages: string[]; fullText: string }> {
   const pdfjsLib = await import("pdfjs-dist");
 
-  // 设置 worker
-  if (typeof window === "undefined") {
-    // 服务端
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  const isServer = typeof window === "undefined";
+
+  if (isServer) {
+    // 服务端：没有真正的 Worker，但 pdfjs-dist 4.x 必须显式给 workerSrc 才会用 fake worker 跑在主线程。
+    // 直接指向磁盘上 node_modules 里的 worker 路径（Node 端用 file:// URL 加载 ESM）。
+    try {
+      const { pathToFileURL } = await import("url");
+      const path = await import("path");
+      // Node CWD 是项目根目录，worker 文件固定在 node_modules/pdfjs-dist/build/pdf.worker.mjs
+      const workerPath = path.resolve(
+        process.cwd(),
+        "node_modules/pdfjs-dist/build/pdf.worker.mjs"
+      );
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
+    } catch {
+      // 兜底：让 pdfjs-dist 内部走 fake worker 流程（主线程跑解析）
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    }
   }
 
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });

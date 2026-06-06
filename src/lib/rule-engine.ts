@@ -1089,27 +1089,49 @@ export function excelToRawData(
     rows.push({ rowIndex: r, cells, tailFields: {} });
   }
 
-  // 数据前区信息提取：扫描 skipRows 之前的行，提取 key-value 元数据
-  // （如收货机构、收货单位等，这些字段不在 SKU 表头中而在数据表之前的元数据行）
+  // 数据前/后区元数据提取：扫描所有行（除 SKU 数据行外），提取 key-value 元数据
+  // （如"收货机构：xxx"、"单据号：PS2512xxx"、"收货人：张三"、"收货电话：185xxx"、
+  //   "收货地址：xxx"等），这些字段不在 SKU 表头中，而在表前/表后元数据行里
+  // 例如 12.25海口龙湖天街发货单：行1/2/3 是表前元数据，行8/9/10 是表后元数据
   const preHeaderFields: Record<string, string> = {};
   const preHeaderKeyMap: Record<string, string> = {
-    storeName: "收货机构|收货门店",
-    externalCode: "单据号|配送单号",
-    recipientName: "收货人",
-    recipientPhone: "收货电话",
-    recipientAddress: "收货地址",
+    storeName: "收货机构|收货门店|收货单位|调入门店|客户名称",
+    externalCode: "单据号|配送单号|配送发货单|调拨单号|运单号|订单号",
+    recipientName: "收货人|收件人|联系人|收货人姓名",
+    recipientPhone: "收货电话|收件人电话|联系电话|收货人手机号|手机号|手机",
+    recipientAddress: "收货地址|收件人地址|详细地址|收货详细地址",
   };
-  for (let r = 0; r < startRow; r++) {
+  // 元数据行特征：首列（col_0）等于某个 key，且后续 cell 中有非空 value
+  // 同时行内容不能用 SKU 表头中的标准列名（"序号"、"物品编码" 等），避免把数据行误判为元数据行
+  const SKU_HEADER_KEYWORDS = ["序号", "物品编码", "物品名称", "物品分类", "物品品牌", "规格型号", "存储方式", "分拣员", "分拣状态", "订货单位", "发货数量", "订货数量", "接单数量", "发货金额", "成本金额", "物品重量", "物品体积", "发货仓库", "基准单位", "分拣单位", "合计"];
+  for (let r = 0; r < data.length; r++) {
     const rowData = data[r];
     if (!rowData) continue;
+    const firstCell = String(rowData[0] ?? "").trim();
+    if (!firstCell) continue;
+    // 跳过 SKU 表头/数据行（行内容以"序号"/"物品编码"开头）
+    if (SKU_HEADER_KEYWORDS.some((kw) => firstCell === kw || firstCell.startsWith(kw + " ") || firstCell.startsWith(kw + "　"))) {
+      // 这是 SKU 表头或数据行，跳过
+      if (firstCell === "序号" || firstCell === "合计") continue;
+      // 数据行：序号是 1/2/3... 是数字开头
+      if (/^\d+$/.test(firstCell)) continue;
+    }
+    // 检查首列是否匹配某个 metadata key
     for (let n = 0; n < rowData.length - 1; n++) {
       const key = String(rowData[n] ?? "").trim();
+      if (!key) continue;
       for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
-        if (patterns.split("|").some((p) => key === p)) {
+        const patternList = patterns.split("|");
+        const matchedPattern = patternList.find((p) => key === p || key.startsWith(p + "：") || key.startsWith(p + ":"));
+        if (matchedPattern) {
           // 取下一个非空单元格的值
           for (let m = n + 1; m < rowData.length; m++) {
             const v = String(rowData[m] ?? "").trim();
-            if (v) { preHeaderFields[target] = v; break; }
+            if (v && !SKU_HEADER_KEYWORDS.includes(v)) {
+              // 如果该字段还未填，则填入（首匹配优先）
+              if (!preHeaderFields[target]) preHeaderFields[target] = v;
+              break;
+            }
           }
           break;
         }
@@ -1118,6 +1140,7 @@ export function excelToRawData(
   }
   // 应用到所有数据行
   if (Object.keys(preHeaderFields).length > 0) {
+    console.log(`[excelToRawData] 从表前/表后元数据行提取到: ${Object.keys(preHeaderFields).join(", ")}`);
     for (const row of rows) {
       row.tailFields = { ...preHeaderFields, ...row.tailFields };
     }
