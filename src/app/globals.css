@@ -257,6 +257,39 @@ body {
   background-color: #f0faf9 !important;
 }
 
+/* 历史页表格 - 收起行：明显视觉区分，告诉用户"这行是收起的汇总行，点击展开" */
+.history-table tbody tr.is-collapsed {
+  cursor: pointer;
+}
+
+.history-table tbody tr.is-collapsed > td {
+  background-color: #ecfaf9 !important;
+  border-bottom-color: #0fc6c220 !important;
+}
+
+/* 非首行的收起行：顶部加 2px teal 分隔线 */
+.history-table tbody tr.is-collapsed:not(:first-of-type) > td {
+  border-top: 2px solid #0fc6c2 !important;
+}
+
+.history-table tbody tr.is-collapsed:hover > td {
+  background-color: #d8f5f4 !important;
+}
+
+/* 收起行首列左侧加 teal 竖条 */
+.history-table tbody tr.is-collapsed > td:first-child {
+  border-left: 2px solid #0fc6c2;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  box-shadow: inset 3px 0 0 #0fc6c2;
+}
+
+.history-table tbody tr.is-collapsed > td:last-child {
+  border-right: 2px solid #0fc6c2;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
 /* 输入框统一样式 */
 input:focus,
 select:focus,
