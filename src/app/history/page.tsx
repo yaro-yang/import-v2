@@ -95,7 +95,7 @@ export default function HistoryPage() {
   // 待删除的分组
   const [deletingGroup, setDeletingGroup] = useState<HistoryGroup | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const pageSize = 20;
+  const pageSize = 10;
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
