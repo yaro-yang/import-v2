@@ -84,7 +84,11 @@ export interface ParseRule {
   fileType: "excel" | "word" | "pdf";
   // 全局配置
   globalConfig: {
-    // 按外部编码聚合（同一外部编码的多行共享收货信息）
+    // 业务模式：
+    //   - "outbound"  默认：普通出库单，1 外部编码 = 1 父单，共享收货信息
+    //   - "transfer"  调拨单：1 外部编码 = 1 调拨单，按 (外部编码+收货门店) 拆成多个调拨明细
+    mode?: "outbound" | "transfer";
+    // 按外部编码聚合（同一外部编码的多行共享收货信息；outbound 模式生效）
     groupByExternalCode?: boolean;
     externalCodeField?: string;
     // 合并多 sheet
@@ -172,9 +176,29 @@ export interface OutboundOrder {
   sourceRow?: number;
   ruleId?: string;
   status: "draft" | "submitted" | "error";
+  // 调拨单模式：所属调拨单 ID（指向 transfer_orders.id）
+  transferOrderId?: string;
   // 子项：SKU 行
   items: OrderItem[];
   // 时间
+  createdAt: string;
+  submittedAt?: string;
+}
+
+// 调拨单（transfer mode 顶层）
+// 1 个调拨单 = 1 个外部编码（DB20260530001）
+// 1 个调拨单包含 N 个调拨明细（按 externalCode+storeName 分组）
+// 1 个调拨明细包含 M 条 SKU 明细
+export interface TransferOrder {
+  id: string;
+  externalCode: string;          // 调拨单号（唯一标识）
+  remark?: string;               // 调拨单级备注
+  sourceFile?: string;
+  sourceSheet?: string;
+  ruleId?: string;
+  status: "draft" | "submitted" | "error";
+  // 调拨明细（每个明细对应一个收货门店）
+  details: OutboundOrder[];
   createdAt: string;
   submittedAt?: string;
 }

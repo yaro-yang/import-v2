@@ -7,8 +7,8 @@ export async function POST(request: NextRequest) {
   await ensureDB();
   try {
     const body = await request.json();
-    // 接收 OrderItem[]（每个 SKU 一条）
-    const { orders } = body as { orders: OrderItem[] };
+    // 接收 OrderItem[]（每个 SKU 一条）+ mode（outbound/transfer）
+    const { orders, mode } = body as { orders: OrderItem[]; mode?: "outbound" | "transfer" };
 
     if (!orders || !Array.isArray(orders)) {
       return NextResponse.json(
@@ -25,16 +25,22 @@ export async function POST(request: NextRequest) {
       submittedAt: now,
     }));
 
-    // saveOrders 内部按 externalCode 聚合成父单 + 子表，返回聚合后的出库单数量
-    const savedOutbounds = await saveOrders(submittedItems);
+    // saveOrders 按 mode 聚合：
+    //   - outbound: 1 外部编码 = 1 父单（兼容旧行为）
+    //   - transfer: 1 外部编码 = 1 调拨单 + N 调拨明细（按 externalCode+storeName 拆分）
+    const { savedOutbounds, savedTransfers } = await saveOrders(submittedItems, mode || "outbound");
     // 同时返回保存的 SKU 行数
     const savedSkuCount = submittedItems.length;
 
+    const message = mode === "transfer"
+      ? `成功提交 ${savedTransfers} 张调拨单（${savedOutbounds} 个调拨明细，${savedSkuCount} 条 SKU）`
+      : `成功提交 ${savedOutbounds} 张出库单（${savedSkuCount} 条 SKU）`;
+
     return NextResponse.json({
       success: true,
-      data: { savedCount: savedSkuCount, savedOutbounds },
-      message: `成功提交 ${savedOutbounds} 张出库单（${savedSkuCount} 条 SKU）`,
-    } as ApiResponse<{ savedCount: number; savedOutbounds: number }>);
+      data: { savedCount: savedSkuCount, savedOutbounds, savedTransfers },
+      message,
+    } as ApiResponse<{ savedCount: number; savedOutbounds: number; savedTransfers: number }>);
   } catch (error) {
     console.error("Save orders error:", error);
     return NextResponse.json(

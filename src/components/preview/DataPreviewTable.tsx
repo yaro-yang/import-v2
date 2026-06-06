@@ -62,7 +62,12 @@ export function DataPreviewTable({
   const parentRef = useRef<HTMLDivElement>(null);
 
   // 实时校验 + 错误映射
-  const { errors, errorFieldMap, duplicateCodes, duplicateOrderIds } = useMemo(() => {
+  const { errors, errorFieldMap, duplicateCodes, duplicateOrderIds } = useMemo((): {
+    errors: ValidationError[];
+    errorFieldMap: Map<string, Set<string>>;
+    duplicateCodes: string[];
+    duplicateOrderIds: Set<string>;
+  } => {
     // 1. 字段级校验
     const { errors: fieldErrors } = validateOrders(orders);
 
@@ -76,12 +81,16 @@ export function DataPreviewTable({
       }
     }
 
-    // 2. 批次内重复外部编码
+    // 2. 批次内重复检测（复合键：调拨单号+门店+SKU）
+    // 调拨单场景：同一调拨单号下 9 个 SKU 分发到 3 个不同门店 → 不会误报
+    // 出库单场景：缺少 storeName 时退化为 code|skuCode → 等同于按 SKU 粒度查重
     const batchDup = findBatchDuplicates(orders);
-    const duplicateCodes: string[] = [];
+    const duplicateKeys: string[] = [];
     const duplicateOrderIds = new Set<string>();
-    for (const [code, indices] of batchDup) {
-      duplicateCodes.push(code);
+    for (const [key, indices] of batchDup) {
+      // 解析复合键：[code, store, sku]
+      const [code, store, sku] = key.split("|");
+      duplicateKeys.push(code);
       for (const i of indices) {
         const order = orders[i];
         if (order) duplicateOrderIds.add(order.id);
@@ -92,10 +101,15 @@ export function DataPreviewTable({
           const id = order.id;
           if (!errorFieldMap.has(id)) errorFieldMap.set(id, new Set());
           errorFieldMap.get(id)!.add("externalCode");
+          // 描述性消息：让用户看清楚是哪个组合重复了
+          const desc =
+            store === "__no_store__"
+              ? `${code} / SKU:${sku}`
+              : `${code} / ${store} / SKU:${sku}`;
           fieldErrors.push({
             row: order.sourceRow || 0,
             field: "externalCode",
-            message: `本批次内重复（出现 ${indices.length} 次）：${code}`,
+            message: `本批次内重复（出现 ${indices.length} 次）：${desc}`,
             severity: "error",
           });
         }

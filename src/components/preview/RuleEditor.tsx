@@ -125,6 +125,10 @@ export function RuleEditor({
   const [groupByExternalCode, setGroupByExternalCode] = useState(
     rule?.globalConfig?.groupByExternalCode ?? false
   );
+  // 业务模式：outbound（普通出库单）/ transfer（调拨单）
+  const [mode, setMode] = useState<"outbound" | "transfer">(
+    rule?.globalConfig?.mode || "outbound"
+  );
   const [skipTotalRow, setSkipTotalRow] = useState(
     rule?.postProcessing?.skipTotalRow ?? false
   );
@@ -169,6 +173,7 @@ export function RuleEditor({
         description: "",
         fileType: rule?.fileType || fileType,
         globalConfig: {
+          mode,
           groupByExternalCode,
           externalCodeField: "externalCode",
           mergeSheets: rule?.globalConfig?.mergeSheets || false,
@@ -381,6 +386,62 @@ export function RuleEditor({
             </div>
           </div>
           <div className="flex flex-col gap-1.5 pt-1">
+            {/* 业务模式选择：出库单 / 调拨单 */}
+            <div className="mb-2">
+              <p className="text-xs font-semibold text-[#4e5969] mb-1.5">业务模式</p>
+              <div className="grid grid-cols-2 gap-2">
+                <label
+                  className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    mode === "outbound"
+                      ? "border-[#0fc6c2] bg-[#e8fafa]"
+                      : "border-[#e5e6eb] hover:border-[#c9cdd4] bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="ruleMode"
+                    value="outbound"
+                    checked={mode === "outbound"}
+                    onChange={() => setMode("outbound")}
+                    className="accent-[#0fc6c2] mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#1d2129]">出库单</p>
+                    <p className="text-xs text-[#86909c] leading-relaxed mt-0.5">
+                      1 外部编码 = 1 出库单
+                    </p>
+                  </div>
+                </label>
+                <label
+                  className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    mode === "transfer"
+                      ? "border-[#0fc6c2] bg-[#e8fafa]"
+                      : "border-[#e5e6eb] hover:border-[#c9cdd4] bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="ruleMode"
+                    value="transfer"
+                    checked={mode === "transfer"}
+                    onChange={() => setMode("transfer")}
+                    className="accent-[#0fc6c2] mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#1d2129]">调拨单</p>
+                    <p className="text-xs text-[#86909c] leading-relaxed mt-0.5">
+                      1 调拨单 → N 调拨明细 → M SKU
+                    </p>
+                  </div>
+                </label>
+              </div>
+              {mode === "transfer" && (
+                <p className="text-xs text-[#d97b00] mt-1.5 leading-relaxed">
+                  💡 调拨单模式：按 (外部编码 + 收货门店) 自动拆分成多个调拨明细，不报&ldquo;外部编码重复&rdquo;
+                </p>
+              )}
+            </div>
+
             <label className="flex items-center gap-2 cursor-pointer text-sm text-[#4e5969] hover:text-[#1d2129] py-1">
               <input
                 type="checkbox"

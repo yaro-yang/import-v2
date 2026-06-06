@@ -114,9 +114,34 @@ export function validateOrders(orders: OrderItem[]): {
   return { errors: allErrors, errorOrderIds, hasError: allErrors.length > 0 };
 }
 
-// 检测同批次内的外部编码重复
-// 返回 Map<externalCode, [indices]>（包含至少 2 条的才返回）
+// 检测同批次内的重复
+// 默认按 (externalCode, storeName, skuCode) 复合键判断 — 调拨单场景下
+// 同一调拨单号下的 9 个 SKU 分发到 3 个不同门店不会误报
+// 返回 Map<duplicateKey, [indices]>（出现 ≥2 次的才返回）
 export function findBatchDuplicates(orders: OrderItem[]): Map<string, number[]> {
+  const map = new Map<string, number[]>();
+  for (let i = 0; i < orders.length; i++) {
+    const o = orders[i];
+    const code = (o.externalCode || "").trim();
+    if (!code) continue;
+    // 复合键：调拨单号 + 收货门店 + SKU 编码
+    // 缺少 storeName 时退化为 code|skuCode（兼容纯 SKU 粒度的出库单）
+    const store = (o.storeName || "").trim() || "__no_store__";
+    const sku = (o.skuCode || "").trim() || "__no_sku__";
+    const key = `${code}|${store}|${sku}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(i);
+  }
+  const duplicates = new Map<string, number[]>();
+  for (const [key, indices] of map) {
+    if (indices.length >= 2) duplicates.set(key, indices);
+  }
+  return duplicates;
+}
+
+// 兼容旧 API：仅按 externalCode 判重（出库单模式）
+// 现在默认走 findBatchDuplicates 的复合键版本；保留此函数以备未来需要
+export function findBatchDuplicatesByCode(orders: OrderItem[]): Map<string, number[]> {
   const map = new Map<string, number[]>();
   for (let i = 0; i < orders.length; i++) {
     const code = (orders[i].externalCode || "").trim();

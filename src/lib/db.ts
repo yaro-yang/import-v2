@@ -1,12 +1,16 @@
 // 数据库操作层 - 使用 Neon PostgreSQL (Serverless)
 // 兼容 Vercel Edge Runtime
 // 无 DATABASE_URL 时回退到本地 JSON 文件存储
-// 父子表设计：
-//   - outbound_orders: 父单（按 externalCode 聚合，保存收货门店、收件人、地址等共享字段）
+// 三层结构（调拨单模式）：
+//   - transfer_orders: 调拨单头（按 externalCode 聚合，1 调拨单 = 1 行）
+//   - outbound_orders: 调拨明细（按 externalCode+storeName 聚合，FK → transfer_orders.id）
+//   - order_items: SKU 明细（每条 SKU 一行，FK → outbound_orders.id）
+// 出库单模式（兼容）：
+//   - outbound_orders: 父单（按 externalCode 聚合，1 出库单 = 1 行）
 //   - order_items: 子表（每条 SKU 一行，FK → outbound_orders.id）
 
 import { neon } from "@neondatabase/serverless";
-import { OrderItem, OutboundOrder, ParseRule, ValidationError } from "@/types";
+import { OrderItem, OutboundOrder, ParseRule, ValidationError, TransferOrder } from "@/types";
 import { promises as fs } from "fs";
 import * as path from "path";
 
@@ -17,17 +21,22 @@ const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
 // 本地文件存储接口
 interface LocalStore {
   rules: Record<string, ParseRule>;
-  // 用 OutboundOrder 序列化保存
+  // 出库单（outbound 模式 + transfer 模式的明细）
   orders: Record<string, OutboundOrder>;
+  // 调拨单（transfer 模式顶层）
+  transfers: Record<string, TransferOrder>;
 }
 
 // 读取本地存储
 async function readLocalStore(): Promise<LocalStore> {
   try {
     const raw = await fs.readFile(ORDERS_FILE, "utf-8");
-    return JSON.parse(raw) as LocalStore;
+    const parsed = JSON.parse(raw) as LocalStore;
+    // 向后兼容：旧版文件没有 transfers 字段
+    if (!parsed.transfers) parsed.transfers = {};
+    return parsed;
   } catch {
-    return { rules: {}, orders: {} };
+    return { rules: {}, orders: {}, transfers: {} };
   }
 }
 
@@ -102,7 +111,26 @@ export async function initDB() {
   }
   const sql = getSql();
 
-  // 父表：出库单
+  // 顶层：调拨单（transfer 模式）。1 调拨单 = 1 外部编码
+  await sql`
+    CREATE TABLE IF NOT EXISTS transfer_orders (
+      id TEXT PRIMARY KEY,
+      external_code TEXT NOT NULL,
+      remark TEXT,
+      source_file TEXT,
+      source_sheet TEXT,
+      rule_id TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      submitted_at TIMESTAMPTZ
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_transfer_external_code ON transfer_orders(external_code)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS uq_transfer_external_code ON transfer_orders(external_code)`;
+
+  // 父表：出库单 / 调拨明细
+  // transfer 模式下：每行有 transfer_order_id FK
+  // outbound 模式下：transfer_order_id 为 NULL
   await sql`
     CREATE TABLE IF NOT EXISTS outbound_orders (
       id TEXT PRIMARY KEY,
@@ -117,10 +145,18 @@ export async function initDB() {
       source_row INTEGER,
       rule_id TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
+      transfer_order_id TEXT REFERENCES transfer_orders(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       submitted_at TIMESTAMPTZ
     )
   `;
+
+  // 迁移：给已存在的 outbound_orders 添加 transfer_order_id 列（幂等）
+  await sql`
+    ALTER TABLE outbound_orders
+    ADD COLUMN IF NOT EXISTS transfer_order_id TEXT REFERENCES transfer_orders(id) ON DELETE CASCADE
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_outbound_transfer_id ON outbound_orders(transfer_order_id)`;
 
   // 子表：SKU 行
   await sql`
@@ -221,22 +257,99 @@ function mapItemRow(row: Record<string, unknown>, parent: Partial<OutboundOrder>
   };
 }
 
+// ====== 调拨单聚合（按 externalCode+storeName 分组） ======
+function groupItemsIntoOutboundOrdersByStore(
+  items: OrderItem[]
+): { transfer: TransferOrder | null; details: OutboundOrder[] }[] {
+  // 第一层：按 externalCode 分组（一个调拨单）
+  // 第二层：按 storeName 分组（一个调拨明细）
+  const byCode = new Map<string, OrderItem[]>();
+  for (const it of items) {
+    const code = it.externalCode || "__no_code__";
+    if (!byCode.has(code)) byCode.set(code, []);
+    byCode.get(code)!.push(it);
+  }
+
+  const result: { transfer: TransferOrder | null; details: OutboundOrder[] }[] = [];
+
+  for (const [code, codeItems] of byCode) {
+    // 第二层：按 storeName 分组
+    const byStore = new Map<string, OrderItem[]>();
+    for (const it of codeItems) {
+      const store = (it.storeName || "").trim() || "__no_store__";
+      if (!byStore.has(store)) byStore.set(store, []);
+      byStore.get(store)!.push(it);
+    }
+
+    const details: OutboundOrder[] = [];
+    for (const [store, storeItems] of byStore) {
+      const first = storeItems[0];
+      const detailId = `out_${code}_${store}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const detail: OutboundOrder = {
+        id: detailId,
+        externalCode: first.externalCode,
+        storeName: first.storeName,
+        recipientName: first.recipientName,
+        recipientPhone: first.recipientPhone,
+        recipientAddress: first.recipientAddress,
+        remark: first.remark,
+        sourceFile: first.sourceFile,
+        sourceSheet: first.sourceSheet,
+        sourceRow: first.sourceRow,
+        ruleId: first.ruleId,
+        status: first.status || "draft",
+        items: storeItems.map((it) => ({ ...it, outboundOrderId: detailId })),
+        createdAt: first.createdAt,
+        submittedAt: first.submittedAt,
+      };
+      details.push(detail);
+    }
+
+    // 调拨单头
+    const transfer: TransferOrder | null = code !== "__no_code__" ? {
+      id: `trf_${code}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      externalCode: code,
+      sourceFile: codeItems[0].sourceFile,
+      sourceSheet: codeItems[0].sourceSheet,
+      ruleId: codeItems[0].ruleId,
+      status: codeItems[0].status || "draft",
+      details,
+      createdAt: codeItems[0].createdAt,
+      submittedAt: codeItems[0].submittedAt,
+    } : null;
+
+    result.push({ transfer, details });
+  }
+
+  return result;
+}
+
 /**
- * 保存订单：接受 OrderItem[]，按 externalCode 聚合后插入父表 + 子表
- * 已存在同 externalCode 的父单 → 覆盖（去重）
+ * 保存订单：接受 OrderItem[]，按 mode 聚合
+ *   - mode = "outbound" (默认)：按 externalCode 聚合成 1 个父单
+ *   - mode = "transfer"：先按 externalCode 聚合成调拨单，再按 (externalCode+storeName) 拆成调拨明细
+ * 已存在同 externalCode 的记录 → 覆盖（去重）
  */
-export async function saveOrders(items: OrderItem[]): Promise<number> {
-  if (items.length === 0) return 0;
+export async function saveOrders(
+  items: OrderItem[],
+  mode: "outbound" | "transfer" = "outbound"
+): Promise<{ savedOutbounds: number; savedTransfers: number }> {
+  if (items.length === 0) return { savedOutbounds: 0, savedTransfers: 0 };
+
+  if (mode === "transfer") {
+    return saveTransferOrders(items);
+  }
+
+  // 兼容旧的 outbound 模式
   const outbounds = groupItemsIntoOutboundOrders(items);
 
   if (!hasDatabase()) {
-    // 本地存储：直接保存聚合后的 OutboundOrder
     const store = await readLocalStore();
     for (const ob of outbounds) {
       store.orders[ob.id] = ob;
     }
     await writeLocalStore(store);
-    return outbounds.length;
+    return { savedOutbounds: outbounds.length, savedTransfers: 0 };
   }
 
   const sql = getSql();
@@ -306,7 +419,130 @@ export async function saveOrders(items: OrderItem[]): Promise<number> {
     savedCount++;
   }
 
-  return savedCount;
+  return { savedOutbounds: savedCount, savedTransfers: 0 };
+}
+
+// ====== 调拨单落库：transfer_orders + outbound_orders + order_items ======
+async function saveTransferOrders(items: OrderItem[]): Promise<{ savedOutbounds: number; savedTransfers: number }> {
+  const groups = groupItemsIntoOutboundOrdersByStore(items);
+  let savedTransfers = 0;
+  let savedOutbounds = 0;
+
+  if (!hasDatabase()) {
+    const store = await readLocalStore();
+    for (const { transfer, details } of groups) {
+      for (const detail of details) {
+        store.orders[detail.id] = detail;
+        savedOutbounds++;
+      }
+      if (transfer) {
+        store.transfers[transfer.id] = transfer;
+        savedTransfers++;
+      }
+    }
+    await writeLocalStore(store);
+    return { savedOutbounds, savedTransfers };
+  }
+
+  const sql = getSql();
+  const now = new Date().toISOString();
+
+  for (const { transfer, details } of groups) {
+    // 1. UPSERT 调拨单头
+    let transferId: string | null = null;
+    if (transfer) {
+      const tRes = await sql`
+        INSERT INTO transfer_orders (
+          id, external_code, source_file, source_sheet, rule_id, status, created_at, submitted_at
+        ) VALUES (
+          ${transfer.id},
+          ${transfer.externalCode},
+          ${transfer.sourceFile || null},
+          ${transfer.sourceSheet || null},
+          ${transfer.ruleId || null},
+          ${transfer.status || "draft"},
+          ${transfer.createdAt || now},
+          ${transfer.submittedAt || null}
+        )
+        ON CONFLICT (external_code) DO UPDATE SET
+          source_file = EXCLUDED.source_file,
+          source_sheet = EXCLUDED.source_sheet,
+          rule_id = EXCLUDED.rule_id,
+          status = EXCLUDED.status,
+          submitted_at = EXCLUDED.submitted_at
+        RETURNING id
+      `;
+      transferId = (tRes as Record<string, unknown>[])[0]?.id as string || transfer.id;
+      savedTransfers++;
+    }
+
+    // 2. UPSERT 每个调拨明细
+    for (const detail of details) {
+      const obRes = await sql`
+        INSERT INTO outbound_orders (
+          id, external_code, store_name, recipient_name, recipient_phone,
+          recipient_address, remark, source_file, source_sheet, source_row,
+          rule_id, status, transfer_order_id, created_at, submitted_at
+        ) VALUES (
+          ${detail.id},
+          ${detail.externalCode || null},
+          ${detail.storeName || null},
+          ${detail.recipientName || null},
+          ${detail.recipientPhone || null},
+          ${detail.recipientAddress || null},
+          ${detail.remark || null},
+          ${detail.sourceFile || null},
+          ${detail.sourceSheet || null},
+          ${detail.sourceRow || null},
+          ${detail.ruleId || null},
+          ${detail.status || "draft"},
+          ${transferId},
+          ${detail.createdAt || now},
+          ${detail.submittedAt || null}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          external_code = EXCLUDED.external_code,
+          store_name = EXCLUDED.store_name,
+          recipient_name = EXCLUDED.recipient_name,
+          recipient_phone = EXCLUDED.recipient_phone,
+          recipient_address = EXCLUDED.recipient_address,
+          remark = EXCLUDED.remark,
+          source_file = EXCLUDED.source_file,
+          source_sheet = EXCLUDED.source_sheet,
+          source_row = EXCLUDED.source_row,
+          rule_id = EXCLUDED.rule_id,
+          status = EXCLUDED.status,
+          transfer_order_id = EXCLUDED.transfer_order_id,
+          submitted_at = EXCLUDED.submitted_at
+        RETURNING id
+      `;
+      const finalObId = (obRes as Record<string, unknown>[])[0]?.id as string || detail.id;
+      savedOutbounds++;
+
+      // 3. 清理旧 SKU 行
+      await sql`DELETE FROM order_items WHERE outbound_order_id = ${finalObId}`;
+
+      // 4. 插入新 SKU 行
+      for (const item of detail.items) {
+        await sql`
+          INSERT INTO order_items (
+            id, outbound_order_id, sku_code, sku_name, sku_quantity, sku_spec, source_row, errors
+          ) VALUES (
+            ${item.id},
+            ${finalObId},
+            ${item.skuCode},
+            ${item.skuName},
+            ${item.skuQuantity},
+            ${item.skuSpec || null},
+            ${item.sourceRow || null},
+            ${item.errors ? JSON.stringify(item.errors) : null}
+          )
+        `;
+      }
+    }
+  }
+
+  return { savedOutbounds, savedTransfers };
 }
 
 /**

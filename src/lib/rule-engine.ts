@@ -416,7 +416,22 @@ function processRows(
   }
 
   // 按外部编码聚合（同一 externalCode 的多行 → 共享收货信息，每行一个 SKU）
-  if (rule.globalConfig.groupByExternalCode && rule.globalConfig.externalCodeField) {
+  // transfer 模式（调拨单）：每行一个独立 OrderItem，各自保留门店/收件人/地址信息
+  // 落库时由 db.ts 按 (externalCode+storeName) 聚合为多个调拨明细
+  const mode = rule.globalConfig.mode || "outbound";
+  if (mode === "transfer") {
+    // 调拨单模式：每行独立处理，不做"按 externalCode 共享收货信息"的合并
+    for (let i = 0; i < filteredData.length; i++) {
+      const row = filteredData[i];
+      const order = buildOrderFromRow(row, rule, fileName);
+      if (order) {
+        const errs = validateOrder(order, rawData.length);
+        if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
+        orders.push(order);
+      }
+      onProgress?.(i + 1, total, `已处理 ${i + 1}/${total} 行`);
+    }
+  } else if (rule.globalConfig.groupByExternalCode && rule.globalConfig.externalCodeField) {
     const grouped = groupByExternalCode(filteredData, rule);
     const groups = Array.from(grouped.entries());
     onProgress?.(0, groups.length, `识别到 ${groups.length} 个外部编码`);

@@ -51,6 +51,9 @@ export default function HomePage() {
   const [, setLiveErrorOrderIds] = useState<Set<string>>(new Set());
   const [duplicateCodes, setDuplicateCodes] = useState<string[]>([]);
 
+  // 当前选中规则的 mode（outbound/transfer）— 用于提交时告诉后端按哪种模式落库
+  const [currentRuleMode, setCurrentRuleMode] = useState<"outbound" | "transfer">("outbound");
+
   // 提交按钮防重复
   const [submitting, setSubmitting] = useState(false);
 
@@ -537,17 +540,17 @@ export default function HomePage() {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders }),
+        body: JSON.stringify({ orders, mode: currentRuleMode }),
       });
       const data = await res.json();
 
       if (data.success) {
         setSubmittedCount(data.data.savedCount);
         setStep("submitted");
-        toast.success(
-          `成功提交 ${data.data.savedOutbounds} 张出库单（${data.data.savedCount} 条 SKU）！`,
-          { id: toastId }
-        );
+        const okMsg = currentRuleMode === "transfer"
+          ? `成功提交 ${data.data.savedTransfers ?? 0} 张调拨单（${data.data.savedOutbounds ?? 0} 个调拨明细，${data.data.savedCount} 条 SKU）！`
+          : `成功提交 ${data.data.savedOutbounds ?? 0} 张出库单（${data.data.savedCount} 条 SKU）！`;
+        toast.success(okMsg, { id: toastId });
       } else {
         toast.error(data.error || "提交失败", { id: toastId });
       }
@@ -557,7 +560,7 @@ export default function HomePage() {
     } finally {
       setSubmitting(false);
     }
-  }, [orders, errors, liveErrors, submitting]);
+  }, [orders, errors, liveErrors, submitting, currentRuleMode]);
 
   // 实时校验回调
   const handleValidationChange = useCallback(
@@ -731,7 +734,12 @@ export default function HomePage() {
             <RuleSelector
               rules={rules}
               selectedRuleId={selectedRuleId}
-              onSelectRule={setSelectedRuleId}
+              onSelectRule={(id) => {
+                setSelectedRuleId(id);
+                // 同步当前规则的 mode 到 state（提交时用）
+                const r = rules.find((x) => x.id === id);
+                setCurrentRuleMode((r?.globalConfig?.mode as "outbound" | "transfer") || "outbound");
+              }}
               onCreateNew={handleCreateNewRule}
               loading={false}
             />
@@ -937,7 +945,8 @@ export default function HomePage() {
             <p className="text-sm text-[#4e5969] mb-6 leading-relaxed">
               已成功提交{" "}
               <span className="font-semibold text-[#0fc6c2] text-base">{submittedCount}</span>{" "}
-              条 SKU 数据（按外部编码已自动聚合成出库单）
+              条 SKU 数据
+              {currentRuleMode === "transfer" ? "（已按调拨单 → 调拨明细 → SKU 三级聚合）" : "（按外部编码已自动聚合成出库单）"}
             </p>
             <div className="flex justify-center gap-2.5 flex-wrap">
               <Button onClick={handleReset}>
