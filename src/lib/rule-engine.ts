@@ -588,22 +588,18 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   const firstDataRow = rawData[0];
 
   // ===== 第一步：从 cells 的命名 key 中构建 colIndex → colName 映射 =====
-  // excelToRawData 会给每个单元格两个 key：命名 key（如 "SKU名称"）和索引 key（如 "col_2"）
-  // 两者有相同的值，所以可以通过匹配值来找对应关系
+  // excelToRawData 按列顺序依次写入命名 key 和 col_N key，
+  // 因此过滤掉 col_ 前缀后，namedKeys 的下标就是真实的列索引。
+  // 注意：不能用"按值匹配"的方式找对应关系——第一行数据若存在重复值
+  // （如 SKU条码 与 外部商品编码 都是 "07010747"，或门店列都是空字符串），
+  // 会导致多个命名 key 全部映射到同一个 col_N，门店列识别失败。
   const namedKeys = Object.keys(firstDataRow.cells).filter(
     (k) => !k.startsWith("col_") && !k.startsWith("_transposed")
   );
   const colNameByIndex = new Map<number, string>();
-  for (const name of namedKeys) {
-    const val = firstDataRow.cells[name];
-    for (let c = 0; c < 200; c++) {
-      const colKey = `col_${c}`;
-      if (firstDataRow.cells[colKey] === val) {
-        colNameByIndex.set(c, name);
-        break;
-      }
-    }
-  }
+  namedKeys.forEach((name, idx) => {
+    colNameByIndex.set(idx, name);
+  });
 
   // ===== 第二步：确定门店列 =====
   const standardKeywords = [

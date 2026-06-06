@@ -58,7 +58,7 @@ ${contentPreview}
    - 标准表：从表头行找对应的列名，如"物品编码"、"SKU名称"、"调入门店"
    - **卡片式：SKU 字段的 columnName 直接填卡片内 SKU 小表的列名（如"物品编码"、"物品名称"、"数量"）**
    - 卡片式/多区域：如果在表头找不到，检查内容中是否有key:value对，如"调拨单号：xxx"，则columnName填"调拨单号"
-   - 矩阵布局：SKU字段从前面标准列中映射；storeName由矩阵转置自动填充门店列名；**externalCode如果表中找不到任何单号字段，confidence填0.1，columnName填null，并在notes中说明"矩阵分配表无外部单号，可用文件名替代"**
+   - 矩阵布局：SKU字段从前面标准列中映射；storeName由矩阵转置自动填充门店列名；**externalCode如果表中找不到任何单号字段，confidence填0.1，columnName填null，staticValue填空字符串"", defaultValue填空字符串""，不要用文件名替代——矩阵分配表本身就是货主对各门店的分配清单，没有外部单号**
 
 4. 特殊模式检测（非常重要）：
    a) cardMode: true —— 如果内容包含"▶ 调拨记录"、"▶ 配送记录"等卡片分隔符
@@ -385,13 +385,12 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
         continue;
       }
       if (field === "externalCode") {
-        // 纯矩阵分配表没有外部单号，使用文件名作为兜底
-        const baseName = request.fileName.replace(/\.[^.]+$/, "");
+        // 纯矩阵分配表没有外部单号，外部编码留空
         mappings.push({
           targetField: field,
-          suggestedSource: baseName,
-          confidence: 0.5,
-          note: `矩阵分配表无单号字段，使用文件名"${baseName}"作为外部编码`,
+          suggestedSource: "",
+          confidence: 0.4,
+          note: "矩阵分配表无单号字段，外部编码留空",
         });
         continue;
       }
@@ -473,14 +472,13 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       matchMode = "externalCode";
     }
 
-    // externalCode 兜底：矩阵模式下也没找到，使用文件名
+    // externalCode 兜底：矩阵模式下也没找到，外部编码留空
     if (!found && field === "externalCode" && matrixStoreColumns.length >= 2) {
-      const baseName = request.fileName.replace(/\.[^.]+$/, "");
       mappings.push({
         targetField: field,
-        suggestedSource: baseName,
-        confidence: 0.45,
-        note: `矩阵模式未检测到单号字段，使用文件名"${baseName}"作为外部编码`,
+        suggestedSource: "",
+        confidence: 0.3,
+        note: "矩阵模式未检测到单号字段，外部编码留空",
       });
       continue;
     }
@@ -553,13 +551,13 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
         columnName: "矩阵门店列值(转置后自动填充)",
       };
     }
-    // 矩阵模式：externalCode 用 static_value 填入文件名（表中无此列）
+    // 矩阵模式：externalCode 用 static_value 留空（表中无此列，不应填文件名）
     if (isPureMatrixInventoryTable && m.targetField === "externalCode") {
       return {
         targetField: m.targetField,
         mode: "static_value" as FieldMapping["mode"],
-        staticValue: baseName,
-        defaultValue: baseName,
+        staticValue: "",
+        defaultValue: "",
       };
     }
     return {
@@ -749,6 +747,14 @@ function convertAIResponse(
       }
     }
 
+    // 矩阵模式下：externalCode 强制留空（防御：AI 偶尔会填文件名/随便猜，这里兜底清空）
+    let staticVal = m.staticValue as string | undefined;
+    let defaultVal = m.defaultValue as string | undefined;
+    if (isAIResultMatrixMode && targetField === "externalCode") {
+      staticVal = "";
+      defaultVal = "";
+    }
+
     return {
       targetField,
       mode,
@@ -757,8 +763,8 @@ function convertAIResponse(
       regexPattern: m.regexPattern as string | undefined,
       regexGroup: m.regexGroup as number | undefined,
       rowKeyPattern: m.rowKeyPattern as string | undefined,
-      staticValue: m.staticValue as string | undefined,
-      defaultValue: m.defaultValue as string | undefined,
+      staticValue: staticVal,
+      defaultValue: defaultVal,
     };
   });
 
