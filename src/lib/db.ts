@@ -341,101 +341,24 @@ function groupItemsIntoOutboundOrdersByStore(
 }
 
 /**
- * 保存订单：接受 OrderItem[]，按 mode 聚合
- *   - mode = "outbound" (默认)：按 externalCode 聚合成 1 个父单
- *   - mode = "transfer"：先按 externalCode 聚合成调拨单，再按 (externalCode+storeName) 拆成调拨明细
- * 已存在同 externalCode 的记录 → 覆盖（去重）
+ * 保存订单：接受 OrderItem[]，统一按 3 层结构落库
+ *   transfer_order（1 外部编码 = 1 主表）
+ *     → outbound_order（1 主表 + N 个门店 = N 条次表）
+ *       → order_item（1 次表 + M 个 SKU = M 条明细）
+ *
+ * 这样同一运单号下的多门店数据会自然形成 rowspan 表格：
+ *   1 外部编码 + N 行门店 + M 行 SKU
+ *
+ * 已存在同 externalCode 的 transfer → 覆盖（去重）
  */
 export async function saveOrders(
   items: OrderItem[],
-  mode: "outbound" | "transfer" = "outbound"
+  _mode: "outbound" | "transfer" = "outbound"
 ): Promise<{ savedOutbounds: number; savedTransfers: number }> {
   if (items.length === 0) return { savedOutbounds: 0, savedTransfers: 0 };
 
-  if (mode === "transfer") {
-    return saveTransferOrders(items);
-  }
-
-  // 兼容旧的 outbound 模式
-  const outbounds = groupItemsIntoOutboundOrders(items);
-
-  if (!hasDatabase()) {
-    const store = await readLocalStore();
-    for (const ob of outbounds) {
-      store.orders[ob.id] = ob;
-    }
-    await writeLocalStore(store);
-    return { savedOutbounds: outbounds.length, savedTransfers: 0 };
-  }
-
-  const sql = getSql();
-  const now = new Date().toISOString();
-  let savedCount = 0;
-
-  for (const ob of outbounds) {
-    // 1. UPSERT 父单（按 external_code 唯一匹配）
-    const parentId = await sql`
-      INSERT INTO outbound_orders (
-        id, external_code, store_name, recipient_name, recipient_phone,
-        recipient_address, remark, source_file, source_sheet, source_row,
-        rule_id, status, created_at, submitted_at
-      ) VALUES (
-        ${ob.id},
-        ${ob.externalCode || null},
-        ${ob.storeName || null},
-        ${ob.recipientName || null},
-        ${ob.recipientPhone || null},
-        ${ob.recipientAddress || null},
-        ${ob.remark || null},
-        ${ob.sourceFile || null},
-        ${ob.sourceSheet || null},
-        ${ob.sourceRow || null},
-        ${ob.ruleId || null},
-        ${ob.status || "draft"},
-        ${ob.createdAt || now},
-        ${ob.submittedAt || null}
-      )
-      ON CONFLICT (id) DO UPDATE SET
-        external_code = EXCLUDED.external_code,
-        store_name = EXCLUDED.store_name,
-        recipient_name = EXCLUDED.recipient_name,
-        recipient_phone = EXCLUDED.recipient_phone,
-        recipient_address = EXCLUDED.recipient_address,
-        remark = EXCLUDED.remark,
-        source_file = EXCLUDED.source_file,
-        source_sheet = EXCLUDED.source_sheet,
-        source_row = EXCLUDED.source_row,
-        rule_id = EXCLUDED.rule_id,
-        status = EXCLUDED.status,
-        submitted_at = EXCLUDED.submitted_at
-      RETURNING id
-    `;
-    const finalParentId = (parentId as Record<string, unknown>[])[0]?.id as string || ob.id;
-
-    // 2. 清理该父单下旧 SKU 行（覆盖语义：旧数据被替换）
-    await sql`DELETE FROM order_items WHERE outbound_order_id = ${finalParentId}`;
-
-    // 3. 批量插入新 SKU 行
-    for (const item of ob.items) {
-      await sql`
-        INSERT INTO order_items (
-          id, outbound_order_id, sku_code, sku_name, sku_quantity, sku_spec, source_row, errors
-        ) VALUES (
-          ${item.id},
-          ${finalParentId},
-          ${item.skuCode},
-          ${item.skuName},
-          ${item.skuQuantity},
-          ${item.skuSpec || null},
-          ${item.sourceRow || null},
-          ${item.errors ? JSON.stringify(item.errors) : null}
-        )
-      `;
-    }
-    savedCount++;
-  }
-
-  return { savedOutbounds: savedCount, savedTransfers: 0 };
+  // 统一走 transfer 落库路径（即使 rule 是 outbound 模式也生成 3 层结构）
+  return saveTransferOrders(items);
 }
 
 // ====== 调拨单落库：transfer_orders + outbound_orders + order_items ======
