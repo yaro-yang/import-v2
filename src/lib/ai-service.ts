@@ -218,7 +218,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     skuSpec: { keywords: ["规格型号", "规格", "型号", "库存单位", "单位"], priority: 4 },
     storeName: { keywords: ["调入门店", "收货门店", "调入方", "收货机构", "客户名称", "收货单位", "店铺", "门店"], priority: 5 },
     recipientName: { keywords: ["收货人", "收件人", "收件人姓名", "联系人"], priority: 6 },
-    recipientPhone: { keywords: ["收货人手机号", "联系电话", "收件人电话", "联系方式", "手机", "电话"], priority: 7 },
+    recipientPhone: { keywords: ["收货电话", "收货人手机号", "联系电话", "收件人电话", "联系方式", "手机", "电话"], priority: 7 },
     recipientAddress: { keywords: ["收货地址", "收件人地址", "详细地址", "地址"], priority: 8 },
     externalCode: { keywords: ["调拨单号", "配送单号", "单据编号", "单据号", "订单号", "外部编码", "运单号", "单号"], priority: 9 },
     remark: { keywords: ["备注", "说明", "附注"], priority: 10 },
