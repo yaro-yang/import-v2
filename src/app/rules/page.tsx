@@ -12,30 +12,48 @@ import { formatDate } from "@/lib/utils";
 export default function RulesPage() {
   const [rules, setRules] = useState<ParseRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadTime, setLoadTime] = useState(0);
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<Partial<ParseRule> | null>(null);
+  const [filterType, setFilterType] = useState<"all" | "excel" | "word" | "pdf" | "ai">("all");
 
   // 加载规则
   const loadRules = useCallback(async () => {
     setLoading(true);
+    const t0 = performance.now();
     try {
       const res = await fetch("/api/rules");
       const data = await res.json();
       if (data.success) {
         setRules(data.data);
       } else {
-        // API 返回错误时不弹 toast，静默处理
         console.error("API error:", data.error);
         setRules([]);
       }
     } catch (err) {
-      // 网络错误时也不弹 toast，静默降级为空列表
       console.error("Failed to load rules:", err);
       setRules([]);
     } finally {
+      setLoadTime(Math.round(performance.now() - t0));
       setLoading(false);
     }
   }, []);
+
+  // 筛选后的规则
+  const filteredRules = rules.filter((r) => {
+    if (filterType === "all") return true;
+    if (filterType === "ai") return !!r.aiGenerated;
+    return r.fileType === filterType;
+  });
+
+  // 各类型计数
+  const counts = {
+    all: rules.length,
+    excel: rules.filter((r) => r.fileType === "excel").length,
+    word: rules.filter((r) => r.fileType === "word").length,
+    pdf: rules.filter((r) => r.fileType === "pdf").length,
+    ai: rules.filter((r) => !!r.aiGenerated).length,
+  };
 
   useEffect(() => {
     loadRules();
@@ -151,28 +169,49 @@ export default function RulesPage() {
           <div className="flex items-center gap-1 overflow-x-auto py-1.5">
             <span className="text-sm text-[#4e5969] whitespace-nowrap mr-1.5">规则类型</span>
             {[
-              { key: "all", label: "全部", count: 0, badge: false },
-              { key: "excel", label: "Excel", count: 0, badge: false },
-              { key: "word", label: "Word", count: 0, badge: false },
-              { key: "pdf", label: "PDF", count: 0, badge: false },
-              { key: "ai", label: "AI生成", count: 0, badge: false },
-            ].map((t) => (
-              <button
-                key={t.key}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap rounded-md transition-colors ${
-                  t.key === "all"
-                    ? "bg-[#e8fafa] text-[#0fc6c2]"
-                    : "text-[#4e5969] hover:bg-[#f7f8fa] hover:text-[#0fc6c2]"
-                }`}
-              >
-                {t.label}
-                {t.badge && t.count > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full bg-[#ff4d4f] text-white">
-                    {t.count > 99 ? "99+" : t.count}
+              { key: "all" as const, label: "全部" },
+              { key: "excel" as const, label: "Excel" },
+              { key: "word" as const, label: "Word" },
+              { key: "pdf" as const, label: "PDF" },
+              { key: "ai" as const, label: "AI生成" },
+            ].map((t) => {
+              const active = filterType === t.key;
+              const count = counts[t.key];
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setFilterType(t.key)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap rounded-md transition-colors cursor-pointer ${
+                    active
+                      ? "bg-[#e8fafa] text-[#0fc6c2]"
+                      : "text-[#4e5969] hover:bg-[#f7f8fa] hover:text-[#0fc6c2]"
+                  }`}
+                >
+                  {t.label}
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full ${
+                      active
+                        ? "bg-[#0fc6c2] text-white"
+                        : "bg-[#e5e6eb] text-[#4e5969]"
+                    }`}
+                  >
+                    {count}
                   </span>
-                )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
+            {loading && (
+              <span className="text-xs text-[#86909c] ml-auto flex items-center gap-1.5">
+                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                  <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" className="opacity-75" />
+                </svg>
+                加载中... (Vercel 冷启动可能 2-3 秒)
+              </span>
+            )}
+            {!loading && loadTime > 0 && (
+              <span className="text-xs text-[#86909c] ml-auto">加载耗时 {loadTime}ms</span>
+            )}
           </div>
         </div>
       </div>
@@ -210,6 +249,14 @@ export default function RulesPage() {
             action={<Button size="sm" onClick={handleCreate}>新建规则</Button>}
           />
         </div>
+      ) : filteredRules.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-8 lg:p-10">
+          <EmptyState
+            title={`没有 ${filterType === "ai" ? "AI 生成的" : filterType.toUpperCase()} 类型的规则`}
+            description="试试切换到「全部」标签查看所有规则，或创建新规则"
+            action={<Button size="sm" onClick={() => setFilterType("all")}>查看全部</Button>}
+          />
+        </div>
       ) : (
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
           <div className="overflow-x-auto">
@@ -226,7 +273,7 @@ export default function RulesPage() {
                 </tr>
               </thead>
               <tbody>
-                {rules.map((rule, index) => (
+                {filteredRules.map((rule, index) => (
                   <tr
                     key={rule.id}
                     className={`border-b border-[#f2f3f5] hover:bg-[#fafbfc] transition-colors ${
@@ -287,7 +334,12 @@ export default function RulesPage() {
 
           {/* 底部统计 */}
           <div className="px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc] flex items-center justify-between text-sm text-[#86909c]">
-            <span>共 {rules.length} 条规则</span>
+            <span>
+              {filterType === "all" ? `共 ${rules.length} 条规则` : `显示 ${filteredRules.length} / ${rules.length} 条`}
+            </span>
+            {loadTime > 0 && (
+              <span className="text-xs">本次加载耗时 {loadTime}ms</span>
+            )}
           </div>
         </div>
       )}
