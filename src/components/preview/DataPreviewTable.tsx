@@ -49,6 +49,26 @@ const columns: Array<{
   { key: "remark", label: "备注", width: 150 },
 ];
 
+// 调拨单模式：9 列（与已导入运单页统一，去掉 weight / temperatureLevel / remark）
+const transferColumns: Array<{
+  key: string;
+  label: string;
+  width: number;
+  required?: boolean;
+  type?: "text" | "number";
+  options?: readonly string[];
+}> = [
+  { key: "externalCode", label: "外部编码", width: 140 },
+  { key: "storeName", label: "收货门店", width: 160, required: true },
+  { key: "recipientName", label: "收件人", width: 100, required: true },
+  { key: "recipientPhone", label: "电话", width: 130, required: true },
+  { key: "recipientAddress", label: "地址", width: 220, required: true },
+  { key: "skuCode", label: "SKU编码", width: 130, required: true },
+  { key: "skuName", label: "SKU名称", width: 160, required: true },
+  { key: "skuQuantity", label: "数量", width: 90, required: true, type: "number" },
+  { key: "skuSpec", label: "规格型号", width: 130 },
+];
+
 export function DataPreviewTable({
   orders,
   onUpdateOrder,
@@ -244,89 +264,265 @@ export function DataPreviewTable({
     });
   }, [orders, mode]);
 
-  // ============ 调拨单模式：扁平表格（1 调拨单 = 1 外部编码行 + N 收货门店行 + M SKU 行） ============
+  // ============ 调拨单模式：Excel rowspan 合并单元格表格 ============
   if (mode === "transfer") {
     const totalDetails = transferGroups.reduce((s, g) => s + g.details.length, 0);
 
     // 字段归属
     const codeFields = new Set(["externalCode"]);
-    const storeFields = new Set(["storeName", "recipientName", "recipientPhone", "recipientAddress"]);
-    const skuFields = new Set(["skuCode", "skuName", "skuQuantity", "skuSpec", "weight", "temperatureLevel", "remark"]);
+    const storeFields = new Set([
+      "storeName",
+      "recipientName",
+      "recipientPhone",
+      "recipientAddress",
+    ]);
+    const skuFields = new Set([
+      "skuCode",
+      "skuName",
+      "skuQuantity",
+      "skuSpec",
+    ]);
 
-    // 构造扁平行
-    type CodeRow = { kind: "code"; key: string; groupIdx: number; group: typeof transferGroups[number] };
-    type StoreRow = { kind: "store"; key: string; groupIdx: number; group: typeof transferGroups[number]; detail: typeof transferGroups[number]["details"][number]; storeIdx: number };
-    type SkuRow = { kind: "sku"; key: string; groupIdx: number; group: typeof transferGroups[number]; sku: OrderItem; skuIdx: number };
-    type TRow = CodeRow | StoreRow | SkuRow;
+    // 调拨单明细的内部类型
+    type TDetail = (typeof transferGroups)[number]["details"][number];
+    type TGroup = (typeof transferGroups)[number];
 
+    // 行描述符
+    type TRow =
+      | {
+          kind: "sku";
+          key: string;
+          groupIdx: number;
+          detailIdx: number;
+          skuIdx: number;
+          detailSkuCount: number;
+          groupTotalRows: number;
+          group: TGroup;
+          detail: TDetail;
+          sku: OrderItem;
+          isFirstRowOfGroup: boolean;
+          isFirstRowOfDetail: boolean;
+          isFirstRowOfTable: boolean;
+        }
+      | {
+          kind: "empty-store";
+          key: string;
+          groupIdx: number;
+          detailIdx: number;
+          detailSkuCount: 1;
+          groupTotalRows: number;
+          group: TGroup;
+          detail: TDetail;
+          isFirstRowOfGroup: boolean;
+          isFirstRowOfDetail: true;
+          isFirstRowOfTable: boolean;
+        }
+      | {
+          kind: "empty-group";
+          key: string;
+          groupIdx: number;
+          groupTotalRows: 1;
+          group: TGroup;
+          isFirstRowOfGroup: true;
+          isFirstRowOfDetail: true;
+          isFirstRowOfTable: boolean;
+        };
+
+    // 行发射算法
     const flatRows: TRow[] = [];
+    let isFirstTableRow = true;
     for (const [gIdx, group] of transferGroups.entries()) {
-      flatRows.push({ kind: "code", key: `c-${gIdx}`, groupIdx: gIdx, group });
-      for (const [dIdx, detail] of group.details.entries()) {
-        flatRows.push({ kind: "store", key: `s-${gIdx}-${dIdx}`, groupIdx: gIdx, group, detail, storeIdx: dIdx });
+      const totalSkusInGroup = group.details.reduce(
+        (s, d) => s + d.skus.length,
+        0
+      );
+
+      // 空整组：渲染 1 行占位
+      if (totalSkusInGroup === 0) {
+        flatRows.push({
+          kind: "empty-group",
+          key: `eg-${gIdx}`,
+          groupIdx: gIdx,
+          groupTotalRows: 1,
+          group,
+          isFirstRowOfGroup: true,
+          isFirstRowOfDetail: true,
+          isFirstRowOfTable: isFirstTableRow,
+        });
+        isFirstTableRow = false;
+        continue;
       }
-      let sIdx = 0;
-      for (const detail of group.details) {
-        for (const sku of detail.skus) {
-          flatRows.push({ kind: "sku", key: `k-${sku.id}`, groupIdx: gIdx, group, sku, skuIdx: sIdx++ });
+
+      const groupTotalRows = group.details.reduce(
+        (s, d) => s + Math.max(d.skus.length, 1),
+        0
+      );
+      let groupFirstRowEmitted = false;
+
+      for (const [dIdx, detail] of group.details.entries()) {
+        const detailSkuCount = detail.skus.length;
+        const isFirstDetailRowOfGroup = !groupFirstRowEmitted;
+
+        if (detailSkuCount === 0) {
+          // 空门店：渲染 1 行占位
+          flatRows.push({
+            kind: "empty-store",
+            key: `es-${gIdx}-${dIdx}`,
+            groupIdx: gIdx,
+            detailIdx: dIdx,
+            detailSkuCount: 1,
+            groupTotalRows,
+            group,
+            detail,
+            isFirstRowOfGroup: isFirstDetailRowOfGroup,
+            isFirstRowOfDetail: true,
+            isFirstRowOfTable: isFirstTableRow,
+          });
+          isFirstTableRow = false;
+          groupFirstRowEmitted = true;
+          continue;
+        }
+
+        for (const [sIdx, sku] of detail.skus.entries()) {
+          flatRows.push({
+            kind: "sku",
+            key: `sk-${gIdx}-${dIdx}-${sIdx}`,
+            groupIdx: gIdx,
+            detailIdx: dIdx,
+            skuIdx: sIdx,
+            detailSkuCount,
+            groupTotalRows,
+            group,
+            detail,
+            sku,
+            isFirstRowOfGroup: isFirstDetailRowOfGroup,
+            isFirstRowOfDetail: sIdx === 0,
+            isFirstRowOfTable: isFirstTableRow,
+          });
+          isFirstTableRow = false;
+          groupFirstRowEmitted = true;
         }
       }
     }
 
-    // 编辑路由：根据 row.kind 把更新广播到对应 SKU
-    const updateForRow = (row: TRow, field: string, value: string) => {
-      if (row.kind === "code") {
+    // 单元格 key（用于编辑状态）
+    const cellKeyOf = (
+      row: TRow,
+      field: string
+    ): string => {
+      if (row.kind === "empty-group")
+        return `g-${row.groupIdx}-${field}`;
+      if (row.kind === "empty-store")
+        return `es-${row.groupIdx}-${row.detailIdx}-${field}`;
+      return `s-${row.groupIdx}-${row.detailIdx}-${row.skuIdx}-${field}`;
+    };
+
+    // 编辑路由：根据字段归属把更新广播到对应 SKU
+    const updateForCell = (row: TRow, field: string, value: string) => {
+      if (row.kind === "empty-group") return;
+      if (row.kind === "empty-store") {
+        // 空门店没有真实 SKU 可更新
+        return;
+      }
+      if (codeFields.has(field)) {
+        // 整组广播
         for (const detail of row.group.details) {
           for (const sku of detail.skus) onUpdateOrder(sku.id, field, value);
         }
-      } else if (row.kind === "store") {
+      } else if (storeFields.has(field)) {
+        // 该门店下所有 SKU
         for (const sku of row.detail.skus) onUpdateOrder(sku.id, field, value);
       } else {
+        // 单个 SKU
         onUpdateOrder(row.sku.id, field, value);
       }
     };
 
-    // 取值：单元格当前展示值
+    // 取值
     const valueForCell = (row: TRow, key: string): string => {
+      if (row.kind === "empty-group") return "";
       let v: unknown;
-      if (row.kind === "code") {
-        if (!codeFields.has(key)) return "";
-        v = row.group.externalCode;
-      } else if (row.kind === "store") {
-        if (!storeFields.has(key)) return "";
-        v = (row.detail as unknown as Record<string, unknown>)[key];
+      if (row.kind === "empty-store") {
+        if (key === "storeName") v = row.detail.storeName;
+        else if (key === "recipientName") v = row.detail.recipientName;
+        else if (key === "recipientPhone") v = row.detail.recipientPhone;
+        else if (key === "recipientAddress") v = row.detail.recipientAddress;
+        else return "";
       } else {
-        if (!skuFields.has(key)) return "";
-        v = (row.sku as unknown as Record<string, unknown>)[key];
+        if (codeFields.has(key) && row.isFirstRowOfGroup) {
+          v = row.group.externalCode;
+        } else if (storeFields.has(key) && row.isFirstRowOfDetail) {
+          if (key === "storeName") v = row.detail.storeName;
+          else if (key === "recipientName") v = row.detail.recipientName;
+          else if (key === "recipientPhone") v = row.detail.recipientPhone;
+          else if (key === "recipientAddress") v = row.detail.recipientAddress;
+        } else if (skuFields.has(key)) {
+          v = (row.sku as unknown as Record<string, unknown>)[key];
+        } else {
+          return "";
+        }
       }
       return v === undefined || v === null ? "" : String(v);
-    };
-
-    // 单元格是否属于该行
-    const cellApplicable = (row: TRow, key: string): boolean => {
-      if (row.kind === "code") return codeFields.has(key);
-      if (row.kind === "store") return storeFields.has(key);
-      return skuFields.has(key);
     };
 
     // 行级错误聚合
     const rowHasAnyError = (row: TRow): boolean => {
       if (row.kind === "sku") return errorFieldMap.has(row.sku.id);
-      const skus = row.kind === "code"
-        ? row.group.details.flatMap((d) => d.skus)
-        : row.detail.skus;
+      const skus =
+        row.kind === "empty-group"
+          ? row.group.details.flatMap((d) => d.skus)
+          : row.detail.skus;
       return skus.some((s) => errorFieldMap.has(s.id));
     };
+
+    // 单元格错误
     const cellHasError = (row: TRow, key: string): boolean => {
-      if (!cellApplicable(row, key)) return false;
-      if (row.kind === "sku") {
+      if (row.kind === "empty-group") return false;
+      if (row.kind === "empty-store") {
+        if (!storeFields.has(key)) return false;
+        return row.detail.skus.some(
+          (s) => errorFieldMap.get(s.id)?.has(key)
+        );
+      }
+      if (codeFields.has(key)) {
+        if (!row.isFirstRowOfGroup) return false;
+        return row.group.details
+          .flatMap((d) => d.skus)
+          .some((s) => errorFieldMap.get(s.id)?.has(key));
+      }
+      if (storeFields.has(key)) {
+        if (!row.isFirstRowOfDetail) return false;
+        return row.detail.skus.some(
+          (s) => errorFieldMap.get(s.id)?.has(key)
+        );
+      }
+      if (skuFields.has(key)) {
         const set = errorFieldMap.get(row.sku.id);
         return !!set && set.has(key);
       }
-      const skus = row.kind === "code"
-        ? row.group.details.flatMap((d) => d.skus)
-        : row.detail.skus;
-      return skus.some((s) => errorFieldMap.get(s.id)?.has(key));
+      return false;
+    };
+
+    // 行底色
+    const rowBgClass = (row: TRow): string => {
+      if (row.kind === "empty-group") return "bg-[#e8fafa]/60";
+      if (row.kind === "empty-store") return "bg-[#f7f8fa]";
+      return row.isFirstRowOfDetail ? "bg-[#f7f8fa]" : "bg-white";
+    };
+
+    // 行号标签
+    const rowLabel = (row: TRow): string => {
+      if (row.kind === "empty-group") return `${row.groupIdx + 1}`;
+      if (row.kind === "empty-store")
+        return `${row.groupIdx + 1}.${row.detailIdx + 1}`;
+      return `${row.groupIdx + 1}.${row.detailIdx + 1}.${row.skuIdx + 1}`;
+    };
+
+    // 删除整组
+    const handleDeleteGroup = (group: TGroup) => {
+      for (const detail of group.details) {
+        for (const sku of detail.skus) onDeleteOrder(sku.id);
+      }
     };
 
     return (
@@ -360,109 +556,159 @@ export function DataPreviewTable({
           </Button>
         </div>
 
-        {/* 扁平表格 */}
+        {/* Excel rowspan 表格 */}
         {flatRows.length === 0 ? (
           <div className="p-8 text-center text-sm text-[#86909c] bg-[#fafbfc] rounded-xl border border-dashed border-[#e5e6eb]">
             暂无数据，请先上传文件并解析
           </div>
         ) : (
-          <div className="border border-[#e5e6eb] rounded-xl overflow-auto" style={{ maxHeight: "clamp(360px, 65vh, 640px)" }}>
-            {/* 表头 - 吸顶 */}
-            <div className="sticky top-0 z-10 flex bg-[#fafbfc] border-b border-[#e5e6eb] min-w-max shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-              <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#fafbfc] z-20">
-                #
-              </div>
-              {columns.map((col) => (
-                <div
-                  key={col.key}
-                  className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb] whitespace-nowrap"
-                  style={{ width: col.width }}
-                >
-                  {col.label}
-                  {col.required && <span className="text-[#cf1322] ml-0.5">*</span>}
-                </div>
-              ))}
-              <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#fafbfc] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
-                操作
-              </div>
-            </div>
+          <div
+            className="border border-[#e5e6eb] rounded-xl overflow-auto"
+            style={{ maxHeight: "clamp(360px, 65vh, 640px)" }}
+          >
+            <table
+              className="w-full text-sm"
+              style={{
+                borderCollapse: "separate",
+                borderSpacing: 0,
+                minWidth: 1280,
+                tableLayout: "auto",
+              }}
+            >
+              <colgroup>
+                <col style={{ width: 48 }} />
+                {transferColumns.map((c) => (
+                  <col key={c.key} style={{ width: c.width }} />
+                ))}
+                <col style={{ width: 72 }} />
+              </colgroup>
 
-            {/* 行 */}
-            <div className="min-w-max">
-              {flatRows.map((row, rowIdx) => {
-                const isCode = row.kind === "code";
-                const isStore = row.kind === "store";
-                const isSku = row.kind === "sku";
-                const hasErr = rowHasAnyError(row);
+              <thead>
+                <tr>
+                  <th className="sticky top-0 left-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-b border-[#e5e6eb]">
+                    #
+                  </th>
+                  {transferColumns.map((col) => (
+                    <th
+                      key={col.key}
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-2.5 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-b border-[#e5e6eb] whitespace-nowrap text-left"
+                    >
+                      {col.label}
+                      {col.required && (
+                        <span className="text-[#cf1322] ml-0.5">*</span>
+                      )}
+                    </th>
+                  ))}
+                  <th className="sticky top-0 right-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-b border-[#e5e6eb]">
+                    操作
+                  </th>
+                </tr>
+              </thead>
 
-                // 行底色（区分行类型 + 分组首行加顶部边框）
-                const bgClass = isCode
-                  ? "bg-[#e8fafa]/60"
-                  : isStore
-                    ? "bg-[#f7f8fa]"
-                    : "bg-white";
-                const groupTopBorder = isCode && rowIdx > 0 ? "border-t-2 border-t-[#0fc6c2]/30" : "";
+              <tbody>
+                {flatRows.map((row) => {
+                  const hasErr = rowHasAnyError(row);
+                  const groupTopBorder =
+                    row.isFirstRowOfGroup && !row.isFirstRowOfTable
+                      ? "border-t-2 border-t-[#0fc6c2]/30"
+                      : "";
 
-                // 当前行序号显示
-                const rowLabel = isCode
-                  ? `${row.groupIdx + 1}`
-                  : isStore
-                    ? `${row.groupIdx + 1}.${row.storeIdx + 1}`
-                    : `${row.groupIdx + 1}.S${row.skuIdx + 1}`;
-
-                return (
-                  <div
-                    key={row.key}
-                    className={cn(
-                      "flex border-b border-[#f2f3f5] min-w-max hover:bg-[#fafbfc]/60 transition-colors",
-                      bgClass,
-                      groupTopBorder,
-                      hasErr && "ring-1 ring-inset ring-[#ffccc7]/60"
-                    )}
-                  >
-                    {/* 行号 - 粘性左列 */}
-                    <div
+                  return (
+                    <tr
+                      key={row.key}
                       className={cn(
-                        "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-[11px] text-center border-r border-[#f2f3f5] sticky left-0 z-10 bg-inherit font-mono",
-                        isCode ? "text-[#0fc6c2] font-semibold" : "text-[#86909c]",
-                        hasErr && "text-[#cf1322]"
+                        rowBgClass(row),
+                        "hover:bg-[#fafbfc]/60",
+                        groupTopBorder,
+                        hasErr && "ring-1 ring-inset ring-[#ffccc7]/60"
                       )}
                     >
-                      {rowLabel}
-                    </div>
-
-                    {/* 数据列 */}
-                    {columns.map((col) => {
-                      const applicable = cellApplicable(row, col.key);
-                      if (!applicable) {
-                        return (
-                          <div
-                            key={col.key}
-                            className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 border-r border-[#f2f3f5]"
-                            style={{ width: col.width }}
-                          />
-                        );
-                      }
-
-                      const isEditing = editingCell?.id === row.key && editingCell?.field === col.key;
-                      const displayValue = valueForCell(row, col.key);
-                      const hasFieldError = cellHasError(row, col.key);
-
-                      return (
-                        <div
-                          key={col.key}
+                      {/* # 列 - 合并单元格 */}
+                      {row.isFirstRowOfGroup && (
+                        <td
+                          rowSpan={row.groupTotalRows}
                           className={cn(
-                            "flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-sm border-r border-[#f2f3f5] cursor-pointer relative group",
-                            hasFieldError && "bg-[#fff1f0]"
+                            "sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center align-top border-r border-b border-[#f2f3f5] bg-inherit font-mono",
+                            row.kind !== "sku" || row.isFirstRowOfGroup
+                              ? row.kind === "sku"
+                                ? "text-[#86909c]"
+                                : "text-[#0fc6c2] font-semibold"
+                              : "text-[#86909c]",
+                            hasErr && "text-[#cf1322]"
                           )}
-                          style={{ width: col.width }}
-                          onClick={() => setEditingCell({ id: row.key, field: col.key })}
                         >
-                          {isEditing ? (
-                            col.options ? (
+                          {rowLabel(row)}
+                        </td>
+                      )}
+
+                      {/* 数据列 */}
+                      {transferColumns.map((col) => {
+                        // 字段归属判断
+                        const isCode = codeFields.has(col.key);
+                        const isStore = storeFields.has(col.key);
+                        const isSku = skuFields.has(col.key);
+
+                        // 该字段是否属于本行
+                        let cellApplicable: boolean;
+                        let rowSpan: number | undefined;
+
+                        if (isCode) {
+                          cellApplicable = row.isFirstRowOfGroup;
+                          rowSpan = row.groupTotalRows;
+                        } else if (isStore) {
+                          if (row.kind === "empty-group") {
+                            cellApplicable = false;
+                            rowSpan = undefined;
+                          } else if (row.kind === "empty-store") {
+                            cellApplicable = true;
+                            rowSpan = 1;
+                          } else {
+                            cellApplicable = row.isFirstRowOfDetail;
+                            rowSpan = row.detailSkuCount;
+                          }
+                        } else if (isSku) {
+                          if (row.kind === "empty-group") {
+                            cellApplicable = false;
+                            rowSpan = undefined;
+                          } else if (row.kind === "empty-store") {
+                            cellApplicable = false;
+                            rowSpan = undefined;
+                          } else {
+                            cellApplicable = true;
+                            rowSpan = undefined;
+                          }
+                        } else {
+                          cellApplicable = false;
+                          rowSpan = undefined;
+                        }
+
+                        if (!cellApplicable) {
+                          return null;
+                        }
+
+                        const ck = cellKeyOf(row, col.key);
+                        const isEditing =
+                          editingCell?.id === ck && editingCell?.field === col.key;
+                        const displayValue = valueForCell(row, col.key);
+                        const hasFieldError = cellHasError(row, col.key);
+
+                        // 单元格样式
+                        const cellClass = cn(
+                          "px-2.5 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top",
+                          hasFieldError && "bg-[#fff1f0]",
+                          col.key === "externalCode" &&
+                            "font-mono font-semibold text-[#1d2129]"
+                        );
+
+                        // 渲染编辑输入框
+                        const renderInput = () => {
+                          if (col.options) {
+                            return (
                               <select
                                 value={displayValue}
-                                onChange={(e) => updateForRow(row, col.key, e.target.value)}
+                                onChange={(e) =>
+                                  updateForCell(row, col.key, e.target.value)
+                                }
                                 onBlur={handleCellBlur}
                                 onKeyDown={(e) => {
                                   if (e.key === "Escape") handleCellBlur();
@@ -470,96 +716,106 @@ export function DataPreviewTable({
                                 }}
                                 className={cn(
                                   "w-full px-1.5 py-0.5 text-sm border rounded outline-none bg-white",
-                                  hasFieldError ? "border-[#cf1322] bg-[#fff1f0]" : "border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
+                                  hasFieldError
+                                    ? "border-[#cf1322] bg-[#fff1f0]"
+                                    : "border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20"
                                 )}
                                 autoFocus
                               >
                                 <option value="">—</option>
                                 {col.options.map((opt) => (
-                                  <option key={opt} value={opt}>{opt}</option>
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
                                 ))}
                               </select>
-                            ) : (
-                              <input
-                                type={col.type === "number" ? "number" : "text"}
-                                value={displayValue}
-                                onChange={(e) => updateForRow(row, col.key, e.target.value)}
-                                onBlur={handleCellBlur}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Escape") handleCellBlur();
-                                  else if (e.key === "Enter") handleCellBlur();
-                                }}
-                                className={cn(
-                                  "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
-                                  hasFieldError ? "border-[#cf1322] bg-[#fff1f0]" : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
-                                )}
-                                step={col.type === "number" ? "0.01" : undefined}
-                                min={col.type === "number" ? "0" : undefined}
-                                autoFocus
-                              />
-                            )
-                          ) : (
-                            <span
+                            );
+                          }
+                          return (
+                            <input
+                              type={col.type === "number" ? "number" : "text"}
+                              value={displayValue}
+                              onChange={(e) =>
+                                updateForCell(row, col.key, e.target.value)
+                              }
+                              onBlur={handleCellBlur}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") handleCellBlur();
+                                else if (e.key === "Enter") handleCellBlur();
+                              }}
                               className={cn(
-                                "block truncate",
-                                hasFieldError && "text-[#cf1322] font-medium",
-                                !displayValue && "text-[#c9cdd4] italic",
-                                isCode && col.key === "externalCode" && "font-mono font-semibold text-[#1d2129]"
+                                "w-full px-1.5 py-0.5 text-sm border rounded outline-none",
+                                hasFieldError
+                                  ? "border-[#cf1322] bg-[#fff1f0]"
+                                  : "border-[#0fc6c2] bg-white focus:ring-1 focus:ring-[#0fc6c2]/20"
                               )}
-                              title={displayValue}
-                            >
-                              {displayValue || "—"}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
+                              step={col.type === "number" ? "0.01" : undefined}
+                              min={col.type === "number" ? "0" : undefined}
+                              autoFocus
+                            />
+                          );
+                        };
 
-                    {/* 操作列 - 粘性右列 */}
-                    <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
-                      {isSku ? (
-                        <button
-                          onClick={() => onDeleteOrder(row.sku.id)}
-                          className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                          title="删除该 SKU"
+                        return (
+                          <td
+                            key={col.key}
+                            rowSpan={rowSpan}
+                            className={cellClass}
+                            onClick={() => {
+                              if (row.kind === "empty-group") return;
+                              setEditingCell({ id: ck, field: col.key });
+                            }}
+                          >
+                            {isEditing ? (
+                              renderInput()
+                            ) : (
+                              <span
+                                className={cn(
+                                  "block truncate",
+                                  hasFieldError &&
+                                    "text-[#cf1322] font-medium",
+                                  !displayValue && "text-[#c9cdd4] italic"
+                                )}
+                                title={displayValue}
+                              >
+                                {row.kind === "empty-group" &&
+                                (isStore || isSku)
+                                  ? "—"
+                                  : displayValue || "—"}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* 操作列 - 合并单元格 */}
+                      {row.isFirstRowOfGroup && (
+                        <td
+                          rowSpan={row.groupTotalRows}
+                          className="sticky right-0 z-10 px-2 py-2.5 text-center align-top border-b border-[#f2f3f5] bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
                         >
-                          删除
-                        </button>
-                      ) : isCode ? (
-                        <button
-                          onClick={() => {
-                            // 删除整张调拨单：移除该 group 下所有 SKU
-                            for (const detail of row.group.details) {
-                              for (const sku of detail.skus) onDeleteOrder(sku.id);
-                            }
-                          }}
-                          className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                          title="删除整张调拨单"
-                        >
-                          删除
-                        </button>
-                      ) : (
-                        // store 行
-                        <button
-                          onClick={() => {
-                            // 删除该明细：移除该 detail 下所有 SKU
-                            for (const sku of row.detail.skus) onDeleteOrder(sku.id);
-                          }}
-                          className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                          title="删除该调拨明细"
-                        >
-                          删除
-                        </button>
+                          {row.kind === "empty-group" ? (
+                            <span className="text-xs text-[#c9cdd4]">—</span>
+                          ) : (
+                            <button
+                              onClick={() => handleDeleteGroup(row.group)}
+                              className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                              title="删除整张调拨单"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </td>
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {/* 错误汇总（同 outbound 模式） */}
+        {/* 错误汇总 */}
         {errors.length > 0 && (
           <div className="mt-3 p-3 bg-[#fff7e8] border border-[#ffe4ba] rounded-lg max-h-44 overflow-y-auto">
             <p className="text-sm font-medium text-[#d97b00] mb-1.5 flex items-center gap-1.5 sticky top-0 bg-[#fff7e8] py-1 z-10">

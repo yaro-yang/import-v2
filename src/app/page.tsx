@@ -942,8 +942,9 @@ export default function HomePage() {
               className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[520px] h-[220px] rounded-full bg-[#0fc6c2]/[0.08] blur-3xl"
             />
 
-            {/* 内容区：明确 flex 居中 */}
-            <div className="relative flex flex-col items-center text-center mx-auto" style={{ maxWidth: 520 }}>
+            {/* 内容区：外层用 flex 居中容器，内层用 flex-col 纵向排列 */}
+            <div className="relative w-full flex justify-center">
+              <div className="flex flex-col items-center text-center w-full" style={{ maxWidth: 520 }}>
               {/* 成功图标 - 渐变填充 + 阴影 */}
               <div className="relative mb-6">
                 {/* 外层柔和环 */}
@@ -1011,6 +1012,7 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
 

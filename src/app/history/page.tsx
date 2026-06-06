@@ -24,17 +24,58 @@ type HistoryGroup = {
   status: "draft" | "submitted" | "error";
 };
 
-const columns: Array<{ key: string; label: string; width: number }> = [
-  { key: "externalCode", label: "外部编码", width: 130 },
-  { key: "storeName", label: "收货门店", width: 160 },
-  { key: "recipientName", label: "收件人", width: 100 },
-  { key: "recipientPhone", label: "电话", width: 130 },
-  { key: "recipientAddress", label: "地址", width: 200 },
-  { key: "skuCode", label: "SKU编码", width: 120 },
-  { key: "skuName", label: "SKU名称", width: 150 },
-  { key: "skuQuantity", label: "数量", width: 80 },
-  { key: "skuSpec", label: "规格型号", width: 120 },
-];
+// 表格行描述符：每条记录对应表里的一行
+type TableRow =
+  | {
+      kind: "sku";
+      key: string;
+      groupIdx: number;
+      groupTotalRows: number;
+      detailIdx: number;
+      detailSkuCount: number;
+      skuIdx: number;
+      group: HistoryGroup;
+      detail: OutboundOrder;
+      sku: OutboundOrder["items"][number];
+      isFirstRowOfGroup: boolean;
+      isFirstRowOfDetail: boolean;
+    }
+  | {
+      kind: "empty-store";
+      key: string;
+      groupIdx: number;
+      groupTotalRows: number;
+      detailIdx: number;
+      detailSkuCount: 1;
+      group: HistoryGroup;
+      detail: OutboundOrder;
+      isFirstRowOfGroup: boolean;
+      isFirstRowOfDetail: true;
+    }
+  | {
+      kind: "empty-group";
+      key: string;
+      groupIdx: number;
+      groupTotalRows: 1;
+      detailIdx: 0;
+      detailSkuCount: 1;
+      group: HistoryGroup;
+      isFirstRowOfGroup: true;
+      isFirstRowOfDetail: true;
+    };
+
+// 列定义（9 列 + # + 操作 = 11 列）
+const COL_INDEX = { width: 44 };
+const COL_EXTERNAL = { key: "externalCode", label: "外部编码", width: 150 };
+const COL_STORE = { key: "storeName", label: "收货门店", width: 170 };
+const COL_NAME = { key: "recipientName", label: "收件人", width: 100 };
+const COL_PHONE = { key: "recipientPhone", label: "电话", width: 130 };
+const COL_ADDR = { key: "recipientAddress", label: "地址", width: 220 };
+const COL_SKU_CODE = { key: "skuCode", label: "SKU编码", width: 130 };
+const COL_SKU_NAME = { key: "skuName", label: "SKU名称", width: 170 };
+const COL_SKU_QTY = { key: "skuQuantity", label: "数量", width: 80 };
+const COL_SKU_SPEC = { key: "skuSpec", label: "规格型号", width: 130 };
+const COL_ACTION = { width: 72 };
 
 export default function HistoryPage() {
   const [orders, setOrders] = useState<OutboundOrder[]>([]);
@@ -137,37 +178,63 @@ export default function HistoryPage() {
     return groups;
   }, [orders]);
 
-  // 扁平行：1 group = 1 code row + N store rows + M SKU rows
-  type FlatRow =
-    | { kind: "code"; key: string; group: HistoryGroup; groupIdx: number }
-    | { kind: "store"; key: string; group: HistoryGroup; detail: OutboundOrder; groupIdx: number; storeIdx: number }
-    | { kind: "sku"; key: string; group: HistoryGroup; detail: OutboundOrder; item: OutboundOrder["items"][number]; groupIdx: number; skuIdx: number };
-
-  const flatRows = useMemo<FlatRow[]>(() => {
-    const rows: FlatRow[] = [];
+  // 把 groups 摊平成 table rows（每行 = 一个 SKU 行；空门店/空整组用占位行）
+  const tableRows = useMemo<TableRow[]>(() => {
+    const rows: TableRow[] = [];
     for (const [gIdx, group] of groups.entries()) {
-      rows.push({ kind: "code", key: `c-${group.rootId}`, group, groupIdx: gIdx });
-      for (const [dIdx, detail] of group.details.entries()) {
+      const totalSkuInGroup = group.details.reduce(
+        (s, d) => s + d.items.length,
+        0
+      );
+
+      // 空整组（极端情况）
+      if (totalSkuInGroup === 0) {
         rows.push({
-          kind: "store",
-          key: `s-${detail.id}`,
-          group,
-          detail,
+          kind: "empty-group",
+          key: `g-${group.rootId}-empty`,
           groupIdx: gIdx,
-          storeIdx: dIdx,
+          groupTotalRows: 1,
+          detailIdx: 0,
+          detailSkuCount: 1,
+          group,
+          isFirstRowOfGroup: true,
+          isFirstRowOfDetail: true,
         });
+        continue;
       }
-      let sIdx = 0;
-      for (const detail of group.details) {
-        for (const item of detail.items) {
+
+      for (const [dIdx, detail] of group.details.entries()) {
+        // 空门店（极端情况）
+        if (detail.items.length === 0) {
+          rows.push({
+            kind: "empty-store",
+            key: `s-${detail.id}-empty`,
+            groupIdx: gIdx,
+            groupTotalRows: totalSkuInGroup,
+            detailIdx: dIdx,
+            detailSkuCount: 1,
+            group,
+            detail,
+            isFirstRowOfGroup: dIdx === 0,
+            isFirstRowOfDetail: true,
+          });
+          continue;
+        }
+
+        for (const [sIdx, item] of detail.items.entries()) {
           rows.push({
             kind: "sku",
             key: `k-${item.id}`,
+            groupIdx: gIdx,
+            groupTotalRows: totalSkuInGroup,
+            detailIdx: dIdx,
+            detailSkuCount: detail.items.length,
+            skuIdx: sIdx,
             group,
             detail,
-            item,
-            groupIdx: gIdx,
-            skuIdx: sIdx++,
+            sku: item,
+            isFirstRowOfGroup: dIdx === 0 && sIdx === 0,
+            isFirstRowOfDetail: sIdx === 0,
           });
         }
       }
@@ -277,30 +344,29 @@ export default function HistoryPage() {
   const transferCount = groups.filter((g) => g.kind === "transfer").length;
   const outboundCount = groups.filter((g) => g.kind === "outbound").length;
 
-  // 取值：单元格当前展示值
-  const valueForCell = (row: FlatRow, key: string): string => {
-    let v: unknown = "";
-    if (row.kind === "code") {
-      if (key === "externalCode") v = row.group.externalCode;
-    } else if (row.kind === "store") {
-      v = (row.detail as unknown as Record<string, unknown>)[key];
-    } else {
-      v = (row.item as unknown as Record<string, unknown>)[key];
+  // 单元格取值
+  const valueAt = (
+    row: TableRow,
+    key: "storeName" | "recipientName" | "recipientPhone" | "recipientAddress"
+  ): string => {
+    if (row.kind === "sku") {
+      const v = (row.detail as unknown as Record<string, unknown>)[key];
+      return v === undefined || v === null ? "" : String(v);
     }
-    return v === undefined || v === null ? "" : String(v);
+    if (row.kind === "empty-store") {
+      const v = (row.detail as unknown as Record<string, unknown>)[key];
+      return v === undefined || v === null ? "" : String(v);
+    }
+    return "";
   };
 
-  const cellApplicable = (row: FlatRow, key: string): boolean => {
-    if (row.kind === "code") return key === "externalCode";
-    if (row.kind === "store") {
-      return [
-        "storeName",
-        "recipientName",
-        "recipientPhone",
-        "recipientAddress",
-      ].includes(key);
-    }
-    return ["skuCode", "skuName", "skuQuantity", "skuSpec"].includes(key);
+  const skuValueAt = (
+    row: TableRow,
+    key: "skuCode" | "skuName" | "skuQuantity" | "skuSpec"
+  ): string => {
+    if (row.kind !== "sku") return "";
+    const v = (row.sku as unknown as Record<string, unknown>)[key];
+    return v === undefined || v === null ? "" : String(v);
   };
 
   return (
@@ -322,7 +388,7 @@ export default function HistoryPage() {
             <div className="flex-1 min-w-0">
               <h1 className="text-lg font-semibold text-[#1d2129]">已导入运单</h1>
               <p className="text-sm text-[#86909c] mt-0.5">
-                调拨单按 1+N+M 扁平展示：1 行外部编码 + N 行门店 + M 行 SKU
+                调拨单按 1+N+M 合并展示：1 行外部编码 + N 行门店 + M 行 SKU
               </p>
             </div>
           </div>
@@ -410,7 +476,7 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* 数据列表 - 扁平表格 */}
+      {/* 数据列表 - Excel 风格合并单元格表格 */}
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
         {loading ? (
           <div className="p-4 lg:p-6 space-y-3">
@@ -432,173 +498,393 @@ export default function HistoryPage() {
           </div>
         ) : (
           <>
-            <div className="border border-[#e5e6eb] rounded-xl overflow-auto" style={{ maxHeight: "clamp(480px, 75vh, 760px)" }}>
-              {/* 表头 - 吸顶 */}
-              <div className="sticky top-0 z-10 flex bg-[#fafbfc] border-b border-[#e5e6eb] min-w-max shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                <div className="flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-[#e5e6eb] sticky left-0 bg-[#fafbfc] z-20">
-                  #
-                </div>
-                {columns.map((col) => (
-                  <div
-                    key={col.key}
-                    className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-xs font-semibold text-[#4e5969] border-r border-[#e5e6eb] whitespace-nowrap"
-                    style={{ width: col.width }}
-                  >
-                    {col.label}
-                  </div>
-                ))}
-                <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center sticky right-0 bg-[#fafbfc] z-20 shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
-                  操作
-                </div>
-              </div>
-
-              {/* 行 */}
-              <div className="min-w-max">
-                {flatRows.map((row, rowIdx) => {
-                  const isCode = row.kind === "code";
-                  const isStore = row.kind === "store";
-
-                  // 行底色（区分行类型 + 分组首行加顶部边框）
-                  const bgClass = isCode
-                    ? "bg-[#e8fafa]/60"
-                    : isStore
-                      ? "bg-[#f7f8fa]"
-                      : "bg-white";
-                  const groupTopBorder =
-                    isCode && rowIdx > 0 ? "border-t-2 border-t-[#0fc6c2]/30" : "";
-
-                  // 当前行序号显示
-                  const rowLabel = isCode
-                    ? `${row.groupIdx + 1}`
-                    : isStore
-                      ? `${row.groupIdx + 1}.${row.storeIdx + 1}`
-                      : `${row.groupIdx + 1}.S${row.skuIdx + 1}`;
-
-                  return (
-                    <div
-                      key={row.key}
-                      className={cn(
-                        "flex border-b border-[#f2f3f5] min-w-max hover:bg-[#fafbfc]/60 transition-colors",
-                        bgClass,
-                        groupTopBorder
-                      )}
+            <div
+              className="border border-[#e5e6eb] rounded-xl overflow-auto"
+              style={{ maxHeight: "clamp(480px, 75vh, 760px)" }}
+            >
+              <table
+                className="min-w-max w-full text-sm"
+                style={{ borderCollapse: "separate", borderSpacing: 0 }}
+              >
+                <colgroup>
+                  <col style={{ width: COL_INDEX.width }} />
+                  <col style={{ width: COL_EXTERNAL.width }} />
+                  <col style={{ width: COL_STORE.width }} />
+                  <col style={{ width: COL_NAME.width }} />
+                  <col style={{ width: COL_PHONE.width }} />
+                  <col style={{ width: COL_ADDR.width }} />
+                  <col style={{ width: COL_SKU_CODE.width }} />
+                  <col style={{ width: COL_SKU_NAME.width }} />
+                  <col style={{ width: COL_SKU_QTY.width }} />
+                  <col style={{ width: COL_SKU_SPEC.width }} />
+                  <col style={{ width: COL_ACTION.width }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th
+                      className="sticky top-0 left-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-r border-b border-[#e5e6eb]"
+                      scope="col"
                     >
-                      {/* 行号 - 粘性左列 */}
-                      <div
-                        className={cn(
-                          "flex-shrink-0 w-10 lg:w-12 px-1 lg:px-2 py-2.5 text-[11px] text-center border-r border-[#f2f3f5] sticky left-0 z-10 bg-inherit font-mono",
-                          isCode
-                            ? "text-[#0fc6c2] font-semibold"
-                            : "text-[#86909c]"
-                        )}
+                      #
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_EXTERNAL.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_STORE.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_NAME.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_PHONE.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_ADDR.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_SKU_CODE.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_SKU_NAME.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-right border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_SKU_QTY.label}
+                    </th>
+                    <th
+                      className="sticky top-0 z-20 bg-[#fafbfc] px-3 py-2.5 text-xs font-semibold text-[#4e5969] text-left border-r border-b border-[#e5e6eb] whitespace-nowrap"
+                      scope="col"
+                    >
+                      {COL_SKU_SPEC.label}
+                    </th>
+                    <th
+                      className="sticky top-0 right-0 z-30 bg-[#fafbfc] px-2 py-2.5 text-xs font-semibold text-[#4e5969] text-center border-b border-[#e5e6eb] shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
+                      scope="col"
+                    >
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((row, rowIdx) => {
+                    // 行底色
+                    let rowBg: string;
+                    if (row.kind === "empty-group") {
+                      rowBg = "bg-[#e8fafa]/60"; // 整组空 → code 色调
+                    } else if (row.kind === "empty-store") {
+                      rowBg = "bg-[#f7f8fa]"; // 门店空 → store 色调
+                    } else if (row.isFirstRowOfDetail) {
+                      rowBg = "bg-[#f7f8fa]"; // 门店首行 → store 色调
+                    } else {
+                      rowBg = "bg-white"; // 后续 SKU → 白
+                    }
+                    // 组首行顶部青色分隔线（除表首）
+                    const topBorder =
+                      row.isFirstRowOfGroup && rowIdx > 0
+                        ? "border-t-2 border-t-[#0fc6c2]/30"
+                        : "";
+
+                    return (
+                      <tr
+                        key={row.key}
+                        className={cn("hover:bg-[#fafbfc]/60 transition-colors", topBorder)}
                       >
-                        {rowLabel}
-                      </div>
-
-                      {/* 数据列 */}
-                      {columns.map((col) => {
-                        const applicable = cellApplicable(row, col.key);
-                        if (!applicable) {
-                          return (
-                            <div
-                              key={col.key}
-                              className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 border-r border-[#f2f3f5]"
-                              style={{ width: col.width }}
-                            />
-                          );
-                        }
-
-                        const displayValue = valueForCell(row, col.key);
-
-                        return (
-                          <div
-                            key={col.key}
-                            className="flex-shrink-0 px-2.5 lg:px-3 py-2.5 text-sm border-r border-[#f2f3f5] relative"
-                            style={{ width: col.width }}
+                        {/* # 列 - 跨整组 */}
+                        {row.isFirstRowOfGroup && (
+                          <td
+                            rowSpan={row.groupTotalRows}
+                            className={cn(
+                              "sticky left-0 z-10 px-2 py-2.5 text-[11px] text-center border-r border-b border-[#f2f3f5] font-mono align-top",
+                              "bg-inherit",
+                              "text-[#0fc6c2] font-semibold"
+                            )}
+                            style={{
+                              backgroundColor:
+                                row.kind === "empty-group"
+                                  ? "rgba(232, 250, 250, 0.6)"
+                                  : row.kind === "empty-store"
+                                    ? "#f7f8fa"
+                                    : row.isFirstRowOfDetail
+                                      ? "#f7f8fa"
+                                      : "#ffffff",
+                            }}
                           >
-                            {isCode ? (
-                              <div className="flex flex-col gap-1.5 min-w-0">
+                            {row.groupIdx + 1}
+                          </td>
+                        )}
+
+                        {/* 外部编码列 - 跨整组（带元信息） */}
+                        {row.isFirstRowOfGroup && (
+                          <td
+                            rowSpan={row.groupTotalRows}
+                            className="px-3 py-2.5 border-r border-b border-[#f2f3f5] align-top"
+                            style={{
+                              backgroundColor:
+                                row.kind === "empty-group"
+                                  ? "rgba(232, 250, 250, 0.6)"
+                                  : row.kind === "empty-store"
+                                    ? "#f7f8fa"
+                                    : row.isFirstRowOfDetail
+                                      ? "#f7f8fa"
+                                      : "#ffffff",
+                            }}
+                          >
+                            <div className="flex flex-col gap-1.5 min-w-0">
+                              <span
+                                className="block truncate font-mono font-semibold text-[#1d2129]"
+                                title={row.group.externalCode}
+                              >
+                                {row.group.externalCode || "—"}
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
                                 <span
-                                  className="block truncate font-mono font-semibold text-[#1d2129]"
-                                  title={displayValue}
+                                  className={cn(
+                                    "inline-block px-1.5 py-0 rounded whitespace-nowrap",
+                                    row.group.kind === "transfer"
+                                      ? "bg-[#fff7e8] text-[#d97b00]"
+                                      : "bg-[#f2f3f5] text-[#86909c]"
+                                  )}
                                 >
-                                  {displayValue || "—"}
+                                  {row.group.kind === "transfer" ? "调拨单" : "出库单"}
                                 </span>
-                                {/* code 行附加信息：状态 + 提交时间 + 模式 + 总数 */}
-                                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-                                  <span
-                                    className={cn(
-                                      "inline-block px-1.5 py-0 rounded whitespace-nowrap",
-                                      row.group.kind === "transfer"
-                                        ? "bg-[#fff7e8] text-[#d97b00]"
-                                        : "bg-[#f2f3f5] text-[#86909c]"
-                                    )}
-                                  >
-                                    {row.group.kind === "transfer" ? "调拨单" : "出库单"}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "inline-block px-1.5 py-0 rounded whitespace-nowrap",
-                                      row.group.status === "submitted"
-                                        ? "bg-[#e8fafa] text-[#0fc6c2]"
-                                        : row.group.status === "error"
-                                          ? "bg-[#fff1f0] text-[#cf1322]"
-                                          : "bg-[#f2f3f5] text-[#86909c]"
-                                    )}
-                                  >
-                                    {row.group.status === "submitted"
-                                      ? "已提交"
+                                <span
+                                  className={cn(
+                                    "inline-block px-1.5 py-0 rounded whitespace-nowrap",
+                                    row.group.status === "submitted"
+                                      ? "bg-[#e8fafa] text-[#0fc6c2]"
                                       : row.group.status === "error"
-                                        ? "有错误"
-                                        : "草稿"}
-                                  </span>
-                                  <span className="text-[#86909c] whitespace-nowrap">
-                                    {row.group.submittedAt
-                                      ? formatDate(row.group.submittedAt)
-                                      : formatDate(row.group.createdAt)}
-                                  </span>
-                                </div>
-                                <div className="text-[11px] text-[#86909c] whitespace-nowrap">
-                                  {row.group.details.length} 个调拨明细 ·{" "}
-                                  {row.group.totalSku} 条 SKU · 总量{" "}
-                                  {row.group.totalQty}
-                                </div>
+                                        ? "bg-[#fff1f0] text-[#cf1322]"
+                                        : "bg-[#f2f3f5] text-[#86909c]"
+                                  )}
+                                >
+                                  {row.group.status === "submitted"
+                                    ? "已提交"
+                                    : row.group.status === "error"
+                                      ? "有错误"
+                                      : "草稿"}
+                                </span>
+                                <span className="text-[#86909c] whitespace-nowrap">
+                                  {row.group.submittedAt
+                                    ? formatDate(row.group.submittedAt)
+                                    : formatDate(row.group.createdAt)}
+                                </span>
                               </div>
-                            ) : (
+                              <div className="text-[11px] text-[#86909c] whitespace-nowrap">
+                                {row.group.details.length} 个调拨明细 ·{" "}
+                                {row.group.totalSku} 条 SKU · 总量{" "}
+                                {row.group.totalQty}
+                              </div>
+                            </div>
+                          </td>
+                        )}
+
+                        {/* 门店信息 4 列 - 跨该门店的 SKU 行 */}
+                        {row.isFirstRowOfDetail && (
+                          <>
+                            <td
+                              rowSpan={row.detailSkuCount}
+                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
+                              style={{
+                                backgroundColor:
+                                  row.kind === "empty-store"
+                                    ? "#f7f8fa"
+                                    : "#f7f8fa",
+                              }}
+                            >
                               <span
                                 className={cn(
                                   "block truncate",
-                                  !displayValue && "text-[#c9cdd4] italic"
+                                  !valueAt(row, "storeName") &&
+                                    "text-[#c9cdd4] italic"
                                 )}
-                                title={displayValue}
+                                title={valueAt(row, "storeName")}
                               >
-                                {displayValue || "—"}
+                                {valueAt(row, "storeName") || "—"}
                               </span>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {/* 操作列 - 粘性右列 */}
-                      <div className="flex-shrink-0 w-14 lg:w-16 px-2 py-2.5 flex items-center justify-center sticky right-0 z-10 bg-inherit shadow-[-2px_0_4px_rgba(0,0,0,0.04)]">
-                        {isCode && (
-                          <button
-                            onClick={() => handleDeleteClick(row.group)}
-                            className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
-                            title={
-                              row.group.kind === "transfer"
-                                ? "删除整张调拨单"
-                                : "删除该运单"
-                            }
-                          >
-                            删除
-                          </button>
+                            </td>
+                            <td
+                              rowSpan={row.detailSkuCount}
+                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
+                              style={{ backgroundColor: "#f7f8fa" }}
+                            >
+                              <span
+                                className={cn(
+                                  "block truncate",
+                                  !valueAt(row, "recipientName") &&
+                                    "text-[#c9cdd4] italic"
+                                )}
+                                title={valueAt(row, "recipientName")}
+                              >
+                                {valueAt(row, "recipientName") || "—"}
+                              </span>
+                            </td>
+                            <td
+                              rowSpan={row.detailSkuCount}
+                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top font-mono"
+                              style={{ backgroundColor: "#f7f8fa" }}
+                            >
+                              <span
+                                className={cn(
+                                  "block truncate",
+                                  !valueAt(row, "recipientPhone") &&
+                                    "text-[#c9cdd4] italic"
+                                )}
+                                title={valueAt(row, "recipientPhone")}
+                              >
+                                {valueAt(row, "recipientPhone") || "—"}
+                              </span>
+                            </td>
+                            <td
+                              rowSpan={row.detailSkuCount}
+                              className="px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] align-top"
+                              style={{ backgroundColor: "#f7f8fa" }}
+                            >
+                              <span
+                                className={cn(
+                                  "block truncate",
+                                  !valueAt(row, "recipientAddress") &&
+                                    "text-[#c9cdd4] italic"
+                                )}
+                                title={valueAt(row, "recipientAddress")}
+                              >
+                                {valueAt(row, "recipientAddress") || "—"}
+                              </span>
+                            </td>
+                          </>
                         )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+
+                        {/* SKU 4 列 - 每行独立 */}
+                        <td
+                          className={cn(
+                            "px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5] font-mono",
+                            rowBg,
+                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "block truncate",
+                              !skuValueAt(row, "skuCode") &&
+                                "text-[#c9cdd4] italic"
+                            )}
+                            title={skuValueAt(row, "skuCode")}
+                          >
+                            {skuValueAt(row, "skuCode") || "—"}
+                          </span>
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5]",
+                            rowBg,
+                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "block truncate",
+                              !skuValueAt(row, "skuName") &&
+                                "text-[#c9cdd4] italic"
+                            )}
+                            title={skuValueAt(row, "skuName")}
+                          >
+                            {skuValueAt(row, "skuName") || "—"}
+                          </span>
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-2.5 text-sm text-right border-r border-b border-[#f2f3f5] tabular-nums",
+                            rowBg,
+                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "block truncate",
+                              !skuValueAt(row, "skuQuantity") &&
+                                "text-[#c9cdd4] italic"
+                            )}
+                            title={skuValueAt(row, "skuQuantity")}
+                          >
+                            {skuValueAt(row, "skuQuantity") || "—"}
+                          </span>
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-2.5 text-sm border-r border-b border-[#f2f3f5]",
+                            rowBg,
+                            row.kind === "empty-group" && "italic text-[#c9cdd4]"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "block truncate",
+                              !skuValueAt(row, "skuSpec") &&
+                                "text-[#c9cdd4] italic"
+                            )}
+                            title={skuValueAt(row, "skuSpec")}
+                          >
+                            {skuValueAt(row, "skuSpec") || "—"}
+                          </span>
+                        </td>
+
+                        {/* 操作列 - 跨整组（一个删除按钮） */}
+                        {row.isFirstRowOfGroup && (
+                          <td
+                            rowSpan={row.groupTotalRows}
+                            className="sticky right-0 z-10 px-2 py-2.5 text-sm border-b border-[#f2f3f5] align-top shadow-[-2px_0_4px_rgba(0,0,0,0.04)]"
+                            style={{
+                              backgroundColor:
+                                row.kind === "empty-group"
+                                  ? "rgba(232, 250, 250, 0.6)"
+                                  : row.kind === "empty-store"
+                                    ? "#f7f8fa"
+                                    : row.isFirstRowOfDetail
+                                      ? "#f7f8fa"
+                                      : "#ffffff",
+                            }}
+                          >
+                            <button
+                              onClick={() => handleDeleteClick(row.group)}
+                              className="px-2 py-1 text-xs text-[#86909c] hover:text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap"
+                              title={
+                                row.group.kind === "transfer"
+                                  ? "删除整张调拨单"
+                                  : "删除该运单"
+                              }
+                            >
+                              删除
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
             {/* 分页 */}
