@@ -233,7 +233,6 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   const isMultiSheet = request.fileType === "excel" && sheetCount >= 2;
 
   // 1c) 矩阵模式：表头行含2个以上门店名（如"银泰"、"金桥"、"金银潭"等）
-  const storeNameKeywords = ["店", "门店", "分店", "银泰", "金桥", "金银潭"];
 
   // 1d) 合计行
   const hasTotalRow = content.includes("合计") || content.includes("小计");
@@ -307,7 +306,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   // 检测矩阵模式的数量列（表头行中超出标准字段的列名可能是门店名）
   const headerParts = headerLine.split(" | ").map((p) => p.trim());
   const standardHeaderKeywords = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结"];
-  let matrixStoreColumns: string[] = [];
+  const matrixStoreColumns: string[] = [];
 
   // 矩阵列检测：不只检查后半部分，而是扫描所有列，找出看起来是门店/分店名称的列
   // 门店列特征：(1) 不属于标准业务字段 (2) 包含门店关键词或看起来像专有名称
