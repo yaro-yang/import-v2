@@ -248,8 +248,8 @@ export function RuleEditor({
         <div className="px-4 py-3 bg-gradient-to-r from-[#fffbf0] to-[#fff8e6] border-b border-[#ffe7ba]/60">
           <p className="text-xs font-semibold text-[#8c6a00] mb-1.5">A组 vs B组（二选一必填）</p>
           <div className="space-y-1 text-xs text-[#8c6a00]">
-            <p><span className="font-semibold">A组（门店模式）</span>：只需填写"收货门店"，不要求收件人姓名/电话/地址</p>
-            <p><span className="font-semibold">B组（收件人模式）</span>：需填写"收件人姓名 + 收件人电话 + 收件人地址"三个字段，不要求收货门店</p>
+            <p><span className="font-semibold">A组（门店模式）</span>：只需填写&ldquo;收货门店&rdquo;，不要求收件人姓名/电话/地址</p>
+            <p><span className="font-semibold">B组（收件人模式）</span>：需填写&ldquo;收件人姓名 + 收件人电话 + 收件人地址&rdquo;三个字段，不要求收货门店</p>
             <p className="text-[#b58b00] mt-1">两组都填也可以，但至少填一组。两组都没填则校验不通过。</p>
           </div>
         </div>
