@@ -637,7 +637,7 @@ export default function HistoryPage() {
                           </td>
                         )}
 
-                        {/* 外部编码列 - 跨整组（带元信息） */}
+                        {/* 外部编码列 - 跨整组（只显示运单号） */}
                         {row.isFirstRowOfGroup && (
                           <td
                             rowSpan={row.groupTotalRows}
@@ -653,52 +653,12 @@ export default function HistoryPage() {
                                       : "#ffffff",
                             }}
                           >
-                            <div className="flex flex-col gap-1.5 min-w-0">
-                              <span
-                                className="block truncate font-mono font-semibold text-[#1d2129]"
-                                title={row.group.externalCode}
-                              >
-                                {row.group.externalCode || "—"}
-                              </span>
-                              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-                                <span
-                                  className={cn(
-                                    "inline-block px-1.5 py-0 rounded whitespace-nowrap",
-                                    row.group.kind === "transfer"
-                                      ? "bg-[#fff7e8] text-[#d97b00]"
-                                      : "bg-[#f2f3f5] text-[#86909c]"
-                                  )}
-                                >
-                                  {row.group.kind === "transfer" ? "调拨单" : "出库单"}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "inline-block px-1.5 py-0 rounded whitespace-nowrap",
-                                    row.group.status === "submitted"
-                                      ? "bg-[#e8fafa] text-[#0fc6c2]"
-                                      : row.group.status === "error"
-                                        ? "bg-[#fff1f0] text-[#cf1322]"
-                                        : "bg-[#f2f3f5] text-[#86909c]"
-                                  )}
-                                >
-                                  {row.group.status === "submitted"
-                                    ? "已提交"
-                                    : row.group.status === "error"
-                                      ? "有错误"
-                                      : "草稿"}
-                                </span>
-                                <span className="text-[#86909c] whitespace-nowrap">
-                                  {row.group.submittedAt
-                                    ? formatDate(row.group.submittedAt)
-                                    : formatDate(row.group.createdAt)}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-[#86909c] whitespace-nowrap">
-                                {row.group.details.length} 个调拨明细 ·{" "}
-                                {row.group.totalSku} 条 SKU · 总量{" "}
-                                {row.group.totalQty}
-                              </div>
-                            </div>
+                            <span
+                              className="block truncate font-mono font-semibold text-[#1d2129]"
+                              title={row.group.externalCode}
+                            >
+                              {row.group.externalCode || "—"}
+                            </span>
                           </td>
                         )}
 
