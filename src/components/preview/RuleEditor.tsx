@@ -19,16 +19,14 @@ interface RuleEditorProps {
   }>;
 }
 
-// 字段定义：图标 + 中文名 + 必填 + placeholder + 分组
-// A组(门店模式): 只需填写"收货门店"
-// B组(收件人模式): 需填写"收件人姓名+收件人电话+收件人地址"三个
-// 两组至少填一组，两组都填也可以。必填项: SKU编码/SKU名称/SKU发货数量 + (A组 or B组)
+// 字段定义：图标 + 中文名 + 必填 + placeholder
+// 必填项: SKU编码/SKU名称/SKU发货数量 + 门店/收件人信息
 const FIELD_DEFS = [
   { key: "externalCode", label: "外部编码", icon: "doc", required: false, hint: "外部系统订单唯一编号，用于去重和聚合（如配送单号）", group: null as string | null },
-  { key: "storeName", label: "收货门店", icon: "store", required: false, hint: "收货门店/机构名称（如\"尹三顺自助烤肉（银泰店）\"）", group: "A" as string | null },
-  { key: "recipientName", label: "收件人姓名", icon: "user", required: false, hint: "收货人姓名", group: "B" as string | null },
-  { key: "recipientPhone", label: "收件人电话", icon: "phone", required: false, hint: "收货人联系方式", group: "B" as string | null },
-  { key: "recipientAddress", label: "收件人地址", icon: "location", required: false, hint: "收货人完整地址", group: "B" as string | null },
+  { key: "storeName", label: "收货门店", icon: "store", required: false, hint: "收货门店/机构名称（如\"尹三顺自助烤肉（银泰店）\"）", group: null as string | null },
+  { key: "recipientName", label: "收件人姓名", icon: "user", required: false, hint: "收货人姓名", group: null as string | null },
+  { key: "recipientPhone", label: "收件人电话", icon: "phone", required: false, hint: "收货人联系方式", group: null as string | null },
+  { key: "recipientAddress", label: "收件人地址", icon: "location", required: false, hint: "收货人完整地址", group: null as string | null },
   { key: "skuCode", label: "SKU物品编码", icon: "code", required: true, hint: "SKU 唯一编码", group: null as string | null },
   { key: "skuName", label: "SKU物品名称", icon: "box", required: true, hint: "SKU 名称", group: null as string | null },
   { key: "skuQuantity", label: "SKU发货数量", icon: "count", required: true, hint: "发货数量，必须为正数", group: null as string | null },
@@ -148,12 +146,11 @@ export function RuleEditor({
 
   // 统计
   const filledCount = mappings.filter((m) => m.columnName?.trim()).length;
-  // A组(门店模式): storeName
-  // B组(收件人模式): recipientName + recipientPhone + recipientAddress
-  const aGroupFilled = mappings.find((m) => m.targetField === "storeName")?.columnName?.trim() ? true : false;
-  const bGroupFields = ["recipientName", "recipientPhone", "recipientAddress"];
-  const bGroupFilled = bGroupFields.every((k) => mappings.find((m) => m.targetField === k)?.columnName?.trim());
-  const abGroupOk = aGroupFilled || bGroupFilled;
+  // 校验：门店信息或收件人信息至少填一组
+  const storeFilled = !!mappings.find((m) => m.targetField === "storeName")?.columnName?.trim();
+  const recipientFilled = ["recipientName", "recipientPhone", "recipientAddress"]
+    .every((k) => mappings.find((m) => m.targetField === k)?.columnName?.trim());
+  const receiverOk = storeFilled || recipientFilled;
 
   const reqFields = FIELD_DEFS.filter((f) => f.required);
   const requiredFilled = mappings.filter(
@@ -216,9 +213,9 @@ export function RuleEditor({
           <p className="text-xs text-[#4e5969] mt-1">
             已填 <span className="font-semibold text-[#0fc6c2]">{filledCount}</span>
             <span className="text-[#86909c]">/{mappings.length}</span> 个字段
-            {!abGroupOk && (
+            {!receiverOk && (
               <span className="text-[#cf1322] ml-2">
-                · A组(收货门店)或B组(收件人信息)至少需填一组
+                · 收货门店或收件人信息至少填一组
               </span>
             )}
             {requiredFilled < reqFields.length && (
@@ -244,15 +241,6 @@ export function RuleEditor({
 
       {/* === 字段映射表格 === */}
       <div className="bg-white rounded-xl border border-[#e5e6eb] overflow-hidden">
-        {/* A组/B组说明 */}
-        <div className="px-4 py-3 bg-gradient-to-r from-[#fffbf0] to-[#fff8e6] border-b border-[#ffe7ba]/60">
-          <p className="text-xs font-semibold text-[#8c6a00] mb-1.5">A组 vs B组（二选一必填）</p>
-          <div className="space-y-1 text-xs text-[#8c6a00]">
-            <p><span className="font-semibold">A组（门店模式）</span>：只需填写&ldquo;收货门店&rdquo;，不要求收件人姓名/电话/地址</p>
-            <p><span className="font-semibold">B组（收件人模式）</span>：需填写&ldquo;收件人姓名 + 收件人电话 + 收件人地址&rdquo;三个字段，不要求收货门店</p>
-            <p className="text-[#b58b00] mt-1">两组都填也可以，但至少填一组。两组都没填则校验不通过。</p>
-          </div>
-        </div>
         {/* 表头 */}
         <div className="grid grid-cols-12 gap-3 px-4 py-2.5 bg-[#fafbfc] border-b border-[#e5e6eb]">
           <div className="col-span-4 text-xs font-semibold text-[#86909c]">目标字段</div>
@@ -290,12 +278,6 @@ export function RuleEditor({
                       </span>
                       {fieldDef.required && (
                         <span className="text-[#cf1322] text-xs font-bold flex-shrink-0">*</span>
-                      )}
-                      {fieldDef.group === "A" && (
-                        <span className="text-[10px] font-medium bg-[#e8ffea] text-[#00b42a] px-1.5 py-px rounded flex-shrink-0">A组</span>
-                      )}
-                      {fieldDef.group === "B" && (
-                        <span className="text-[10px] font-medium bg-[#fff7e6] text-[#ff7d00] px-1.5 py-px rounded flex-shrink-0">B组</span>
                       )}
                     </div>
                   </div>
@@ -429,12 +411,12 @@ export function RuleEditor({
         <Button
           onClick={handleSave}
           loading={saving}
-          disabled={requiredFilled < reqFields.length || !abGroupOk}
+          disabled={requiredFilled < reqFields.length || !receiverOk}
         >
           {requiredFilled < reqFields.length
             ? `还需填写 ${reqFields.length - requiredFilled} 个必填项`
-            : !abGroupOk
-            ? "A组或B组至少需填一组"
+            : !receiverOk
+            ? "请填写收货门店或收件人信息"
             : "保存规则"}
         </Button>
       </div>

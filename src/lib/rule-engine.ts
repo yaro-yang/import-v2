@@ -557,7 +557,7 @@ function validateOrder(order: OrderItem, _totalRows: number): ValidationError[] 
     errors.push({
       row: order.sourceRow || 0,
       field: "收货信息",
-      message: "A组（收货门店）和B组（收件人信息）至少填写一组",
+      message: "收货门店和收件人信息至少填写一组",
       severity: "error",
     });
   }
