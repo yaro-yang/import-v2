@@ -41,8 +41,8 @@ export async function executeRule(
   if (rule.postProcessing?.textRecordMarker) {
     const textSections = splitByTextMarker(rawData, rule);
     for (const section of textSections) {
-      const order = buildOrderFromTextSection(section, rule, fileName);
-      if (order) {
+      const sectionOrders = buildOrderFromTextSection(section, rule, fileName);
+      for (const order of sectionOrders) {
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
@@ -55,9 +55,9 @@ export async function executeRule(
     // 从第一个标记前的行中提取订单级字段（如 externalCode）
     const orderLevelFields = extractOrderLevelFields(preCardRows);
     for (const group of cardGroups) {
-      const order = buildOrderFromCard(group, rule, fileName);
-      if (order) {
-        // 合并订单级字段（如未在卡片中提取到）
+      const cardOrders = buildOrderFromCard(group, rule, fileName);
+      // 合并订单级字段（如未在卡片中提取到）
+      for (const order of cardOrders) {
         for (const [k, v] of Object.entries(orderLevelFields)) {
           const current = (order as unknown as Record<string, unknown>)[k];
           if (!current) (order as unknown as Record<string, unknown>)[k] = v;
@@ -108,15 +108,16 @@ function splitByTextMarker(rawData: RawDataRow[], rule: ParseRule): string[][] {
 }
 
 // ====== 从文本段构建运单（Word/PDF 纯文本模式） ======
+// 返回多个 OrderItem（每个 SKU 一条），共享父单字段
 function buildOrderFromTextSection(
   textLines: string[],
   rule: ParseRule,
   fileName: string
-): OrderItem | null {
+): OrderItem[] {
   const fullText = textLines.join("\n");
-  if (!fullText.trim()) return null;
+  if (!fullText.trim()) return [];
 
-  const order: OrderItem = {
+  const baseOrder: OrderItem = {
     id: uuidv4(),
     skuCode: "", skuName: "", skuQuantity: 0,
     status: "draft",
@@ -154,47 +155,55 @@ function buildOrderFromTextSection(
 
     if (value) {
       if (mapping.targetField === "skuQuantity") {
-        order.skuQuantity = parseFloat(value) || 0;
+        baseOrder.skuQuantity = parseFloat(value) || 0;
       } else {
-        setOrderField(order, mapping.targetField, value);
+        setOrderField(baseOrder, mapping.targetField, value);
       }
     }
   }
 
   // 特殊处理：从物品行提取 SKU 信息（格式：编号 类别 编码 名称 规格 单位 数量）
-  const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
-  let totalQty = 0;
-
+  const skuLines: { code: string; name: string; spec: string; qty: number }[] = [];
   for (const line of textLines) {
     // 匹配物品行：数字开头 + 至少3个字段
     const skuMatch = line.match(/^(\d+)\s+(\S+)\s+(\S+)\s+(.+?)\s+(\S+)\s+\S+\s+(\d+)/);
     if (skuMatch) {
-      skuCodes.push(skuMatch[3]);
-      skuNames.push(skuMatch[4].trim());
-      skuSpecs.push(skuMatch[5]);
-      totalQty += parseInt(skuMatch[6]) || 0;
+      skuLines.push({
+        code: skuMatch[3],
+        name: skuMatch[4].trim(),
+        spec: skuMatch[5],
+        qty: parseInt(skuMatch[6]) || 0,
+      });
     }
   }
 
-  if (skuCodes.length > 0) {
-    order.skuCode = skuCodes.join("; ");
-    order.skuName = skuNames.join("; ");
-    order.skuQuantity = totalQty;
-    order.skuSpec = skuSpecs.join("; ");
+  // 每个 SKU 一条 OrderItem（共享父单字段）
+  if (skuLines.length > 0) {
+    return skuLines.map((sku) => ({
+      ...baseOrder,
+      id: uuidv4(),
+      skuCode: sku.code,
+      skuName: sku.name,
+      skuQuantity: sku.qty,
+      skuSpec: sku.spec,
+    }));
   }
 
-  return order;
+  // 没有识别到 SKU 行：返回一条占位记录
+  return [baseOrder];
 }
 
 // ====== 从卡片构建运单 ======
+// 返回多个 OrderItem（每个 SKU 一条），共享父单字段
 function buildOrderFromCard(
   cardRows: RawDataRow[],
   rule: ParseRule,
   fileName: string
-): OrderItem | null {
-  if (cardRows.length === 0) return null;
+): OrderItem[] {
+  if (cardRows.length === 0) return [];
 
-  const order: OrderItem = {
+  // 父单基础信息（每个 SKU 行共享这些字段）
+  const baseOrder: OrderItem = {
     id: uuidv4(),
     skuCode: "", skuName: "", skuQuantity: 0,
     status: "draft",
@@ -269,7 +278,7 @@ function buildOrderFromCard(
       if (!value) {
         value = extractFieldValue(cardRows[0], mapping);
       }
-      if (value) setOrderField(order, mapping.targetField, value);
+      if (value) setOrderField(baseOrder, mapping.targetField, value);
     }
   }
 
@@ -311,8 +320,8 @@ function buildOrderFromCard(
     }
   }
 
-  const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
-  let totalQty = 0;
+  // 收集每条 SKU 行（不聚合），保留单条记录
+  const skuRows: { code: string; name: string; spec: string; qty: number; sourceRow: number }[] = [];
 
   for (const row of cardRows) {
     const cells = getCardCells(row);
@@ -348,21 +357,26 @@ function buildOrderFromCard(
     // 只有 col_0 看起来像 SKU 编码（字母数字混合，不是中文）才接受
     const isLikelySku = /^[A-Z0-9][A-Z0-9\-_]*$/i.test(code);
     if (!isLikelySku) continue;
+    if (!code) continue;
 
-    if (code) skuCodes.push(code);
-    if (name) skuNames.push(name);
-    totalQty += qty;
-    if (spec) skuSpecs.push(spec);
+    skuRows.push({ code, name, spec, qty, sourceRow: row.rowIndex });
   }
 
-  if (skuCodes.length > 0) {
-    order.skuCode = skuCodes.join("; ");
-    order.skuName = skuNames.join("; ");
-    order.skuQuantity = totalQty;
-    order.skuSpec = skuSpecs.join("; ");
+  // 每个 SKU 一条 OrderItem（共享父单字段）
+  if (skuRows.length > 0) {
+    return skuRows.map((sku) => ({
+      ...baseOrder,
+      id: uuidv4(),
+      skuCode: sku.code,
+      skuName: sku.name,
+      skuQuantity: sku.qty,
+      skuSpec: sku.spec,
+      sourceRow: sku.sourceRow,
+    }));
   }
 
-  return order;
+  // 没有识别到 SKU 行：返回一条占位记录（让父单字段仍有展示）
+  return [baseOrder];
 }
 
 function processRows(
@@ -382,12 +396,12 @@ function processRows(
     });
   }
 
-  // 按外部编码聚合
+  // 按外部编码聚合（同一 externalCode 的多行 → 共享收货信息，每行一个 SKU）
   if (rule.globalConfig.groupByExternalCode && rule.globalConfig.externalCodeField) {
     const grouped = groupByExternalCode(filteredData, rule);
     for (const [code, rows] of grouped) {
-      const order = buildOrderFromRows(rows, rule, fileName, code);
-      if (order) {
+      const groupOrders = buildOrderFromRows(rows, rule, fileName, code);
+      for (const order of groupOrders) {
         const errs = validateOrder(order, rawData.length);
         if (errs.length > 0) { order.errors = errs; order.status = "error"; errors.push(...errs); }
         orders.push(order);
@@ -584,14 +598,17 @@ function groupByExternalCode(rows: RawDataRow[], rule: ParseRule): Map<string, R
 }
 
 // ====== 从多行构建运单 ======
+// 返回多个 OrderItem（每个 SKU 行一条），共享父单收货信息
 function buildOrderFromRows(
   rows: RawDataRow[],
   rule: ParseRule,
   fileName: string,
   externalCode: string
-): OrderItem | null {
+): OrderItem[] {
+  if (rows.length === 0) return [];
   const firstRow = rows[0];
-  const order: OrderItem = {
+  // 父单基础字段：所有 SKU 行共享这些
+  const baseOrder: OrderItem = {
     id: uuidv4(),
     externalCode: externalCode !== "__no_code__" ? externalCode : undefined,
     skuCode: "", skuName: "", skuQuantity: 0,
@@ -603,7 +620,7 @@ function buildOrderFromRows(
     createdAt: new Date().toISOString(),
   };
 
-  // 提取收货信息
+  // 提取共享收货信息
   for (const mapping of rule.fieldMappings) {
     if (["storeName", "recipientName", "recipientPhone", "recipientAddress", "remark"].includes(mapping.targetField)) {
       let value = extractFieldValue(firstRow, mapping);
@@ -611,36 +628,26 @@ function buildOrderFromRows(
       if (mapping.targetField === "storeName" && firstRow.cells["_transposed_col_name"]) {
         value = firstRow.cells["_transposed_col_name"];
       }
-      if (value) setOrderField(order, mapping.targetField, value);
+      if (value) setOrderField(baseOrder, mapping.targetField, value);
     }
   }
 
-  // 合并 SKU 信息
-  if (rows.length > 1) {
-    const skuCodes: string[] = [], skuNames: string[] = [], skuSpecs: string[] = [];
-    let totalQty = 0;
-    for (const row of rows) {
-      const code = extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuCode"));
-      const name = extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuName"));
-      const qty = parseFloat(extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuQuantity")) || "0");
-      const spec = extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuSpec"));
-      if (code) skuCodes.push(code);
-      if (name) skuNames.push(name);
-      totalQty += qty || 0;
-      if (spec) skuSpecs.push(spec);
-    }
-    order.skuCode = skuCodes.join("; ");
-    order.skuName = skuNames.join("; ");
-    order.skuQuantity = totalQty;
-    order.skuSpec = skuSpecs.join("; ");
-  } else {
-    order.skuCode = extractFieldValue(rows[0], rule.fieldMappings.find((m) => m.targetField === "skuCode")) || "";
-    order.skuName = extractFieldValue(rows[0], rule.fieldMappings.find((m) => m.targetField === "skuName")) || "";
-    order.skuQuantity = parseFloat(extractFieldValue(rows[0], rule.fieldMappings.find((m) => m.targetField === "skuQuantity")) || "0");
-    order.skuSpec = extractFieldValue(rows[0], rule.fieldMappings.find((m) => m.targetField === "skuSpec")) || "";
-  }
-
-  return order;
+  // 每个原始行 = 一个 SKU 行，每行一个 OrderItem
+  return rows.map((row) => {
+    const skuCode = extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuCode")) || "";
+    const skuName = extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuName")) || "";
+    const skuQty = parseFloat(extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuQuantity")) || "0") || 0;
+    const skuSpec = extractFieldValue(row, rule.fieldMappings.find((m) => m.targetField === "skuSpec")) || "";
+    return {
+      ...baseOrder,
+      id: uuidv4(),
+      skuCode,
+      skuName,
+      skuQuantity: skuQty,
+      skuSpec: skuSpec || undefined,
+      sourceRow: row.rowIndex,
+    };
+  });
 }
 
 // ====== 从单行构建运单 ======

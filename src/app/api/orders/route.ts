@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
   await ensureDB();
   try {
     const body = await request.json();
+    // 接收 OrderItem[]（每个 SKU 一条）
     const { orders } = body as { orders: OrderItem[] };
 
     if (!orders || !Array.isArray(orders)) {
@@ -18,19 +19,22 @@ export async function POST(request: NextRequest) {
 
     // 标记为已提交
     const now = new Date().toISOString();
-    const submittedOrders = orders.map((order) => ({
+    const submittedItems = orders.map((order) => ({
       ...order,
       status: "submitted" as const,
       submittedAt: now,
     }));
 
-    const savedCount = await saveOrders(submittedOrders);
+    // saveOrders 内部按 externalCode 聚合成父单 + 子表，返回聚合后的出库单数量
+    const savedOutbounds = await saveOrders(submittedItems);
+    // 同时返回保存的 SKU 行数
+    const savedSkuCount = submittedItems.length;
 
     return NextResponse.json({
       success: true,
-      data: { savedCount },
-      message: `成功提交 ${savedCount} 条运单`,
-    } as ApiResponse<{ savedCount: number }>);
+      data: { savedCount: savedSkuCount, savedOutbounds },
+      message: `成功提交 ${savedOutbounds} 张出库单（${savedSkuCount} 条 SKU）`,
+    } as ApiResponse<{ savedCount: number; savedOutbounds: number }>);
   } catch (error) {
     console.error("Save orders error:", error);
     return NextResponse.json(

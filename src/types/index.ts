@@ -115,18 +115,21 @@ export interface ParseRule {
   aiNotes?: string;             // AI 推测说明
 }
 
-// 运单数据（解析后的结构化数据）
+// 运单数据（解析后的结构化数据，SKU 粒度：每个 SKU 一条记录）
+// 同一 externalCode 下的多条 OrderItem 共享父单（OutboundOrder）信息
 export interface OrderItem {
   id: string;
+  // 外部系统订单唯一编号（用于聚合/去重）
+  externalCode?: string;
+  // 父出库单 ID（运行时关联，DB 落库时填充）
+  outboundOrderId?: string;
   // A组：门店模式
   storeName?: string;
   // B组：收件人模式
   recipientName?: string;
   recipientPhone?: string;
   recipientAddress?: string;
-  // 外部编码
-  externalCode?: string;
-  // SKU 信息
+  // SKU 信息（每条记录只对应一个 SKU）
   skuCode: string;
   skuName: string;
   skuQuantity: number;
@@ -141,6 +144,29 @@ export interface OrderItem {
   // 状态
   status: "draft" | "submitted" | "error";
   errors?: ValidationError[];
+  // 时间
+  createdAt: string;
+  submittedAt?: string;
+}
+
+// 父出库单：按 externalCode 聚合的容器
+// 同一 externalCode 下的多个 OrderItem（SKU 行）共享一组收货信息
+export interface OutboundOrder {
+  id: string;
+  externalCode?: string;        // 外部系统订单唯一编号
+  storeName?: string;            // 收货门店
+  recipientName?: string;        // 收件人
+  recipientPhone?: string;       // 电话
+  recipientAddress?: string;     // 地址
+  remark?: string;               // 父单备注
+  // 元信息
+  sourceFile?: string;
+  sourceSheet?: string;
+  sourceRow?: number;
+  ruleId?: string;
+  status: "draft" | "submitted" | "error";
+  // 子项：SKU 行
+  items: OrderItem[];
   // 时间
   createdAt: string;
   submittedAt?: string;

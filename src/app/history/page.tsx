@@ -2,18 +2,19 @@
 
 import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
-import { OrderItem } from "@/types";
+import { OutboundOrder } from "@/types";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, exportToExcel } from "@/lib/utils";
 
 export default function HistoryPage() {
-  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [orders, setOrders] = useState<OutboundOrder[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [searchExternalCode, setSearchExternalCode] = useState("");
   const [searchRecipientName, setSearchRecipientName] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const pageSize = 20;
 
   const loadOrders = useCallback(async () => {
@@ -31,14 +32,14 @@ export default function HistoryPage() {
       if (data.success) {
         setOrders(data.data.orders);
         setTotal(data.data.total);
+        // 默认展开第一页所有
+        setExpandedIds(new Set(data.data.orders.map((o: OutboundOrder) => o.id)));
       } else {
-        // API 返回错误时不弹 toast，静默处理
         console.error("API error:", data.error);
         setOrders([]);
         setTotal(0);
       }
     } catch (err) {
-      // 网络错误时也不弹 toast，静默降级为空列表
       console.error("Failed to load orders:", err);
       setOrders([]);
       setTotal(0);
@@ -56,37 +57,69 @@ export default function HistoryPage() {
     loadOrders();
   };
 
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // 导出：把每个出库单展开为多行（每条 SKU 一行）
   const handleExportAll = () => {
     try {
-      const exportData = orders.map((order) => ({
-        外部编码: order.externalCode || "",
-        收货门店: order.storeName || "",
-        收件人: order.recipientName || "",
-        电话: order.recipientPhone || "",
-        地址: order.recipientAddress || "",
-        SKU编码: order.skuCode,
-        SKU名称: order.skuName,
-        发货数量: order.skuQuantity,
-        规格型号: order.skuSpec || "",
-        备注: order.remark || "",
-        提交时间: order.submittedAt ? formatDate(order.submittedAt) : "",
-        状态: order.status === "submitted" ? "已提交" : order.status === "error" ? "有错误" : "草稿",
-      }));
+      const exportData: Record<string, unknown>[] = [];
+      for (const ob of orders) {
+        if (ob.items.length === 0) {
+          exportData.push({
+            外部编码: ob.externalCode || "",
+            收货门店: ob.storeName || "",
+            收件人: ob.recipientName || "",
+            电话: ob.recipientPhone || "",
+            地址: ob.recipientAddress || "",
+            SKU编码: "",
+            SKU名称: "",
+            发货数量: 0,
+            规格型号: "",
+            备注: ob.remark || "",
+            提交时间: ob.submittedAt ? formatDate(ob.submittedAt) : "",
+            状态: ob.status === "submitted" ? "已提交" : ob.status === "error" ? "有错误" : "草稿",
+          });
+        } else {
+          for (const item of ob.items) {
+            exportData.push({
+              外部编码: ob.externalCode || "",
+              收货门店: ob.storeName || "",
+              收件人: ob.recipientName || "",
+              电话: ob.recipientPhone || "",
+              地址: ob.recipientAddress || "",
+              SKU编码: item.skuCode,
+              SKU名称: item.skuName,
+              发货数量: item.skuQuantity,
+              规格型号: item.skuSpec || "",
+              备注: item.remark || ob.remark || "",
+              提交时间: ob.submittedAt ? formatDate(ob.submittedAt) : "",
+              状态: ob.status === "submitted" ? "已提交" : ob.status === "error" ? "有错误" : "草稿",
+            });
+          }
+        }
+      }
       exportToExcel(exportData, `运单列表_${new Date().toLocaleDateString()}.xlsx`);
-      toast.success("导出成功");
+      toast.success(`导出 ${exportData.length} 条 SKU`);
     } catch (err) {
       console.error("Export error:", err);
       toast.error("导出失败");
     }
   };
 
+  const totalSkuCount = orders.reduce((sum, ob) => sum + ob.items.length, 0);
   const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div className="space-y-4 lg:space-y-5 page-container">
-      {/* 吸顶操作区：标题 + 状态标签 + 筛选 + 操作按钮 */}
+      {/* 吸顶操作区：标题 + 筛选 */}
       <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-3.5 space-y-3">
-        {/* 页面标题 + 操作按钮 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb]">
           <div className="flex items-center gap-3 p-4">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_3px_10px_rgba(15,198,194,0.25)]">
@@ -102,27 +135,14 @@ export default function HistoryPage() {
             <div className="flex-1 min-w-0">
               <h1 className="text-lg font-semibold text-[#1d2129]">已导入运单</h1>
               <p className="text-sm text-[#86909c] mt-0.5">
-                查看已提交的历史运单，支持筛选与导出
+                按外部编码聚合的出库单，每张单据内含全部 SKU 行
               </p>
             </div>
           </div>
         </div>
 
-        {/* 筛选表单 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4">
           <div className="flex flex-wrap items-center gap-2 lg:gap-2.5 search-controls-sm">
-            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
-              <span className="whitespace-nowrap">申请渠道</span>
-              <select className="border border-[#d0d7de] rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
-                <option>全部</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
-              <span className="whitespace-nowrap">审核状态</span>
-              <select className="border border-[#d0d7de] rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0fc6c2] bg-white min-w-[80px]">
-                <option>全部</option>
-              </select>
-            </div>
             <input
               type="text"
               placeholder="搜索外部编码..."
@@ -139,10 +159,6 @@ export default function HistoryPage() {
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="w-full sm:w-[160px] lg:w-[200px] px-2.5 py-1.5 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
             />
-            <div className="flex items-center gap-2 text-sm text-[#4e5969]">
-              <span className="whitespace-nowrap">创建时间</span>
-              <input type="date" className="border border-[#d0d7de] rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0fc6c2] bg-white" />
-            </div>
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={handleSearch}>查询</Button>
             </div>
@@ -155,50 +171,20 @@ export default function HistoryPage() {
         <Button size="sm" onClick={() => (window.location.href = "/")}>
           新增
         </Button>
-        <Button variant="outline" size="sm" onClick={() => toast("批量审核功能待接入")}>
-          审核
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => toast("批量导入功能待接入")}>
-          导入
-        </Button>
         {orders.length > 0 && (
-          <>
-            <Button variant="outline" size="sm" onClick={handleExportAll}>
-              导出
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => toast("导出明细功能待接入")}>
-              导出明细
-            </Button>
-          </>
+          <Button variant="outline" size="sm" onClick={handleExportAll}>
+            导出（{totalSkuCount} 条 SKU）
+          </Button>
         )}
       </div>
 
-      {/* 数据列表 - 卡片式 */}
+      {/* 数据列表 - 卡片式（按出库单聚合） */}
       <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden animate-fade-in">
         {loading ? (
-          <div className="p-4 lg:p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-base min-w-[700px]">
-                <thead>
-                  <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                    {["外部编码", "收货门店", "收件人", "SKU编码", "SKU名称", "数量", "提交时间", "状态"].map((h) => (
-                      <th key={h} className="px-3 lg:px-4 py-3.5 text-left text-base font-semibold text-[#4e5969]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i} className="border-b border-[#f2f3f5]">
-                      {Array.from({ length: 8 }).map((_, j) => (
-                        <td key={j} className="px-3 lg:px-4 py-3">
-                          <div className="skeleton h-4 rounded" style={{ width: `${60 + Math.random() * 40}%` }} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="p-4 lg:p-6 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="skeleton h-24 rounded-lg" />
+            ))}
           </div>
         ) : orders.length === 0 ? (
           <div className="p-8">
@@ -214,95 +200,118 @@ export default function HistoryPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-base min-w-[700px]">
-                <thead>
-                  <tr className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
-                      外部编码
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
-                      收货门店
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
-                      收件人
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969]">
-                      SKU编码
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden md:table-cell">
-                      SKU名称
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-right text-base font-semibold text-[#4e5969]">
-                      数量
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-left text-base font-semibold text-[#4e5969] hidden sm:table-cell">
-                      提交时间
-                    </th>
-                    <th className="px-4 lg:px-5 py-3.5 text-center text-base font-semibold text-[#4e5969] sticky-action-col">
-                      状态
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order, index) => (
-                    <tr
-                      key={order.id}
-                      className={`border-b border-[#f2f3f5] hover:bg-[#fafbfc] transition-colors ${
-                        index % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"
-                      }`}
+            <div className="divide-y divide-[#f2f3f5]">
+              {orders.map((ob) => {
+                const isExpanded = expandedIds.has(ob.id);
+                const totalQty = ob.items.reduce((s, i) => s + i.skuQuantity, 0);
+                return (
+                  <div key={ob.id} className="hover:bg-[#fafbfc] transition-colors">
+                    {/* 父单头部：展开/折叠 + 共享信息 */}
+                    <div
+                      className="flex items-center gap-3 p-3.5 lg:p-4 cursor-pointer"
+                      onClick={() => toggleExpand(ob.id)}
                     >
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#1d2129] font-mono whitespace-nowrap">
-                        {order.externalCode || "—"}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate">
-                        {order.storeName || "—"}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] whitespace-nowrap">
-                        {order.recipientName || "—"}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] max-w-[100px] lg:max-w-[120px] truncate">
-                        {order.skuCode}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#4e5969] max-w-[120px] lg:max-w-[150px] truncate hidden md:table-cell">
-                        {order.skuName}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#1d2129] text-right font-medium whitespace-nowrap">
-                        {order.skuQuantity}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-sm text-[#86909c] whitespace-nowrap hidden sm:table-cell">
-                        {order.submittedAt
-                          ? formatDate(order.submittedAt)
-                          : formatDate(order.createdAt)}
-                      </td>
-                      <td className="px-4 lg:px-5 py-3 text-center sticky-action-col">
+                      {/* 展开箭头 */}
+                      <div className={`flex-shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86909c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </div>
+                      {/* 关键信息 */}
+                      <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-4 gap-2 md:gap-4">
+                        <div className="min-w-0">
+                          <p className="text-xs text-[#86909c]">外部编码</p>
+                          <p className="text-sm font-mono font-medium text-[#1d2129] truncate">
+                            {ob.externalCode || "—"}
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-[#86909c]">收货门店 / 收件人</p>
+                          <p className="text-sm text-[#1d2129] truncate">
+                            {ob.storeName || ob.recipientName || "—"}
+                          </p>
+                        </div>
+                        <div className="min-w-0 hidden md:block">
+                          <p className="text-xs text-[#86909c]">SKU 数 / 总量</p>
+                          <p className="text-sm text-[#1d2129]">
+                            {ob.items.length} 项 · {totalQty}
+                          </p>
+                        </div>
+                        <div className="min-w-0 hidden md:block">
+                          <p className="text-xs text-[#86909c]">提交时间</p>
+                          <p className="text-sm text-[#86909c]">
+                            {ob.submittedAt ? formatDate(ob.submittedAt) : formatDate(ob.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      {/* 状态标签 */}
+                      <div className="flex-shrink-0">
                         <span
                           className={`inline-block px-2 py-0.5 text-xs rounded whitespace-nowrap ${
-                            order.status === "submitted"
+                            ob.status === "submitted"
                               ? "bg-[#e8fafa] text-[#0fc6c2]"
-                              : order.status === "error"
+                              : ob.status === "error"
                                 ? "bg-[#fff1f0] text-[#cf1322]"
                                 : "bg-[#f2f3f5] text-[#86909c]"
                           }`}
                         >
-                          {order.status === "submitted"
+                          {ob.status === "submitted"
                             ? "已提交"
-                            : order.status === "error"
+                            : ob.status === "error"
                               ? "有错误"
                               : "草稿"}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+
+                    {/* 展开后的子项：SKU 行列表 */}
+                    {isExpanded && (
+                      <div className="bg-[#fafbfc] border-t border-[#f2f3f5] px-4 lg:px-6 py-2">
+                        {ob.items.length === 0 ? (
+                          <p className="text-xs text-[#86909c] py-3 text-center">无 SKU</p>
+                        ) : (
+                          <div className="divide-y divide-[#f2f3f5]">
+                            {/* 收货详情行 */}
+                            {(ob.recipientName || ob.recipientPhone || ob.recipientAddress) && (
+                              <div className="py-2 text-xs text-[#4e5969] flex flex-wrap gap-x-4 gap-y-1">
+                                {ob.recipientName && <span>收件人：{ob.recipientName}</span>}
+                                {ob.recipientPhone && <span>电话：{ob.recipientPhone}</span>}
+                                {ob.recipientAddress && <span className="truncate max-w-[400px]">地址：{ob.recipientAddress}</span>}
+                              </div>
+                            )}
+                            {/* SKU 表头 */}
+                            <div className="grid grid-cols-12 gap-2 py-2 text-xs font-semibold text-[#86909c]">
+                              <div className="col-span-1">序号</div>
+                              <div className="col-span-3">SKU编码</div>
+                              <div className="col-span-4">SKU名称</div>
+                              <div className="col-span-2">规格</div>
+                              <div className="col-span-1 text-right">数量</div>
+                              <div className="col-span-1 text-right">备注</div>
+                            </div>
+                            {ob.items.map((item, idx) => (
+                              <div key={item.id} className="grid grid-cols-12 gap-2 py-2 text-sm text-[#1d2129]">
+                                <div className="col-span-1 text-[#86909c]">{idx + 1}</div>
+                                <div className="col-span-3 font-mono truncate">{item.skuCode}</div>
+                                <div className="col-span-4 truncate">{item.skuName}</div>
+                                <div className="col-span-2 truncate text-[#4e5969]">{item.skuSpec || "—"}</div>
+                                <div className="col-span-1 text-right font-medium">{item.skuQuantity}</div>
+                                <div className="col-span-1 text-right text-[#86909c] truncate">{item.remark || ""}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* 分页 - 鲸天风格 */}
+            {/* 分页 */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc]">
                 <p className="text-sm text-[#86909c]">
-                  共 {total} 条
+                  共 {total} 张出库单
                 </p>
                 <div className="flex items-center gap-1">
                   <button
@@ -328,21 +337,6 @@ export default function HistoryPage() {
                       </button>
                     );
                   })}
-                  {totalPages > 7 && (
-                    <>
-                      <span className="text-sm text-[#86909c] px-1">...</span>
-                      <button
-                        onClick={() => setPage(totalPages)}
-                        className={`min-w-[32px] h-[28px] text-sm rounded transition-colors ${
-                          page === totalPages
-                            ? "bg-[#0fc6c2] text-white"
-                            : "hover:bg-white border border-transparent"
-                        }`}
-                      >
-                        {totalPages}
-                      </button>
-                    </>
-                  )}
                   <button
                     disabled={page >= totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
@@ -350,21 +344,6 @@ export default function HistoryPage() {
                   >
                     &gt;
                   </button>
-                  <span className="ml-2 text-sm text-[#86909c]">
-                    前往第{" "}
-                    <input
-                      type="number"
-                      min={1}
-                      max={totalPages}
-                      value={page}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value);
-                        if (v >= 1 && v <= totalPages) setPage(v);
-                      }}
-                      className="w-10 h-[24px] text-sm text-center border border-[#d0d7de] rounded outline-none focus:border-[#0fc6c2]"
-                    />{" "}
-                    页
-                  </span>
                 </div>
               </div>
             )}

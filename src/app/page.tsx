@@ -298,7 +298,10 @@ export default function HomePage() {
       if (data.success) {
         setSubmittedCount(data.data.savedCount);
         setStep("submitted");
-        toast.success(`成功提交 ${data.data.savedCount} 条运单！`, { id: toastId });
+        toast.success(
+          `成功提交 ${data.data.savedOutbounds} 张出库单（${data.data.savedCount} 条 SKU）！`,
+          { id: toastId }
+        );
       } else {
         toast.error(data.error || "提交失败", { id: toastId });
       }
@@ -584,7 +587,7 @@ export default function HomePage() {
             <p className="text-sm text-[#4e5969] mb-6 leading-relaxed">
               已成功提交{" "}
               <span className="font-semibold text-[#0fc6c2] text-base">{submittedCount}</span>{" "}
-              条运单
+              条 SKU 数据（按外部编码已自动聚合成出库单）
             </p>
             <div className="flex justify-center gap-2.5 flex-wrap">
               <Button onClick={handleReset}>
