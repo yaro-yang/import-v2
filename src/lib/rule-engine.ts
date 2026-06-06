@@ -585,23 +585,94 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   const mode = rule.dataRegion.matrixMode;
   if (!mode) return rawData;
 
-  const rowHeaderCol = mode.rowHeaderColumn ?? 0;
-  const valueStartCol = mode.valueColumnsStart ?? 1;
-  const valueEndCol = mode.valueColumnsEnd ?? 100;
+  if (rawData.length === 0) return transposed;
 
-  // 获取列名（门店名/日期等）
-  const columnNames: string[] = [];
+  // ===== 自动检测矩阵列范围 =====
+  const standardColumnKeywords = [
+    "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类",
+    "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结",
+    "单品", "价格", "金额", "总价", "备注", "说明"
+  ];
+
+  // 找到 header 行（通常 colNameRow 或第一条数据对应的 header）
   const colNameRowIndex = mode.valueColumnNamesRow ?? 0;
   const colNameRow = rawData.find((r) => r.rowIndex === colNameRowIndex);
 
+  // 获取第一行有数据的行来检测列名
+  const firstDataRow = rawData[0];
+
+  // 自动检测：扫描所有列，找出第一组连续的非标准列（很可能是门店列）
+  let autoValueStartCol = mode.valueColumnsStart;
+  let autoValueEndCol = mode.valueColumnsEnd;
+
+  if (autoValueStartCol === undefined || autoValueEndCol === undefined) {
+    // 获取最大列索引
+    let maxColIdx = 50;
+    const sampleRow = colNameRow || firstDataRow;
+    if (sampleRow) {
+      const colKeys = Object.keys(sampleRow.cells)
+        .filter((k) => k.startsWith("col_"))
+        .map((k) => parseInt(k.replace("col_", ""), 10));
+      if (colKeys.length > 0) maxColIdx = Math.max(...colKeys);
+    }
+
+    // 收集每列的列名
+    const colNames: { idx: number; name: string; isStandard: boolean }[] = [];
+    for (let c = 0; c <= maxColIdx; c++) {
+      const colName = (colNameRow?.cells[`col_${c}`] || firstDataRow?.cells[`col_${c}`] || "").trim();
+      const isStandard = !colName || standardColumnKeywords.some((kw) => colName.includes(kw));
+      colNames.push({ idx: c, name: colName, isStandard });
+    }
+
+    // 找到第一组连续的非标准列（门店列通常在表头后部）
+    // 策略：从表的中间位置开始，找最长的连续非标准列区间
+    const midPoint = Math.floor(colNames.length / 2);
+    let bestStart = autoValueStartCol ?? 1;
+    let bestEnd = autoValueEndCol ?? maxColIdx;
+    let bestLen = 0;
+
+    for (let c = midPoint; c < colNames.length; c++) {
+      if (!colNames[c].isStandard && colNames[c].name) {
+        let end = c;
+        while (end < colNames.length && !colNames[end].isStandard && colNames[end].name && end + 1 < colNames.length && !colNames[end + 1].isStandard && colNames[end + 1].name) {
+          end++;
+        }
+        const len = end - c + 1;
+        if (len > bestLen) {
+          bestLen = len;
+          bestStart = c;
+          bestEnd = end;
+        }
+        c = end;
+      }
+    }
+
+    // 如果找到了更合理的区间，使用它
+    if (bestLen >= 2) {
+      autoValueStartCol = autoValueStartCol ?? bestStart;
+      autoValueEndCol = autoValueEndCol ?? bestEnd;
+    } else {
+      autoValueStartCol = autoValueStartCol ?? 1;
+      autoValueEndCol = autoValueEndCol ?? maxColIdx;
+    }
+  }
+
+  const valueStartCol = autoValueStartCol ?? 1;
+  const valueEndCol = autoValueEndCol ?? 50;
+
+  // 行头列：使用配置的，或自动检测第一列非门店的SKU标识列
+  const rowHeaderCol = mode.rowHeaderColumn ?? 0;
+
   for (const row of rawData) {
     const rowHeader = row.cells[`col_${rowHeaderCol}`] || "";
-    if (!rowHeader || rowHeader === Object.values(row.cells).find((c) => c === rowHeader && c === "SKU信息" || c === "合计")) continue;
+    if (!rowHeader || rowHeader === "合计" || rowHeader === "小计") continue;
 
+    let hasAnyValue = false;
     for (let col = valueStartCol; col <= valueEndCol; col++) {
       const cellValue = row.cells[`col_${col}`];
       if (!cellValue || cellValue.trim() === "" || cellValue === "0" || cellValue === "null") continue;
 
+      hasAnyValue = true;
       const colName = colNameRow?.cells[`col_${col}`] || `col_${col}`;
 
       const newRow: RawDataRow = {
@@ -618,6 +689,15 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
       };
 
       transposed.push(newRow);
+    }
+
+    // 如果整行没有任何门店有值，但 SKU 有效，至少保留一行（允许数量为0的情况）
+    if (!hasAnyValue && rowHeader) {
+      // 检查该行是否为纯空行（无任何有效SKU数据）
+      const hasSkuData = Object.entries(row.cells).some(
+        ([key, val]) => key !== `col_${rowHeaderCol}` && val && val.trim() && !key.startsWith("_transposed")
+      );
+      if (!hasSkuData) continue; // 真正的空行，跳过
     }
   }
 
@@ -706,12 +786,12 @@ function buildOrderFromRow(row: RawDataRow, rule: ParseRule, fileName: string): 
 
   for (const mapping of rule.fieldMappings) {
     let value = extractFieldValue(row, mapping);
-    // 矩阵转置模式
+    // 矩阵转置模式：门店名和数量来自转置后的特殊键
     if (mapping.targetField === "storeName" && row.cells["_transposed_col_name"]) {
       value = row.cells["_transposed_col_name"];
     }
-    if (mapping.targetField === "skuQuantity" && row.cells["_qty_" + (mapping.columnName || "")]) {
-      value = row.cells["_qty_" + (mapping.columnName || "")];
+    if (mapping.targetField === "skuQuantity" && row.cells["_transposed_value"]) {
+      value = row.cells["_transposed_value"];
     }
     if (value !== undefined && value !== null && value !== "") {
       if (mapping.targetField === "skuQuantity") {
@@ -761,6 +841,18 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
         return match ? match[1].trim() : "";
       }
       return "";
+    case "matrix_transpose":
+      // 矩阵转置模式：值来自转置后的特殊单元格
+      if (mapping.targetField === "storeName") {
+        return row.cells["_transposed_col_name"] || "";
+      }
+      if (mapping.targetField === "skuQuantity") {
+        return row.cells["_transposed_value"] || "";
+      }
+      // 其他字段正常从列中提取
+      if (mapping.columnName) return row.cells[mapping.columnName] || "";
+      if (mapping.columnIndex !== undefined) return row.cells[`col_${mapping.columnIndex}`] || "";
+      return mapping.defaultValue || "";
     default:
       if (mapping.columnName) return row.cells[mapping.columnName] || "";
       if (mapping.columnIndex !== undefined) return row.cells[`col_${mapping.columnIndex}`] || "";

@@ -413,9 +413,6 @@ export default function HistoryPage() {
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="text-lg font-semibold text-[#1d2129]">已导入运单</h1>
-              <p className="text-sm text-[#86909c] mt-0.5">
-                调拨单按 1+N+M 合并展示：1 行外部编码 + N 行门店 + M 行 SKU
-              </p>
             </div>
           </div>
         </div>
@@ -518,20 +515,12 @@ export default function HistoryPage() {
             value={totalQtyCount}
             tone="primary"
           />
-          {(totalTransfers > 0 || totalOutbounds > 0) && (
+          {totalOutbounds > 0 && (
             <div className="hidden md:flex items-center gap-2 text-xs ml-1">
-              {totalTransfers > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#e8fafa] text-[#0bada9] font-medium rounded-md border border-[#0fc6c2]/15">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#0fc6c2]" />
-                  调拨单 {totalTransfers}
-                </span>
-              )}
-              {totalOutbounds > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#f2f3f5] text-[#4e5969] font-medium rounded-md">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#86909c]" />
-                  出库单 {totalOutbounds}
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#f2f3f5] text-[#4e5969] font-medium rounded-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#86909c]" />
+                出库单 {totalOutbounds}
+              </span>
             </div>
           )}
         </div>

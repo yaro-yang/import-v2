@@ -30,7 +30,8 @@ function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
    - 标准表：表头行含\u201c物品编码\u201d、\u201c名称\u201d、\u201c数量\u201d等列名，数据行紧接其后
    - 多区域布局：顶部元数据行（如\u201c调拨单号：xxx\u201d、\u201c收货机构：xxx\u201d），中间数据表，底部尾部信息（如\u201c收货人：xxx\u201d、\u201c电话：xxx\u201d）
    - 卡片式布局：由多个卡片组成，每张卡片以\u201c\u25b6 调拨记录 #N\u201d开头，卡片内包含门店/收货人信息+一张小数据表
-   - 矩阵布局：前几列是SKU/物品信息，后几列是门店名，每个单元格是门店对应的数量
+   - 矩阵布局：前几列是SKU/物品信息（如仓库名称、货主名称、SKU名称、SKU条码等），后几列是门店名（如银泰、金银潭、金桥等），每个单元格是门店对应的数量。常见于库存分配表/配货表。
+     * **矩阵库分配表重要特征：表头既没有"调拨单号/配送单号"，也没有"收货人/电话/地址"，文件本身就是货主对各门店的分配数量清单**
    - 复合单元格：一个单元格含\u201c\\n\u201d分隔的复合信息（如\u201c规格\u00d7数量\u201d）`
     : request.fileType === "word"
       ? "Word纯文本段落，注意段落间的结构化信息（收货人、地址、电话等）。"
@@ -57,25 +58,28 @@ ${contentPreview}
    - 标准表：从表头行找对应的列名，如"物品编码"、"SKU名称"、"调入门店"
    - **卡片式：SKU 字段的 columnName 直接填卡片内 SKU 小表的列名（如"物品编码"、"物品名称"、"数量"）**
    - 卡片式/多区域：如果在表头找不到，检查内容中是否有key:value对，如"调拨单号：xxx"，则columnName填"调拨单号"
-   - 矩阵布局：standardFields中填skuCode/skuName等标准列的映射；matrixStoreColumns中填门店名列表
+   - 矩阵布局：SKU字段从前面标准列中映射；storeName由矩阵转置自动填充门店列名；**externalCode如果表中找不到任何单号字段，confidence填0.1，columnName填null，并在notes中说明"矩阵分配表无外部单号，可用文件名替代"**
 
 4. 特殊模式检测（非常重要）：
    a) cardMode: true —— 如果内容包含"▶ 调拨记录"、"▶ 配送记录"等卡片分隔符
       - **卡片式必须将 cardMode.enabled 设为 true, startMarker 设为 "▶"**
       - **卡片式不要设置 tailRegion（每张卡片内部已含收货门店/收货人/电话/地址信息，由卡片解析器自动提取）**
-   b) matrixMode: true —— 如果表头行包含门店/分店名作为列（如"银泰"、"金桥"、"金银潭"）
+   b) matrixMode: true —— 表头包含≥2个门店名（如"银泰"、"金桥"、"金银潭"），且这些列在表头靠后位置
+      - **矩阵模式如果表中完全找不到 externalCode、recipientName、recipientPhone、recipientAddress 的对应列，confidence 设为 0.1，columnName 设为 null，不要强行猜测**
    c) compositeMode: true —— 如果表格单元格包含"\n"换行分隔的复合信息
    d) groupByExternalCode: true —— 如果多个仓库配送单合并到一个文件中
    e) mergeSheets: true —— 如果有多个结构相同的Sheet
 
-5. 尾部信息区（tailRegion）——**仅对标准表有效，卡片式不需要**:
+5. 尾部信息区（tailRegion）——**仅对标准表有效，卡片式和矩阵式不需要**:
    - 如果数据表下方有额外的信息行（如"收货人：xxx"、"电话：xxx"、"地址：xxx"、"收货门店：xxx"、"单据号：xxx"），
      这些应提取到tailFields中
    - tailFields格式：[{targetField, mode: "row_field", rowKeyPattern: "收货人|收货人姓名", staticValue: null, confidence: 0.8}]
    - tailStartRow: 尾部信息起始行号。如果有合计行，tailStartRow在合计行之后
 
 6. storeName(收货门店)优先匹配含"调入/门店/收货店/店铺/客户/收货机构"等关键词的列名
+   - **矩阵模式：storeName来自矩阵列名转置，columnName可填null，由矩阵转置自动处理**
 7. recipientName/recipientPhone/recipientAddress优先从尾部信息区提取（卡片式则由卡片解析器自动处理）
+   - **矩阵库存分配表通常没有收件人信息，这三项直接填null，confidence=0.1**
 
 输出纯JSON,不要markdown代码块,不要解释:
 {
@@ -302,23 +306,117 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
 
   // 检测矩阵模式的数量列（表头行中超出标准字段的列名可能是门店名）
   const headerParts = headerLine.split(" | ").map((p) => p.trim());
-  const standardHeaderKeywords = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期"];
+  const standardHeaderKeywords = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结"];
   let matrixStoreColumns: string[] = [];
-  if (headerParts.length >= 8) {
-    // 后半部分列如果看起来是门店名，则为矩阵模式
-    const secondHalf = headerParts.slice(Math.floor(headerParts.length / 2));
-    matrixStoreColumns = secondHalf.filter((col) =>
-      storeNameKeywords.some((kw) => col.includes(kw)) &&
-      !standardHeaderKeywords.some((kw) => col.includes(kw))
-    );
+
+  // 矩阵列检测：不只检查后半部分，而是扫描所有列，找出看起来是门店/分店名称的列
+  // 门店列特征：(1) 不属于标准业务字段 (2) 包含门店关键词或看起来像专有名称
+  const storeNamePatterns = ["店", "门店", "分店", "商场", "银泰", "金桥", "金银潭", "万象", "万达", "广场", "世纪"];
+  const isLikelyStoreName = (col: string): boolean => {
+    const trimmed = col.trim();
+    if (!trimmed) return false;
+    // 如果是标准字段关键词，跳过
+    if (standardHeaderKeywords.some((kw) => trimmed.includes(kw))) return false;
+    // 如果包含门店模式关键词，是门店列
+    if (storeNamePatterns.some((kw) => trimmed.includes(kw))) return true;
+    // 如果列名很短（2-4字）且在表头最后几列（>=4列之后），可能是简称门店名
+    if (trimmed.length >= 2 && trimmed.length <= 4 && headerParts.length >= 10) return false; // 太短且无关键词的不确定
+    return false;
+  };
+
+  for (const part of headerParts) {
+    if (isLikelyStoreName(part)) {
+      matrixStoreColumns.push(part);
+    }
   }
+
+  // 扩展检测：如果 headerParts 数量 >= 10，最后几列可能是不含关键词的门店名（如"银泰"已经被上面的 pattern 覆盖）
+  // 如果矩阵列数量不足但列数多，再检查最后 1/4 的列中短小精悍的列名
+  if (matrixStoreColumns.length < 2 && headerParts.length >= 12) {
+    const lastQuarter = headerParts.slice(Math.floor(headerParts.length * 0.75));
+    for (const col of lastQuarter) {
+      const trimmed = col.trim();
+      if (trimmed && !standardHeaderKeywords.some((kw) => trimmed.includes(kw)) && trimmed.length <= 4 && trimmed.length >= 2) {
+        if (!matrixStoreColumns.includes(trimmed)) {
+          matrixStoreColumns.push(trimmed);
+        }
+      }
+    }
+  }
+
+  // 检测是否为"纯矩阵库存分配表"——有门店列但没有任何外部编码、收货人、电话、地址字段
+  // 这种文件（如欢乐牧场模板）的结构：SKU列在前 + 门店分配列在后，无外部单号和收件人信息
+  const hasExternalCodeAnywhere = (() => {
+    for (const kw of commonMappings.externalCode.keywords) {
+      for (let i = 0; i < Math.min(lines.length, 30); i++) {
+        if (lines[i].includes(kw)) return true;
+      }
+    }
+    return false;
+  })();
+  const hasRecipientInfoAnywhere = (() => {
+    const recipientKws = ["收货人", "收件人", "联系人", "电话", "联系电话", "地址", "收货地址", "收件人地址"];
+    for (const kw of recipientKws) {
+      for (let i = 0; i < Math.min(lines.length, 30); i++) {
+        if (lines[i].includes(kw)) return true;
+      }
+    }
+    return false;
+  })();
+  const isPureMatrixInventoryTable = matrixStoreColumns.length >= 2 && !hasExternalCodeAnywhere && !hasRecipientInfoAnywhere && !isCardMode;
 
   // ===== 第五步：生成字段映射 =====
   for (const [field, info] of Object.entries(commonMappings)) {
     let found = false;
     let matchedKeyword = "";
     let matchedLineIdx = headerRow;
-    let matchMode: "header" | "nearby" | "tail" | "externalCode" = "header";
+    let matchMode: "header" | "nearby" | "tail" | "externalCode" | "matrix" | "filename" = "header";
+
+    // ===== 纯矩阵库存分配表特殊处理 =====
+    if (isPureMatrixInventoryTable) {
+      if (field === "storeName") {
+        // 矩阵模式：storeName 来自矩阵列名转置
+        const storeColNames = matrixStoreColumns.slice(0, 5).join("/");
+        mappings.push({
+          targetField: field,
+          suggestedSource: `矩阵门店列: ${storeColNames}${matrixStoreColumns.length > 5 ? "..." : ""}`,
+          confidence: 0.75,
+          note: `矩阵转置模式：${matrixStoreColumns.length}个门店列（${storeColNames}）自动拆分`,
+        });
+        continue;
+      }
+      if (field === "externalCode") {
+        // 纯矩阵分配表没有外部单号，使用文件名作为兜底
+        const baseName = request.fileName.replace(/\.[^.]+$/, "");
+        mappings.push({
+          targetField: field,
+          suggestedSource: baseName,
+          confidence: 0.5,
+          note: `矩阵分配表无单号字段，使用文件名"${baseName}"作为外部编码`,
+        });
+        continue;
+      }
+      if (field === "skuQuantity") {
+        // 矩阵模式：数量从门店列中取得
+        mappings.push({
+          targetField: field,
+          suggestedSource: `矩阵门店列数量`,
+          confidence: 0.65,
+          note: `发货数量来自各门店列值（矩阵转置后自动聚合）`,
+        });
+        continue;
+      }
+      if (field.startsWith("recipient") || field === "recipientName" || field === "recipientPhone" || field === "recipientAddress") {
+        // 纯矩阵分配表没有收件人信息
+        mappings.push({
+          targetField: field,
+          suggestedSource: "",
+          confidence: 0.1,
+          note: "纯矩阵分配表无收件人信息",
+        });
+        continue;
+      }
+    }
 
     // 先在表头行搜索
     for (const keyword of info.keywords) {
@@ -329,8 +427,8 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       }
     }
 
-    // 表头行没找到，在周围行搜索
-    if (!found) {
+    // 表头行没找到，在周围行搜索（非纯矩阵模式才需要搜索尾部/附近行）
+    if (!found && !isPureMatrixInventoryTable) {
       // 对 storeName/recipient fields 优先搜索尾部的 key:value 对
       if ((field === "storeName" || field.startsWith("recipient")) && tailLines.length > 0) {
         const tailKw = field === "storeName" ? ["收货门店", "收货机构", "门店"]
@@ -368,12 +466,24 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
       }
     }
 
-    // externalCode 特殊处理：如果所有搜索都没找到，使用 step 1 结果
+    // externalCode 特殊处理：如果所有搜索都没找到，使用 step 1 结果（非矩阵模式）
     if (!found && field === "externalCode" && externalCodeMatchedKeyword) {
       matchedKeyword = externalCodeMatchedKeyword;
       matchedLineIdx = externalCodeMatchedLineIdx;
       found = true;
       matchMode = "externalCode";
+    }
+
+    // externalCode 兜底：矩阵模式下也没找到，使用文件名
+    if (!found && field === "externalCode" && matrixStoreColumns.length >= 2) {
+      const baseName = request.fileName.replace(/\.[^.]+$/, "");
+      mappings.push({
+        targetField: field,
+        suggestedSource: baseName,
+        confidence: 0.45,
+        note: `矩阵模式未检测到单号字段，使用文件名"${baseName}"作为外部编码`,
+      });
+      continue;
     }
 
     // 提取列名文字
@@ -406,7 +516,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     { targetField: "recipientAddress", keywords: ["地址", "收货地址"] },
   ];
 
-  if (tailLines.length > 0) {
+  if (tailLines.length > 0 && !isPureMatrixInventoryTable) {
     for (const tfd of tailFieldDefs) {
       for (const tl of tailLines) {
         for (const kw of tfd.keywords) {
@@ -423,25 +533,52 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     }
   }
 
-  // ===== 第七步：构建建议的解析规则 =====
-  const suggestedRuleFieldMappings: FieldMapping[] = mappings.map((m) => ({
-    targetField: m.targetField,
-    mode: (m.targetField === "storeName" || m.targetField.startsWith("recipient"))
-           && tailFields.some((tf) => tf.targetField === m.targetField)
-           ? "row_field" as FieldMapping["mode"]
-           : "column_name" as FieldMapping["mode"],
-    columnName: extractCleanColumnName(m.suggestedSource),
-  }));
-
   // 检测是否为矩阵模式
   const isMatrixMode = matrixStoreColumns.length >= 2;
+
+  // ===== 第七步：构建建议的解析规则 =====
+  const baseName = request.fileName.replace(/\.[^.]+$/, "");
+  const suggestedRuleFieldMappings: FieldMapping[] = mappings.map((m) => {
+    // 在矩阵模式下，storeName 来自矩阵列名转置
+    if (isPureMatrixInventoryTable && m.targetField === "storeName") {
+      return {
+        targetField: m.targetField,
+        mode: "matrix_transpose" as FieldMapping["mode"],
+        columnName: `矩阵门店列(${matrixStoreColumns.join("/")})`,
+      };
+    }
+    if (isPureMatrixInventoryTable && m.targetField === "skuQuantity") {
+      return {
+        targetField: m.targetField,
+        mode: "matrix_transpose" as FieldMapping["mode"],
+        columnName: "矩阵门店列值(转置后自动填充)",
+      };
+    }
+    // 矩阵模式：externalCode 用 static_value 填入文件名（表中无此列）
+    if (isPureMatrixInventoryTable && m.targetField === "externalCode") {
+      return {
+        targetField: m.targetField,
+        mode: "static_value" as FieldMapping["mode"],
+        staticValue: baseName,
+        defaultValue: baseName,
+      };
+    }
+    return {
+      targetField: m.targetField,
+      mode: (m.targetField === "storeName" || m.targetField.startsWith("recipient"))
+             && tailFields.some((tf) => tf.targetField === m.targetField)
+             ? "row_field" as FieldMapping["mode"]
+             : "column_name" as FieldMapping["mode"],
+      columnName: extractCleanColumnName(m.suggestedSource),
+    };
+  });
 
   return {
     suggestedRule: {
       name: `${request.fileName} - 解析规则`,
       fileType: request.fileType,
       globalConfig: {
-        groupByExternalCode: !!externalCodeMatchedKeyword,
+        groupByExternalCode: isPureMatrixInventoryTable ? false : !!externalCodeMatchedKeyword,
         externalCodeField: "externalCode",
         mergeSheets: isMultiSheet,
       },
@@ -450,14 +587,14 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
         // 卡片模式：从第 0 行开始（包含标题/订单头），headerRow 不适用
         skipRows: isCardMode ? 0 : skipRows,
         headerRow: isCardMode ? 0 : headerRow,
-        tailRegion: tailLines.length > 0 && !isCardMode
+        tailRegion: tailLines.length > 0 && !isCardMode && !isPureMatrixInventoryTable
           ? { startRow: tailStartRow, fields: tailFields }
           : undefined,
         cardMode: isCardMode
           ? { enabled: true, startMarker: "▶" }
           : undefined,
         matrixMode: isMatrixMode
-          ? { enabled: true }
+          ? { enabled: true, valueColumnNamesRow: headerRow }
           : undefined,
       },
       postProcessing: {
@@ -465,11 +602,15 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
         totalRowPattern: "合计",
       },
       aiGenerated: false,
-      aiConfidence: 0.4,
-      aiNotes: `启发式分析：表头行${headerRow + 1}${tailLines.length > 0 ? `，尾部信息行${tailStartRow + 1}` : ""}${isCardMode ? "，卡片模式" : ""}${isMatrixMode ? "，矩阵模式" : ""}`,
+      aiConfidence: isPureMatrixInventoryTable ? 0.55 : 0.4,
+      aiNotes: isPureMatrixInventoryTable
+        ? `矩阵库存分配表：表头行${headerRow + 1}，${matrixStoreColumns.length}个门店列(${matrixStoreColumns.slice(0,5).join("/")})，无外部单号/收件人信息`
+        : `启发式分析：表头行${headerRow + 1}${tailLines.length > 0 ? `，尾部信息行${tailStartRow + 1}` : ""}${isCardMode ? "，卡片模式" : ""}${isMatrixMode ? "，矩阵模式" : ""}`,
     },
-    confidence: 0.4,
-    notes: `基于启发式规则分析，识别到表头行${headerRow + 1}${tailLines.length > 0 ? `，尾部信息行${tailStartRow + 1}` : ""}${isCardMode ? "，卡片模式" : ""}`,
+    confidence: isPureMatrixInventoryTable ? 0.55 : 0.4,
+    notes: isPureMatrixInventoryTable
+      ? `矩阵库存分配表：识别到${matrixStoreColumns.length}个门店列，无外部单号/收件人信息，外部编码使用文件名`
+      : `基于启发式规则分析，识别到表头行${headerRow + 1}${tailLines.length > 0 ? `，尾部信息行${tailStartRow + 1}` : ""}${isCardMode ? "，卡片模式" : ""}`,
     fieldMappings: mappings,
   };
 }
@@ -575,17 +716,32 @@ function convertAIResponse(
   }
 
   // 转换原始 mappings 为 FieldMapping 数组 — columnName 直接填入 AI 推荐值
-  const fieldMappingsFull: FieldMapping[] = rawMappings.map((m) => ({
-    targetField: (m.targetField as string) || "",
-    mode: (m.mode as FieldMapping["mode"]) || "column_name",
-    columnIndex: m.columnIndex as number | undefined,
-    columnName: (m.columnName as string) || undefined,
-    regexPattern: m.regexPattern as string | undefined,
-    regexGroup: m.regexGroup as number | undefined,
-    rowKeyPattern: m.rowKeyPattern as string | undefined,
-    staticValue: m.staticValue as string | undefined,
-    defaultValue: m.defaultValue as string | undefined,
-  }));
+  const isAIResultMatrixMode = !!(parsed.matrixMode);
+
+  const fieldMappingsFull: FieldMapping[] = rawMappings.map((m) => {
+    const targetField = (m.targetField as string) || "";
+    const rawMode = (m.mode as FieldMapping["mode"]) || "column_name";
+
+    // 矩阵模式下：storeName 和 skuQuantity 需要使用 matrix_transpose 模式
+    let mode = rawMode;
+    if (isAIResultMatrixMode) {
+      if (targetField === "storeName" || targetField === "skuQuantity") {
+        mode = "matrix_transpose";
+      }
+    }
+
+    return {
+      targetField,
+      mode,
+      columnIndex: m.columnIndex as number | undefined,
+      columnName: (m.columnName as string) || undefined,
+      regexPattern: m.regexPattern as string | undefined,
+      regexGroup: m.regexGroup as number | undefined,
+      rowKeyPattern: m.rowKeyPattern as string | undefined,
+      staticValue: m.staticValue as string | undefined,
+      defaultValue: m.defaultValue as string | undefined,
+    };
+  });
 
   const tailFields: FieldMapping[] = (parsed.tailFields as FieldMapping[]) || [];
   const hasTailInfo = (parsed.hasTailInfo as boolean) || tailFields.length > 0;

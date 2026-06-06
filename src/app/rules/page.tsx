@@ -184,7 +184,6 @@ export default function RulesPage() {
                       : "text-[#4e5969] hover:bg-[#f7f8fa] hover:text-[#0fc6c2]"
                   }`}
                 >
-                  {t.label}
                   <span
                     className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold rounded-full ${
                       active
@@ -194,6 +193,7 @@ export default function RulesPage() {
                   >
                     {count}
                   </span>
+                  {t.label}
                 </button>
               );
             })}
