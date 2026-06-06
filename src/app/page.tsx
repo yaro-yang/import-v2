@@ -327,109 +327,124 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="space-y-4 lg:space-y-5 page-container">
-      {/* 吸顶操作区：标题 + 步骤指示器 */}
-      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-4 space-y-3">
-        {/* 页面标题卡片 */}
+    <div className="space-y-6 lg:space-y-7 page-container">
+      {/* 吸顶操作区：标题 + 步骤指示器 一体卡片 */}
+      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-5 space-y-4">
+        {/* 标题 + 描述 一体卡片 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
-          <div className="flex items-center gap-3 p-4 lg:p-5">
-            <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_4px_10px_rgba(15,198,194,0.25)]">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex items-center gap-4 p-5 lg:p-6">
+            <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_6px_16px_rgba(15,198,194,0.3)]">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg lg:text-xl font-semibold text-[#1d2129]">导入下单</h1>
-              <p className="text-sm lg:text-base text-[#86909c] mt-1 hidden sm:block">
+              <h1 className="text-xl lg:text-2xl font-semibold text-[#1d2129]">导入下单</h1>
+              <p className="text-sm lg:text-base text-[#86909c] mt-1.5">
                 上传 Excel / Word / PDF 文件，AI 自动解析并批量下单
               </p>
             </div>
           </div>
-        </div>
 
-        {/* 步骤指示器 - 卡片式 */}
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
-        <div className="flex items-center gap-1 lg:gap-2 flex-wrap">
-          {[
-            { key: "upload", label: "上传文件" },
-            { key: "select-rule", label: "选择规则" },
-            { key: "preview", label: "预览编辑" },
-            { key: "submitted", label: "提交完成" },
-          ].map((s, i) => {
-            const stepKeys: Step[] = ["upload", "select-rule", "preview", "submitted"];
-            const currentIndex = stepKeys.indexOf(step);
-            const isActive = currentIndex >= i;
-            const isCurrent = currentIndex === i;
+          {/* 步骤指示器 - 醒目大圆点 + 连线 */}
+          <div className="border-t border-[#e5e6eb] bg-gradient-to-b from-[#fafbfc] to-white px-5 lg:px-8 py-6 lg:py-7">
+            <div className="flex items-center">
+              {[
+                { key: "upload", label: "上传文件" },
+                { key: "select-rule", label: "选择规则" },
+                { key: "preview", label: "预览编辑" },
+                { key: "submitted", label: "提交完成" },
+              ].map((s, i, arr) => {
+                const stepKeys: Step[] = ["upload", "select-rule", "preview", "submitted"];
+                const currentIndex = stepKeys.indexOf(step);
+                const isActive = currentIndex >= i;
+                const isCurrent = currentIndex === i;
+                const isCompleted = currentIndex > i;
 
-            return (
-              <div key={s.key} className="flex items-center gap-1 lg:gap-2">
-                {i > 0 && (
-                  <div
-                    className={`w-6 lg:w-10 h-[2px] ${
-                      isActive ? "bg-[#0fc6c2]" : "bg-[#d0d7de]"
-                    }`}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-5 py-2 lg:py-2.5 rounded-lg text-sm lg:text-base font-medium transition-colors step-indicator-sm ${
-                    isCurrent
-                      ? "bg-[#0fc6c2] text-white"
-                      : isActive
-                        ? "bg-[#e8fafa] text-[#0fc6c2]"
-                        : "bg-[#f2f3f5] text-[#86909c]"
-                  }`}
-                >
-                  {isActive && !isCurrent ? (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                  ) : (
-                    <span className="w-3.5 h-3.5 lg:w-4 lg:h-4 rounded-full border flex items-center justify-center text-[9px] lg:text-[10px] leading-none">
-                      {i + 1}
-                    </span>
-                  )}
-                  <span className="whitespace-nowrap">{s.label}</span>
-                </div>
-              </div>
-            );
-          })}
+                return (
+                  <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div
+                        className={`w-11 h-11 lg:w-12 lg:h-12 rounded-full flex items-center justify-center text-base lg:text-lg font-semibold transition-all ${
+                          isCurrent
+                            ? "bg-[#0fc6c2] text-white shadow-[0_6px_18px_rgba(15,198,194,0.45)] ring-[5px] ring-[#e8fafa] scale-110"
+                            : isActive
+                              ? "bg-[#0fc6c2] text-white"
+                              : "bg-white text-[#86909c] border-2 border-[#e5e6eb]"
+                        }`}
+                      >
+                        {isActive && !isCurrent ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        ) : (
+                          i + 1
+                        )}
+                      </div>
+                      <span
+                        className={`text-base lg:text-base font-medium whitespace-nowrap ${
+                          isCurrent
+                            ? "text-[#0fc6c2] font-semibold"
+                            : isActive
+                              ? "text-[#1d2129]"
+                              : "text-[#86909c]"
+                        }`}
+                      >
+                        {s.label}
+                      </span>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div className="flex-1 mx-3 lg:mx-4">
+                        <div
+                          className={`h-[3px] rounded-full transition-colors ${
+                            isCompleted ? "bg-[#0fc6c2]" : "bg-[#e5e6eb]"
+                          }`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
       </div>
 
       {/* 步骤 1: 上传文件 */}
       {step === "upload" && (
-        <div key="upload" className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-8 animate-fade-in card-padding-sm">
+        <div key="upload" className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-6 lg:p-10 animate-fade-in card-padding-sm">
           <FileUploader onFileSelect={handleFileSelect} />
         </div>
       )}
 
       {/* 步骤 2: 选择规则 */}
       {step === "select-rule" && file && (
-        <div className="animate-fade-in space-y-4 lg:space-y-5">
+        <div className="animate-fade-in space-y-5 lg:space-y-6">
           {/* 文件信息卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
-            <div className="flex items-center gap-3 lg:gap-4">
-              <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-lg bg-[#e8fafa] flex items-center justify-center text-[#0fc6c2] flex-shrink-0">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 lg:w-12 lg:h-12 rounded-xl bg-[#e8fafa] flex items-center justify-center text-[#0fc6c2] flex-shrink-0">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-medium text-[#1d2129] truncate">
+                <p className="text-base lg:text-lg font-medium text-[#1d2129] truncate">
                   {file.name}
                 </p>
-                <p className="text-sm text-[#86909c] mt-0.5">
+                <p className="text-sm text-[#86909c] mt-1">
                   {formatFileSize(file.size)} ·{" "}
                   {file.name.split(".").pop()?.toUpperCase()}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleReset}>
+              <Button variant="secondary" size="sm" onClick={handleReset}>
                 更换文件
               </Button>
             </div>
           </div>
 
           {/* 规则选择卡片 - 用户手动选择已有规则或点击"新建规则"触发 AI 分析 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-6">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-7">
             <RuleSelector
               rules={rules}
               selectedRuleId={selectedRuleId}
@@ -440,9 +455,10 @@ export default function HomePage() {
           </div>
 
           {/* 操作栏卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-4 lg:p-5">
+          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6">
             <div className="flex items-center justify-end gap-3">
               <Button
+                size="lg"
                 onClick={handleParse}
                 loading={loading}
                 disabled={!selectedRuleId}
