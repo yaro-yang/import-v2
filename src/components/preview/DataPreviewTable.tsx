@@ -188,7 +188,9 @@ export function DataPreviewTable({
       }
     }
     setOriginalErrorValues(map);
-  }, [externalErrors, orders]);
+    // 不依赖 orders：否则用户编辑后会用新值覆盖原始问题值
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalErrors]);
 
   // 当 orders 数据源变更时（如重新解析），重置
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
