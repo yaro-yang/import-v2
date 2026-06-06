@@ -130,7 +130,7 @@ export function DataPreviewTable({
     return {
       errors: allErrors,
       errorFieldMap,
-      duplicateCodes,
+      duplicateCodes: duplicateKeys,
       duplicateOrderIds,
     };
   }, [orders, externalErrors]);
