@@ -578,7 +578,12 @@ export default function HistoryPage() {
             >
               <table
                 className="history-table min-w-max w-full text-sm"
-                style={{ borderCollapse: "separate", borderSpacing: 0 }}
+                style={{
+                  borderCollapse: "separate",
+                  borderSpacing: 0,
+                  minWidth: 1500,
+                  tableLayout: "fixed",
+                }}
               >
                 <colgroup>
                   <col style={{ width: COL_INDEX.width }} />
@@ -1032,11 +1037,11 @@ export default function HistoryPage() {
             </div>
 
             {/* 分页 */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc]">
-                <p className="text-sm text-[#86909c]">
-                  共 {total} 张出库单
-                </p>
+            <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e6eb] bg-[#fafbfc]">
+              <p className="text-sm text-[#86909c]">
+                共 {total} 张出库单，{totalSkuCount} 条 SKU
+              </p>
+              {totalPages > 1 && (
                 <div className="flex items-center gap-1">
                   <button
                     disabled={page <= 1}
@@ -1069,8 +1074,8 @@ export default function HistoryPage() {
                     &gt;
                   </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>
