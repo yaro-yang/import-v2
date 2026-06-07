@@ -832,44 +832,52 @@ function convertAIResponse(
   const tailFields: FieldMapping[] = (parsed.tailFields as FieldMapping[]) || [];
   const hasTailInfo = (parsed.hasTailInfo as boolean) || tailFields.length > 0;
 
-  // ===== 矩阵模式兜底：AI 可能没识别出矩阵，但启发式分析能识别 =====
-  // 基于 fileContent 文本做轻量级检测：
-  //   1) 取表头行（"行1: ..."）按 | 拆分
-  //   2) 找 ≥2 个不在标准字段关键词内的"短专有名词"列（如 银泰/金桥/门店B/门店D）
+  // ===== 矩阵模式兜底：总是跑一遍"启发式矩阵检测"（无论 AI 是否设 matrixMode）=====
+  // 基于 fileContent 真实表头检测门店列：
+  //   1) 取表头行按 | 或 \t 拆分
+  //   2) 找 ≥2 个不在标准字段关键词内的"短专有名词"列
   //   3) 同时全文无"收货人/电话/单据号"等单据特征
-  //   满足以上则强制覆盖 matrixMode=true，并修正 storeName/skuQuantity mapping
-  const isAIResultMatrix = !!(parsed.matrixMode);
-  let overrideMatrixMode = false;
+  // 满足以上 → 强制启用 matrixMode，并把 storeName/skuQuantity 改为 matrix_transpose
+  //            columnName 不写死具体门店名——由矩阵转置从 storeColumnNames 自动取
   let detectedStoreColumns: string[] = [];
-  if (!isAIResultMatrix) {
-    const fcLines = (request.fileContent || "").split("\n").slice(0, 1);
-    if (fcLines[0]) {
-      const firstLine = fcLines[0].replace(/^行\d+:\s*/, "");
-      const headerParts = firstLine.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
-      const stdKw = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结", "单价", "金额", "价格"];
-      const storeKw = ["店", "门店", "分店", "商场", "银泰", "金桥", "金银潭", "万象", "万达", "广场", "世纪"];
-      const candidates = headerParts.filter((h) => {
-        if (stdKw.some((k) => h.includes(k))) return false;
-        if (!storeKw.some((k) => h.includes(k))) return false;
-        if (h.length > 8) return false;
-        return true;
-      });
-      // 全文无单据特征
-      const allText = request.fileContent || "";
-      const hasDocKw = ["收货人", "收件人", "联系电话", "收货地址", "单据号", "配送单号", "运单号", "调拨单号"].some((k) => allText.includes(k));
-      if (candidates.length >= 2 && !hasDocKw) {
-        overrideMatrixMode = true;
+  const fcLines = (request.fileContent || "").split("\n").slice(0, 1);
+  if (fcLines[0]) {
+    const firstLine = fcLines[0].replace(/^行\d+:\s*/, "");
+    const headerParts = firstLine.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
+    const stdKw = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结", "单价", "金额", "价格", "重量", "体积", "辅助", "总计", "小计", "合计"];
+    const storeKw = ["店", "门店", "分店", "商场", "银泰", "金桥", "金银潭", "万象", "万达", "广场", "世纪"];
+    // 候选：非标准字段关键词 且 短(≤8字) 且 非纯数字
+    const candidates = headerParts.filter((h) => {
+      if (stdKw.some((k) => h.includes(k))) return false;
+      if (h.length > 8) return false;
+      if (/^\d+$/.test(h)) return false;
+      return true;
+    });
+    const allText = request.fileContent || "";
+    const hasDocKw = ["收货人", "收件人", "联系电话", "收货地址", "单据号", "配送单号", "运单号", "调拨单号", "订货机构", "供货机构", "调出仓库"].some((k) => allText.includes(k));
+    if (candidates.length >= 2 && !hasDocKw) {
+      // 进一步过滤：含 storeKw 关键词 OR 短中文（2-4字）
+      detectedStoreColumns = candidates.filter((c) =>
+        storeKw.some((k) => c.includes(k)) || (c.length >= 2 && c.length <= 4)
+      );
+      // 过滤后不足 2 个 → 回退到 candidates 全部
+      if (detectedStoreColumns.length < 2) {
         detectedStoreColumns = candidates;
       }
     }
   }
 
-  // 如果覆盖了矩阵模式，更新 mappingsFull 中的 storeName/skuQuantity 为 matrix_transpose
-  if (overrideMatrixMode) {
+  // 最终矩阵模式：AI 识别 OR 启发式检测到 ≥2 个门店列
+  const finalMatrixMode = !!(parsed.matrixMode) || detectedStoreColumns.length >= 2;
+
+  // 强制修正 storeName/skuQuantity 为 matrix_transpose（清掉 AI 误填的 columnName）
+  if (finalMatrixMode) {
     for (const m of fieldMappingsFull) {
       if (m.targetField === "storeName" || m.targetField === "skuQuantity") {
         m.mode = "matrix_transpose";
-        m.columnName = "矩阵转置自动填充";
+        m.columnName = undefined;
+        m.columnIndex = undefined;
+        m.rowKeyPattern = undefined;
       }
       if (m.targetField === "externalCode") {
         m.mode = "static_value";
@@ -904,7 +912,7 @@ function convertAIResponse(
           ? { enabled: true, startMarker: (parsed.cardStartMarker as string) || "" }
           : undefined,
         // matrixMode：AI 识别 OR 后端启发式兜底
-        matrixMode: (parsed.matrixMode || overrideMatrixMode)
+        matrixMode: finalMatrixMode
           ? {
               enabled: true,
               valueColumnNamesRow: (parsed.headerRow as number) || 0,

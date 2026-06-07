@@ -144,15 +144,17 @@ export function RuleEditor({
     return defaultMappings;
   });
 
-  // 取字段"显示用"的字符串：row_field 模式显示 rowKeyPattern，其他显示 columnName
+  // 取字段"显示用"的字符串：row_field 模式显示 rowKeyPattern，matrix_transpose 模式显示"矩阵转置自动填充"
   const getDisplayValue = (m: FieldMapping): string => {
     if (m.mode === "row_field") return m.rowKeyPattern || "";
+    if (m.mode === "matrix_transpose") return m.columnName || "矩阵转置自动填充";
     return m.columnName || "";
   };
 
   // 取字段"实际填充值"（用于判断 hasValue）
   const getFilledValue = (m: FieldMapping): string => {
     if (m.mode === "row_field") return m.rowKeyPattern || "";
+    if (m.mode === "matrix_transpose") return m.columnName || "矩阵转置自动填充";
     return m.columnName || "";
   };
 
@@ -316,6 +318,7 @@ export function RuleEditor({
             const conf = aiInfo?.confidence || 0;
             const isLowConf = conf > 0 && conf < 0.5;
             const isRowField = mapping.mode === "row_field";
+            const isMatrix = mapping.mode === "matrix_transpose";
 
             return (
               <div
@@ -356,25 +359,35 @@ export function RuleEditor({
                           if (isRowField) {
                             // row_field 模式：写入 rowKeyPattern
                             next[idx] = { ...next[idx], rowKeyPattern: e.target.value };
+                          } else if (isMatrix) {
+                            // 矩阵模式：输入框只读（值由 storeColumnNames 自动提供）
+                            return;
                           } else {
                             next[idx] = { ...next[idx], columnName: e.target.value };
                           }
                           setMappings(next);
                         }
                       }}
+                      readOnly={isMatrix}
                       placeholder={hasValue ? "" : fieldDef.hint}
                       className={`w-full px-3 py-1.5 text-sm rounded-md outline-none transition-all bg-white border ${
-                        isRowField ? "pr-14 " : ""
+                        isRowField || isMatrix ? "pr-14 " : ""
                       }${
                         isLowConf
                           ? "border-[#ffd591] focus:border-[#ff7d00] focus:ring-1 focus:ring-[#ff7d00]/15"
                           : "border-[#e5e6eb] focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/15"
-                      }`}
+                      }${isMatrix ? " bg-[#fff7e6]/50 cursor-not-allowed" : ""}`}
                     />
                     {isRowField && (
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#fff7e6] text-[#d97b00] pointer-events-none">
                         关键字
                       </span>
+                    )}
+                    {isMatrix && (
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#fff1d6] text-[#ff7d00] pointer-events-none">
+                        矩阵
+                      </span>
+                    )}
                     )}
                   </div>
                   {aiInfo && (
