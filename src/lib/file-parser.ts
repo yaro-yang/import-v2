@@ -77,19 +77,38 @@ export async function parsePDF(
   const isServer = typeof window === "undefined";
 
   if (isServer) {
-    // 服务端：没有真正的 Worker，但 pdfjs-dist 4.x 必须显式给 workerSrc 才会用 fake worker 跑在主线程。
-    // 直接指向磁盘上 node_modules 里的 worker 路径（Node 端用 file:// URL 加载 ESM）。
+    // 服务端：pdfjs-dist 4.x 必须显式给 workerSrc，否则会报"Setting up fake worker failed"
+    // 关键：不能用 process.cwd() 拼路径——Vercel/Next.js standalone build 下 CWD 是 /var/task，
+    //       node_modules 不会被打包到 .next/。要用 `createRequire` 走 Node 标准包解析
+    //       它能正确从 .next/server/chunks/491.js 所在的 require 链找到真正的 node_modules 路径
     try {
-      const { pathToFileURL } = await import("url");
+      const { createRequire } = await import("module");
+      // 拿到 .next 打包后的 require，再用它解析 pdfjs-dist 的 worker 文件路径
+      const { fileURLToPath, pathToFileURL } = await import("url");
       const path = await import("path");
-      // Node CWD 是项目根目录，worker 文件固定在 node_modules/pdfjs-dist/build/pdf.worker.mjs
-      const workerPath = path.resolve(
-        process.cwd(),
-        "node_modules/pdfjs-dist/build/pdf.worker.mjs"
-      );
-      pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
-    } catch {
-      // 兜底：让 pdfjs-dist 内部走 fake worker 流程（主线程跑解析）
+      const requireFromHere = createRequire(import.meta.url);
+      // 优先 .mjs（4.x 的默认 worker），找不到再退到 .min.mjs
+      let workerPath: string | null = null;
+      const candidates = [
+        "pdfjs-dist/build/pdf.worker.mjs",
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+      ];
+      for (const c of candidates) {
+        try {
+          workerPath = requireFromHere.resolve(c);
+          if (workerPath) break;
+        } catch { /* try next */ }
+      }
+      if (workerPath) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
+      } else {
+        // 兜底：直接走 process.cwd() + 相对路径（开发/本地生产 build）
+        const fallbackPath = path.resolve(process.cwd(), "node_modules/pdfjs-dist/build/pdf.worker.mjs");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(fallbackPath).href;
+      }
+    } catch (e) {
+      // 最后兜底：传空让 pdfjs-dist 内部走 fake worker（已知在 4.x 不可靠，但 try 一下不抛错）
+      console.warn("[parsePDF] 无法定位 pdf worker 路径，尝试 fake worker:", e);
       pdfjsLib.GlobalWorkerOptions.workerSrc = "";
     }
   }
