@@ -762,11 +762,20 @@ function convertAIResponse(
     const colName = (m.columnName as string) || null;
     const colIdx = m.columnIndex !== null && m.columnIndex !== undefined ? Number(m.columnIndex) : null;
     const staticVal = (m.staticValue as string) || null;
+    const rowKey = (m.rowKeyPattern as string) || null;
+    const mode = (m.mode as string) || "column_name";
+
+    // suggestedSource 优先显示 rowKeyPattern（如果是 row_field 模式），否则显示 columnName
+    const suggestedSource = (mode === "row_field" && rowKey)
+      ? `关键字: "${rowKey}"`
+      : colName
+        || (colIdx !== null ? `第${colIdx + 1}列` : "")
+        || (rowKey ? `关键字: "${rowKey}"` : "")
+        || (staticVal ? `${staticVal}` : "");
 
     fieldMappings.push({
       targetField: (m.targetField as string) || "",
-      suggestedSource: colName
-        || (colIdx !== null ? `第${colIdx + 1}列` : "")
+      suggestedSource,
         || (staticVal ? `${staticVal}` : ""),
       confidence: (m.confidence as number) || (colName ? 0.7 : 0.3),
       note: (m.note as string) || (colName ? `AI识别到列名"${colName}"` : "未找到明确对应，请手动填写"),

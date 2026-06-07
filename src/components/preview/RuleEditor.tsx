@@ -144,21 +144,33 @@ export function RuleEditor({
     return defaultMappings;
   });
 
+  // 取字段"显示用"的字符串：row_field 模式显示 rowKeyPattern，其他显示 columnName
+  const getDisplayValue = (m: FieldMapping): string => {
+    if (m.mode === "row_field") return m.rowKeyPattern || "";
+    return m.columnName || "";
+  };
+
+  // 取字段"实际填充值"（用于判断 hasValue）
+  const getFilledValue = (m: FieldMapping): string => {
+    if (m.mode === "row_field") return m.rowKeyPattern || "";
+    return m.columnName || "";
+  };
+
   // 获取某字段的 AI 信息
   const getAIInfo = (targetField: string) =>
     aiFieldMappings.find((fm) => fm.targetField === targetField);
 
   // 统计
-  const filledCount = mappings.filter((m) => m.columnName?.trim()).length;
+  const filledCount = mappings.filter((m) => getFilledValue(m).trim()).length;
   // 校验：门店信息或收件人信息至少填一组
-  const storeFilled = !!mappings.find((m) => m.targetField === "storeName")?.columnName?.trim();
+  const storeFilled = !!getFilledValue(mappings.find((m) => m.targetField === "storeName") || {} as FieldMapping).trim();
   const recipientFilled = ["recipientName", "recipientPhone", "recipientAddress"]
-    .every((k) => mappings.find((m) => m.targetField === k)?.columnName?.trim());
+    .every((k) => getFilledValue(mappings.find((m) => m.targetField === k) || {} as FieldMapping).trim());
   const receiverOk = storeFilled || recipientFilled;
 
   const reqFields = FIELD_DEFS.filter((f) => f.required);
   const requiredFilled = mappings.filter(
-    (m) => m.required && m.columnName?.trim()
+    (m) => m.required && getFilledValue(m).trim()
   ).length;
 
   const isAI = !!rule?.aiGenerated;
@@ -167,6 +179,14 @@ export function RuleEditor({
     setSaving(true);
     try {
       const now = new Date().toISOString();
+      // 把输入框内容正确写回 row_field 模式的 rowKeyPattern
+      const normalizedMappings: FieldMapping[] = mappings.map((m) => {
+        if (m.mode === "row_field") {
+          // row_field 模式下，输入框填的是 rowKeyPattern
+          return { ...m, rowKeyPattern: m.rowKeyPattern || m.columnName, columnName: undefined };
+        }
+        return m;
+      });
       const fullRule: ParseRule = {
         id: (rule as ParseRule)?.id || uuidv4(),
         name: name || `${fileName || "未命名"} 解析规则`,
@@ -178,7 +198,7 @@ export function RuleEditor({
           externalCodeField: "externalCode",
           mergeSheets: rule?.globalConfig?.mergeSheets || false,
         },
-        fieldMappings: mappings,
+        fieldMappings: normalizedMappings,
         // 保留 AI/启发式分析返回的高级配置（matrixMode, cardMode, tailRegion 等），
         // 只覆盖用户可修改的 skipRows / headerRow
         dataRegion: {
@@ -264,9 +284,11 @@ export function RuleEditor({
           {FIELD_DEFS.map((fieldDef) => {
             const mapping = mappings.find((m) => m.targetField === fieldDef.key)!;
             const aiInfo = getAIInfo(fieldDef.key);
-            const hasValue = !!mapping.columnName?.trim();
+            const displayValue = getDisplayValue(mapping);
+            const hasValue = !!getFilledValue(mapping).trim();
             const conf = aiInfo?.confidence || 0;
             const isLowConf = conf > 0 && conf < 0.5;
+            const isRowField = mapping.mode === "row_field";
 
             return (
               <div
@@ -296,24 +318,38 @@ export function RuleEditor({
 
                 {/* 中间：输入框 + AI 提示 */}
                 <div className="col-span-6 min-w-0">
-                  <input
-                    type="text"
-                    value={mapping.columnName || ""}
-                    onChange={(e) => {
-                      const idx = mappings.findIndex((m) => m.targetField === fieldDef.key);
-                      if (idx >= 0) {
-                        const next = [...mappings];
-                        next[idx] = { ...next[idx], columnName: e.target.value };
-                        setMappings(next);
-                      }
-                    }}
-                    placeholder={hasValue ? "" : fieldDef.hint}
-                    className={`w-full px-3 py-1.5 text-sm rounded-md outline-none transition-all bg-white border ${
-                      isLowConf
-                        ? "border-[#ffd591] focus:border-[#ff7d00] focus:ring-1 focus:ring-[#ff7d00]/15"
-                        : "border-[#e5e6eb] focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/15"
-                    }`}
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={displayValue}
+                      onChange={(e) => {
+                        const idx = mappings.findIndex((m) => m.targetField === fieldDef.key);
+                        if (idx >= 0) {
+                          const next = [...mappings];
+                          if (isRowField) {
+                            // row_field 模式：写入 rowKeyPattern
+                            next[idx] = { ...next[idx], rowKeyPattern: e.target.value };
+                          } else {
+                            next[idx] = { ...next[idx], columnName: e.target.value };
+                          }
+                          setMappings(next);
+                        }
+                      }}
+                      placeholder={hasValue ? "" : fieldDef.hint}
+                      className={`w-full px-3 py-1.5 text-sm rounded-md outline-none transition-all bg-white border ${
+                        isRowField ? "pr-14 " : ""
+                      }${
+                        isLowConf
+                          ? "border-[#ffd591] focus:border-[#ff7d00] focus:ring-1 focus:ring-[#ff7d00]/15"
+                          : "border-[#e5e6eb] focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/15"
+                      }`}
+                    />
+                    {isRowField && (
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#fff7e6] text-[#d97b00] pointer-events-none">
+                        关键字
+                      </span>
+                    )}
+                  </div>
                   {aiInfo && (
                     <p className="text-[11px] text-[#86909c] mt-1 leading-tight truncate">
                       AI 推断
