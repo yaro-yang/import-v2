@@ -1140,13 +1140,16 @@ export function excelToRawData(
       // ===== 关键：先做"同 cell 多 key:value 切分"（PDF 视觉行被合并场景）=====
       // 如果当前 cell 内有 ≥2 个 key:value 对，按"中文+冒号"边界切分后逐个匹配
       // 这样每个 key 拿到的是真正的"它自己的 value"，不会被下一个 key 串进来
+      // 注意：split 按"空白+中文+冒号"位置切，切点前的所有字符（含 |）都会保留在上一段，
+      //       所以切分后必须把每段 value 末尾的 | / ｜ / 空白清除
       if (n === 0 && /[一-鿿]+[：:][^：:]+?(?=\s+[一-鿿]+[：:]|$)/.test(rawKey)) {
         const allPairs = rawKey.split(/\s+(?=[一-鿿]+[：:])/);
         for (const pair of allPairs) {
           const cIdx = pair.search(/[：:]/);
           if (cIdx < 0) continue;
           const pKey = pair.substring(0, cIdx).trim();
-          const pValue = pair.substring(cIdx + 1).trim();
+          // 关键：清除 value 末尾的 | / ｜（split 切点前会保留这个符号）
+          const pValue = pair.substring(cIdx + 1).replace(/\s*[|｜]\s*$/, "").trim();
           for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
             if (preHeaderFields[target]) continue;
             const pl = patterns.split("|");

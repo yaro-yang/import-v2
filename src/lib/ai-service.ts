@@ -777,7 +777,14 @@ function convertAIResponse(
       targetField: (m.targetField as string) || "",
       suggestedSource: suggestedSource || (staticVal ? `${staticVal}` : ""),
       confidence: (m.confidence as number) || (colName ? 0.7 : 0.3),
-      note: (m.note as string) || (colName ? `AI识别到列名"${colName}"` : "未找到明确对应，请手动填写"),
+      // 优先用 AI 返回的 note；否则根据 mode 提示对应内容
+      note: (m.note as string) || (
+        mode === "row_field" && rowKey
+          ? `AI识别到关键字"${rowKey}"`
+          : colName
+            ? `AI识别到列名"${colName}"`
+            : "未找到明确对应，请手动填写"
+      ),
     });
   }
 
