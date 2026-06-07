@@ -149,7 +149,7 @@ export default function HistoryPage() {
   // 把 OutboundOrder[] 聚合成 HistoryGroup[]
   // - transfer 模式：按 transferOrderId 聚合（同一调拨单的多门店归到一组）
   // - outbound 模式（无 transferOrderId）：按 externalCode 聚合
-  //   空外部编码的全部归为一组
+  //   空外部编码：按 batchId 聚合（每次导入各成一组，多次导入互不混淆）
   const groups = useMemo<HistoryGroup[]>(() => {
     const map = new Map<string, HistoryGroup>();
 
@@ -178,17 +178,20 @@ export default function HistoryPage() {
           g.submittedAt = ob.submittedAt;
         }
       } else {
-        // 出库单模式：按 externalCode 聚合（空编码归为一组）
+        // 出库单模式：按 externalCode 聚合
         const code = ob.externalCode || "";
         if (!code) {
-          // 空外部编码：全部归为一组
-          const emptyKey = "__empty_code__";
-          let g = map.get(emptyKey);
+          // 空外部编码：按 batchId 聚合（每次导入各成一组；无 batchId 兜底用 createdAt 精确到秒）
+          // 这样多次导入的空外部编码在已导入运单中会按批次显示为多个独立组
+          const batchKey = ob.batchId
+            ? `__batch__${ob.batchId}`
+            : `__legacy__${ob.createdAt}`;
+          let g = map.get(batchKey);
           if (!g) {
             g = {
               kind: "outbound",
               externalCode: "（无编码）",
-              rootId: emptyKey,
+              rootId: batchKey,
               details: [],
               totalQty: 0,
               totalSku: 0,
@@ -196,7 +199,7 @@ export default function HistoryPage() {
               createdAt: ob.createdAt,
               status: ob.status,
             };
-            map.set(emptyKey, g);
+            map.set(batchKey, g);
           }
           g.details.push(ob);
           g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
@@ -318,8 +321,11 @@ export default function HistoryPage() {
     setDeleting(true);
     const toastId = toast.loading("正在删除...");
     try {
-      // 空编码聚合组（rootId = "__empty_code__"）：逐个删除所有子单
-      if (deletingGroup.rootId === "__empty_code__") {
+      // 空编码聚合组（rootId = "__batch__xxx" 或 "__legacy__xxx"）：逐个删除所有子单
+      if (
+        deletingGroup.rootId.startsWith("__batch__") ||
+        deletingGroup.rootId.startsWith("__legacy__")
+      ) {
         let deleted = 0;
         let failed = 0;
         for (const detail of deletingGroup.details) {
@@ -377,8 +383,8 @@ export default function HistoryPage() {
 
     for (const rootId of idsToDelete) {
       try {
-        if (rootId === "__empty_code__") {
-          const emptyGroup = groups.find((g) => g.rootId === "__empty_code__");
+        if (rootId.startsWith("__batch__") || rootId.startsWith("__legacy__")) {
+          const emptyGroup = groups.find((g) => g.rootId === rootId);
           if (emptyGroup) {
             for (const detail of emptyGroup.details) {
               try {

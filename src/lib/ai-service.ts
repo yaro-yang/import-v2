@@ -23,20 +23,20 @@ function getAIConfig(): AIModelConfig {
 }
 
 // 构建 Prompt（引导 AI 输出精确的列名匹配）
-// 注：prompt 越短 AI 响应越快（7000->4000 字符，约省 40% token）
+// 注：prompt 越短 AI 响应越快
 function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
   const contentPreview = request.fileContent.substring(0, 4000);
   const fileTypeHint = request.fileType === "excel"
     ? `Excel布局（识别其中一种）：
    - 标准表：表头含"物品编码/名称/数量"等，数据紧接其后
-   - 多区域：表前/表后有key:value元数据（"收货机构"、"单据号"、"收货人"、"收货电话"、"收货地址"），中间数据表
-   - 卡片式：含"▶ 调拨记录"等分隔符
-   - 矩阵式：表头含≥2个门店列（"银泰"等）且无"收货人/电话"，是库存分配表`
+   - 多区域：表前/表后有key:value元数据行，中间是数据表
+   - 卡片式：含"▶ 调拨记录"等分隔符，每张卡片内有收货门店/收货人/电话/地址
+   - 矩阵式：表头含≥2个门店列（"银泰"等）且无收货人/电话，是库存分配表`
     : request.fileType === "word"
       ? "Word纯文本段落。"
       : "PDF文本。多页PDF每页可能含多个订单。注意key: value对。";
 
-  return `你是出库单解析专家。分析${request.fileType.toUpperCase()}文件，输出JSON。
+  return `你是出库单解析专家。分析${request.fileType.toUpperCase()}文件，输出纯JSON（无markdown代码块）。
 
 文件名: ${request.fileName}
 
@@ -45,43 +45,50 @@ ${fileTypeHint}
 内容:
 ${contentPreview}
 
-规则：
-1. headerRow: 表头0-based行号。卡片式 headerRow=0, skipRows=0
-2. skipRows: headerRow之前的行数。卡片式为0
-3. fieldMappings.columnName: 表头原始列名（如"物品编码"），若表头无则填null
-4. 关键模式：
-   - 卡片式：cardMode=true, startMarker="▶"，不要 tailRegion
-   - 矩阵式：matrixMode=true，storeName/skuQuantity 由矩阵自动处理
-   - 表前/表后元数据：externalCode/storeName/recipient* 字段在表头找不到时，**用 mode="row_field" + rowKeyPattern="收货机构|单据号|收货人|收货电话|收货地址"**，后处理会自动从表前/表后key:value行提取填入（不要用文件名兜底）
-5. tailRegion：仅标准表有效。元数据在表后时用 [{targetField, mode:"row_field", rowKeyPattern:"收货人|收货人姓名"}] 格式
+## 关键指令
+**所有字段映射（columnName、rowKeyPattern）必须从文件实际内容中识别，不要照抄下面示例！**
 
-输出纯JSON,不要markdown:
+## 规则
+1. headerRow: 表头0-based行号。卡片式 headerRow=0, skipRows=0
+2. fieldMappings:
+   - **标准表**：SKU 字段（skuCode/skuName/skuQuantity/skuSpec）从表头找对应列名 → mode="column_name"
+   - **表前/表后元数据**（storeName/externalCode/recipient*）：先看表头是否有该列名；
+     - 有 → mode="column_name" + columnName=表头中的原列名
+     - 没有但内容里有"调拨单号：xxx"等key:value形式 → mode="row_field" + rowKeyPattern=文件中实际出现的key（如"调拨单号"、"收货人"、"收货电话"等）
+   - **卡片式**：SKU 字段对应卡片内小表表头（如"物品编码"），storeName/externalCode/recipient* 由 cardMode 模式自动从卡片内提取，**不写字段映射**（设 mode="column_name", columnName=null）
+   - **矩阵式**：storeName/skuQuantity 用 mode="matrix_transpose"（自动处理），其他字段按上面规则
+3. 模式标志：
+   - 卡片式 → cardMode=true, cardStartMarker="▶ 调拨记录"（或文件中实际标记）
+   - 矩阵式 → matrixMode=true
+4. 找不到的字段 columnName=null, confidence=0.2
+
+## 输出 JSON 结构（请按文件实际内容填值，不要照抄示例值）
 {
-  "headerRow": 0,
-  "skipRows": 0,
+  "headerRow": <表头行号>,
+  "skipRows": <跳过的行数>,
   "fieldMappings": [
-    {"targetField": "skuCode", "mode": "column_name", "columnName": "物品编码", "confidence": 0.8},
-    {"targetField": "skuName", "mode": "column_name", "columnName": "物品名称", "confidence": 0.8},
-    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "发货数量", "confidence": 0.8},
-    {"targetField": "skuSpec", "mode": "column_name", "columnName": "规格型号", "confidence": 0.3},
-    {"targetField": "storeName", "mode": "row_field", "rowKeyPattern": "收货机构|收货门店", "confidence": 0.6},
-    {"targetField": "externalCode", "mode": "row_field", "rowKeyPattern": "单据号|配送单号", "confidence": 0.6},
-    {"targetField": "recipientName", "mode": "row_field", "rowKeyPattern": "收货人", "confidence": 0.6},
-    {"targetField": "recipientPhone", "mode": "row_field", "rowKeyPattern": "收货电话", "confidence": 0.6},
-    {"targetField": "recipientAddress", "mode": "row_field", "rowKeyPattern": "收货地址", "confidence": 0.6},
-    {"targetField": "remark", "mode": "column_name", "columnName": null, "confidence": 0.2}
+    {"targetField": "skuCode", "mode": "column_name", "columnName": "<文件表头中的列名>", "confidence": 0.8},
+    {"targetField": "skuName", "mode": "column_name", "columnName": "<文件表头中的列名>", "confidence": 0.8},
+    {"targetField": "skuQuantity", "mode": "column_name", "columnName": "<文件表头中的列名>", "confidence": 0.8},
+    {"targetField": "skuSpec", "mode": "column_name", "columnName": "<文件表头中的列名或null>", "confidence": 0.3},
+    {"targetField": "storeName", "mode": "<column_name|row_field|matrix_transpose>", "columnName": "<...或null>", "rowKeyPattern": "<...或undefined>", "confidence": 0.6},
+    {"targetField": "externalCode", "mode": "<...>", "columnName": "<...或null>", "rowKeyPattern": "<...或undefined>", "confidence": 0.6},
+    {"targetField": "recipientName", "mode": "<...>", "columnName": "<...或null>", "rowKeyPattern": "<...或undefined>", "confidence": 0.5},
+    {"targetField": "recipientPhone", "mode": "<...>", "columnName": "<...或null>", "rowKeyPattern": "<...或undefined>", "confidence": 0.5},
+    {"targetField": "recipientAddress", "mode": "<...>", "columnName": "<...或null>", "rowKeyPattern": "<...或undefined>", "confidence": 0.5},
+    {"targetField": "remark", "mode": "column_name", "columnName": "<...或null>", "confidence": 0.2}
   ],
   "tailFields": [],
   "tailStartRow": null,
   "groupByExternalCode": false,
   "skipTotalRow": false,
   "mergeSheets": false,
-  "matrixMode": false,
-  "cardMode": false,
+  "matrixMode": <true|false>,
+  "cardMode": <true|false>,
   "compositeMode": false,
   "cardStartMarker": "▶ 调拨记录",
   "confidence": 0.7,
-  "notes": "简要说明文件布局模式"
+  "notes": "<文件布局模式简述>"
 }`;
 }
 
@@ -113,7 +120,7 @@ export async function analyzeFileWithAI(
         messages: [
           {
             role: "system",
-            content: "你是出库单解析专家。只输出JSON，不要解释，不要markdown代码块，直接输出纯JSON对象。",
+            content: "出库单解析专家。快速分析文件结构并直接输出JSON（不要markdown代码块、不要解释）。",
           },
           {
             role: "user",
@@ -121,7 +128,7 @@ export async function analyzeFileWithAI(
           },
         ],
         temperature: 0.1,
-        max_tokens: 2000,
+        max_tokens: 1200,  // 减少 40% token，AI 响应更快
         response_format: { type: "json_object" },
       }),
       signal: controller.signal,

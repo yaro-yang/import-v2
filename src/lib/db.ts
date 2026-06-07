@@ -175,6 +175,13 @@ export async function initDB() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_outbound_transfer_id ON outbound_orders(transfer_order_id)`;
 
+  // 迁移：给已存在的 outbound_orders 添加 batch_id 列（幂等；空 externalCode 时按 batch 聚合）
+  await sql`
+    ALTER TABLE outbound_orders
+    ADD COLUMN IF NOT EXISTS batch_id TEXT
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_outbound_batch_id ON outbound_orders(batch_id)`;
+
   // 子表：SKU 行
   await sql`
     CREATE TABLE IF NOT EXISTS order_items (
@@ -232,6 +239,7 @@ function mapOutboundRow(row: Record<string, unknown>, items: OrderItem[]): Outbo
     recipientPhone: (row.recipient_phone as string) || undefined,
     recipientAddress: (row.recipient_address as string) || undefined,
     remark: (row.remark as string) || undefined,
+    batchId: (row.batch_id as string) || undefined,
     sourceFile: (row.source_file as string) || undefined,
     sourceSheet: (row.source_sheet as string) || undefined,
     sourceRow: row.source_row as number | undefined,
@@ -255,6 +263,7 @@ function mapItemRow(row: Record<string, unknown>, parent: Partial<OutboundOrder>
     id: row.id as string,
     outboundOrderId: row.outbound_order_id as string,
     externalCode: parent.externalCode,
+    batchId: parent.batchId,
     storeName: parent.storeName,
     recipientName: parent.recipientName,
     recipientPhone: parent.recipientPhone,
@@ -311,6 +320,7 @@ function groupItemsIntoOutboundOrdersByStore(
         recipientPhone: first.recipientPhone,
         recipientAddress: first.recipientAddress,
         remark: first.remark,
+        batchId: first.batchId,
         sourceFile: first.sourceFile,
         sourceSheet: first.sourceSheet,
         sourceRow: first.sourceRow,
@@ -423,7 +433,7 @@ async function saveTransferOrders(items: OrderItem[]): Promise<{ savedOutbounds:
         INSERT INTO outbound_orders (
           id, external_code, store_name, recipient_name, recipient_phone,
           recipient_address, remark, source_file, source_sheet, source_row,
-          rule_id, status, transfer_order_id, created_at, submitted_at
+          rule_id, status, transfer_order_id, batch_id, created_at, submitted_at
         ) VALUES (
           ${detail.id},
           ${detail.externalCode || null},
@@ -438,6 +448,7 @@ async function saveTransferOrders(items: OrderItem[]): Promise<{ savedOutbounds:
           ${detail.ruleId || null},
           ${detail.status || "draft"},
           ${transferId},
+          ${detail.batchId || null},
           ${detail.createdAt || now},
           ${detail.submittedAt || null}
         )
@@ -454,6 +465,7 @@ async function saveTransferOrders(items: OrderItem[]): Promise<{ savedOutbounds:
           rule_id = EXCLUDED.rule_id,
           status = EXCLUDED.status,
           transfer_order_id = EXCLUDED.transfer_order_id,
+          batch_id = EXCLUDED.batch_id,
           submitted_at = EXCLUDED.submitted_at
         RETURNING id
       `;

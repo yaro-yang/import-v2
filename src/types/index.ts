@@ -133,6 +133,8 @@ export interface OrderItem {
   externalCode?: string;
   // 父出库单 ID（运行时关联，DB 落库时填充）
   outboundOrderId?: string;
+  // 导入批次 ID（前端在每次提交时生成；空 externalCode 时用于按批次聚合展示）
+  batchId?: string;
   // A组：门店模式
   storeName?: string;
   // B组：收件人模式
@@ -172,6 +174,8 @@ export interface OutboundOrder {
   recipientPhone?: string;       // 电话
   recipientAddress?: string;     // 地址
   remark?: string;               // 父单备注
+  // 导入批次 ID（前端在每次提交时生成；空 externalCode 时用于按批次聚合展示）
+  batchId?: string;
   // 元信息
   sourceFile?: string;
   sourceSheet?: string;

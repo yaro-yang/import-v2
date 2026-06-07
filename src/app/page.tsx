@@ -565,12 +565,16 @@ export default function HomePage() {
     setSubmitMessage("正在准备数据...");
     const toastId = toast.loading("正在提交订单...");
     try {
+      // 为本次提交生成统一的批次 ID（用于空 externalCode 时按批次聚合）
+      // 同一批导入的所有订单共享同一个 batchId；多次导入各用不同 batchId
+      const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const ordersWithBatch = orders.map((o) => ({ ...o, batchId }));
       setSubmitProgress(30);
       setSubmitMessage("正在保存到数据库...");
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders, mode: currentRuleMode }),
+        body: JSON.stringify({ orders: ordersWithBatch, mode: currentRuleMode }),
       });
       setSubmitProgress(80);
       setSubmitMessage("正在处理结果...");
