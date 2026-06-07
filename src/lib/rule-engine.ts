@@ -10,6 +10,8 @@ interface RawDataRow {
   cells: Record<string, string>;
   sourceSheet?: string;
   tailFields?: Record<string, string>;
+  // headerName → colIdx 反向映射（避免在 cells 里混入对象污染 Object.values 遍历）
+  headerColIdx?: Record<string, number>;
 }
 
 // ====== 矩阵模式自动检测（executeRule 入口处使用） ======
@@ -715,13 +717,13 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   const hasValidConfig = storeIndices.length > 0 && storeNames.length === storeIndices.length;
 
   if (!hasValidConfig) {
-    // 兜底：用 cells.__headerColIdx__ 反向表（headerName → colIdx）查索引
+    // 兜底：用 row.headerColIdx 反向表（headerName → colIdx）查索引
     // 这是 excelToRawData 阶段显式保存的映射，**避免"按值匹配"在空值场景不可靠的问题**
     // （如"银泰"列首行值是空字符串时，cells[col_7]=cells[col_13]=""，值匹配会把所有空值列都匹配上）
+    // 注意：必须从 row.headerColIdx 读，**不要**塞到 row.cells 里——后者会被 Object.values 遍历污染
     const firstDataRow = rawData[0];
     if (!firstDataRow) return rawData;
-    const cells = firstDataRow.cells as Record<string, unknown>;
-    const headerColIdx = (cells["__headerColIdx__"] as Record<string, number> | undefined) || {};
+    const headerColIdx = firstDataRow.headerColIdx || {};
 
     const newStoreIndices: number[] = [];
     const newStoreNames: string[] = [];
@@ -1108,17 +1110,18 @@ export function excelToRawData(
       cells[headerName] = String(rowData[col] ?? "");
       cells[`col_${col}`] = String(rowData[col] ?? "");
     }
-    // ===== 关键：保存 headerName → colIdx 反向映射 =====
+    // ===== 关键：保存 headerName → colIdx 反向映射到 cells 外的 row.headerColIdx =====
     // 解决空值场景下"值匹配"不可靠的问题（如"银泰"列首行值是空字符串时）
     // 下游 transposeMatrix 用这个表直接查 storeColumnIndices
+    // 注意：必须存到 row 上而不是 cells 里——cells 是"列名→值"映射，混入对象会污染所有
+    //       `Object.values(cells).join(" ")` / `.filter(v => v.trim())` 等遍历
     const headerColIdx: Record<string, number> = {};
     for (let col = 0; col < rowData.length; col++) {
       const headerName = headers[col] || `col_${col}`;
       if (!(headerName in headerColIdx)) headerColIdx[headerName] = col;
     }
-    (cells as Record<string, unknown>)["__headerColIdx__"] = headerColIdx;
 
-    rows.push({ rowIndex: r, cells, tailFields: {} });
+    rows.push({ rowIndex: r, cells, tailFields: {}, headerColIdx });
   }
 
   // 数据前/后区元数据提取：扫描所有行（除 SKU 数据行外），提取 key-value 元数据
