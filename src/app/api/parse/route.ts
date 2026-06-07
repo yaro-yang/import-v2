@@ -202,10 +202,9 @@ export async function POST(request: NextRequest) {
           });
           orders = result.orders;
         } else if (fileType === "pdf") {
-          let fullText: string;
+          let parseResult: Awaited<ReturnType<typeof parsePDF>>;
           try {
-            const result = await parsePDF(buffer);
-            fullText = result.fullText;
+            parseResult = await parsePDF(buffer);
           } catch (e) {
             send({
               type: "error",
@@ -216,22 +215,45 @@ export async function POST(request: NextRequest) {
             safeClose();
             return;
           }
+          const { fullText, rows2d } = parseResult;
           if (!fullText || !fullText.trim()) {
             send({ type: "error", code: "EMPTY_CONTENT", message: "PDF 文件无文本内容（可能是扫描件或图片型 PDF）", fileInfo: { name: file.name, size: file.size, type: file.type } });
             safeClose();
             return;
           }
-          const lines = fullText.split("\n").filter((l) => l.trim());
-          const total = lines.length;
-          send({ type: "start", total, message: `共 ${total} 行文本` });
-          const rawData = lines.map((line, i) => ({
-            rowIndex: i,
-            cells: { text: line, col_0: line },
-          }));
-          const result = await executeRule(rawData, rule, file.name, (processed, total, msg) => {
-            send({ type: "progress", processed, total, message: msg });
-          });
-          orders = result.orders;
+
+          // 优先走"二维表抽取"路径（auto-detected 表格 + 表头）—— 复用 Excel 规则引擎逻辑
+          if (rows2d && rows2d.length >= 2) {
+            // 把表头行号覆盖到 rule.dataRegion.headerRow
+            const adjustedRule = {
+              ...rule,
+              dataRegion: {
+                ...rule.dataRegion,
+                headerRow: parseResult.headerRow ?? 0,
+                skipRows: parseResult.headerRow ?? 0,
+              },
+            };
+            const total = rows2d.length;
+            send({ type: "start", total, message: `PDF 自动识别到 ${rows2d.length} 行（表头行 ${(parseResult.headerRow ?? 0) + 1}）` });
+            const rawData = excelToRawData(rows2d, adjustedRule);
+            const result = await executeRule(rawData, adjustedRule, file.name, (processed, total, msg) => {
+              send({ type: "progress", processed, total, message: msg });
+            });
+            orders = result.orders;
+          } else {
+            // 兜底：纯文本行模式（无表格的 PDF）
+            const lines = fullText.split("\n").filter((l) => l.trim());
+            const total = lines.length;
+            send({ type: "start", total, message: `PDF 共 ${total} 行文本（无表格）` });
+            const rawData = lines.map((line, i) => ({
+              rowIndex: i,
+              cells: { text: line, col_0: line },
+            }));
+            const result = await executeRule(rawData, rule, file.name, (processed, total, msg) => {
+              send({ type: "progress", processed, total, message: msg });
+            });
+            orders = result.orders;
+          }
         }
 
         // 7. 校验汇总

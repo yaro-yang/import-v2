@@ -918,13 +918,10 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
       return "";
     case "row_field":
       if (mapping.rowKeyPattern) {
-        // 按单元格提取：找到 key 所在的列，再取 key 后面第一个非空单元格
-        // 比按整行拼接文本再正则匹配更稳——避免贪婪匹配吞掉同行其他字段
+        // 1. 先在 row.cells 命名 key 中找 key（按单元格 + 同行下一列的策略）
         for (const [key, value] of Object.entries(row.cells)) {
           if (key.startsWith("col_") || key.startsWith("_transposed")) continue;
           if (String(value ?? "").includes(mapping.rowKeyPattern)) {
-            // 用 rawData 行的 col_<n> 顺序拿 value
-            // row.cells 的命名 key（"序号"等）顺序与 col_<n> 一致，可以按 col_<n> 顺序找下一个
             const colKeys = Object.keys(row.cells).filter((k) => k.startsWith("col_")).sort((a, b) => {
               return parseInt(a.slice(4), 10) - parseInt(b.slice(4), 10);
             });
@@ -938,6 +935,16 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
             return "";
           }
         }
+        // 2. 兜底：在 row.tailFields 中找（excelToRawData 提取的 preHeaderFields/tailRegion 字段）
+        // tailFields 是 { storeName: "xxx", externalCode: "xxx" } 形式，key 已经是目标字段名
+        // 兼容旧规则：也按 rowKeyPattern 的字面文字匹配
+        if (row.tailFields) {
+          // 直接看是否已经是这个目标字段
+          const direct = (row.tailFields as Record<string, string>)[mapping.targetField];
+          if (direct) return direct;
+        }
+        // 3. 从 fullText 兜底（按行扫，看哪一行含 rowKeyPattern）
+        // 这种"按行扫"只在 PDF/Word 纯文本场景才需要，已由 preHeaderFields 覆盖大部分情况
         return "";
       }
       return "";
@@ -1101,7 +1108,7 @@ export function excelToRawData(
   const preHeaderFields: Record<string, string> = {};
   const preHeaderKeyMap: Record<string, string> = {
     storeName: "收货机构|收货门店|收货单位|调入门店|客户名称",
-    externalCode: "单据号|配送单号|配送发货单|调拨单号|运单号|订单号",
+    externalCode: "单据编号|单据号|配送单号|配送发货单|调拨单号|运单号|订单号",
     recipientName: "收货人|收件人|联系人|收货人姓名",
     recipientPhone: "收货电话|收件人电话|联系电话|收货人手机号|手机号|手机",
     recipientAddress: "收货地址|收件人地址|详细地址|收货详细地址",
@@ -1112,6 +1119,8 @@ export function excelToRawData(
   for (let r = 0; r < data.length; r++) {
     const rowData = data[r];
     if (!rowData) continue;
+    // 跳过表头行本身（避免把表头当元数据候选行）
+    if (r === headerRow) continue;
     const firstCell = String(rowData[0] ?? "").trim();
     if (!firstCell) continue;
     // 跳过 SKU 表头/数据行（行内容以"序号"/"物品编码"开头）
@@ -1122,22 +1131,59 @@ export function excelToRawData(
       if (/^\d+$/.test(firstCell)) continue;
     }
     // 检查首列是否匹配某个 metadata key
-    for (let n = 0; n < rowData.length - 1; n++) {
-      const key = String(rowData[n] ?? "").trim();
-      if (!key) continue;
-      for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
-        const patternList = patterns.split("|");
-        const matchedPattern = patternList.find((p) => key === p || key.startsWith(p + "：") || key.startsWith(p + ":"));
-        if (matchedPattern) {
-          // 取下一个非空单元格的值
-          for (let m = n + 1; m < rowData.length; m++) {
-            const v = String(rowData[m] ?? "").trim();
-            if (v && !SKU_HEADER_KEYWORDS.includes(v)) {
-              // 如果该字段还未填，则填入（首匹配优先）
-              if (!preHeaderFields[target]) preHeaderFields[target] = v;
-              break;
+    // 关键：单 cell 情况下也要进 n 循环（n=0）— 用 `n <= 0` 让 n=0 始终能进
+    const maxN = Math.max(0, rowData.length - 1);
+    for (let n = 0; n <= maxN; n++) {
+      const rawKey = String(rowData[n] ?? "").trim();
+      if (!rawKey) continue;
+
+      // ===== 关键：先做"同 cell 多 key:value 切分"（PDF 视觉行被合并场景）=====
+      // 如果当前 cell 内有 ≥2 个 key:value 对，按"中文+冒号"边界切分后逐个匹配
+      // 这样每个 key 拿到的是真正的"它自己的 value"，不会被下一个 key 串进来
+      if (n === 0 && /[一-鿿]+[：:][^：:]+?(?=\s+[一-鿿]+[：:]|$)/.test(rawKey)) {
+        const allPairs = rawKey.split(/\s+(?=[一-鿿]+[：:])/);
+        for (const pair of allPairs) {
+          const cIdx = pair.search(/[：:]/);
+          if (cIdx < 0) continue;
+          const pKey = pair.substring(0, cIdx).trim();
+          const pValue = pair.substring(cIdx + 1).trim();
+          for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
+            if (preHeaderFields[target]) continue;
+            const pl = patterns.split("|");
+            if (pl.some((p) => pKey === p || pKey.startsWith(p))) {
+              if (pValue && !SKU_HEADER_KEYWORDS.includes(pValue)) {
+                preHeaderFields[target] = pValue;
+                break;
+              }
             }
           }
+        }
+        // 多 key 提取后，本 cell 已被处理完，跳过单 key 提取
+        continue;
+      }
+
+      // ===== 单 key 提取（cell 内只有 1 个 key:value）=====
+      const colonIdx = rawKey.search(/[：:]/);
+      const key = colonIdx >= 0 ? rawKey.substring(0, colonIdx).trim() : rawKey;
+      const inlineValue = colonIdx >= 0 ? rawKey.substring(colonIdx + 1).trim() : "";
+      for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
+        const patternList = patterns.split("|");
+        const matchedPattern = patternList.find((p) => key === p || key.startsWith(p));
+        if (matchedPattern) {
+          // 优先用同 cell 的 inline value，没有再取下一个非空 cell
+          let value = "";
+          if (inlineValue && !SKU_HEADER_KEYWORDS.includes(inlineValue)) {
+            value = inlineValue;
+          } else {
+            for (let m = n + 1; m < rowData.length; m++) {
+              const v = String(rowData[m] ?? "").trim();
+              if (v && !SKU_HEADER_KEYWORDS.includes(v)) {
+                value = v;
+                break;
+              }
+            }
+          }
+          if (value && !preHeaderFields[target]) preHeaderFields[target] = value;
           break;
         }
       }
@@ -1148,6 +1194,39 @@ export function excelToRawData(
     console.log(`[excelToRawData] 从表前/表后元数据行提取到: ${Object.keys(preHeaderFields).join(", ")}`);
     for (const row of rows) {
       row.tailFields = { ...preHeaderFields, ...row.tailFields };
+    }
+  }
+
+  // ====== 关键：兜底扫描表前/表后所有"行"提取元数据（即使在 rows2d 之外）======
+  // 适用于 PDF/Word 等"表前元数据行"被 rows2d 排除的场景：
+  // 解析器（file-parser）的二维表抽取只保留了"表头行+数据行"，但 key:value 元数据行
+  // （如"收货机构：xxx"）被丢在外面。这里我们从 data 全集里重新扫一次：
+  // —— 任何不在 headerRow 之前/之后数据范围内的行，都视为元数据候选
+  if (Object.keys(preHeaderFields).length < 5) {
+    // 已有 preHeaderFields 不足时，强制全文档扫描
+    const enriched: Record<string, string> = {};
+    for (let r = 0; r < data.length; r++) {
+      if (r === headerRow) continue;
+      const rowData = data[r];
+      if (!rowData) continue;
+      const rowText = rowData.map((c) => String(c ?? "")).join(" ");
+      for (const [target, patterns] of Object.entries(preHeaderKeyMap)) {
+        if (enriched[target]) continue;
+        for (const p of patterns.split("|")) {
+          const re = new RegExp(p + "[：:]\\s*([^\\s：:][^：:]*?)(?=\\s+[一-鿿][：:]|$)");
+          const m = rowText.match(re);
+          if (m && m[1] && !SKU_HEADER_KEYWORDS.includes(m[1].trim())) {
+            enriched[target] = m[1].trim();
+            break;
+          }
+        }
+      }
+    }
+    if (Object.keys(enriched).length > 0) {
+      console.log(`[excelToRawData] 兜底扫描: 找到 ${Object.keys(enriched).length} 字段: ${Object.keys(enriched).join(", ")}`);
+      for (const row of rows) {
+        row.tailFields = { ...enriched, ...row.tailFields };
+      }
     }
   }
 

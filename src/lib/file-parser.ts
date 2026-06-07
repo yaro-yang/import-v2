@@ -63,9 +63,15 @@ export async function parseWord(
 }
 
 // 解析 PDF 文件（使用 pdfjs-dist）
+// 返回结构：
+//   - pages: 每页文本（按视觉行分行的字符串）
+//   - fullText: 整篇文本（用 \n---PAGE_BREAK---\n 分页）
+//   - rows2d: 自动按"列头行"切分后的二维数组（复用 Excel 风格）
+//   - headerRow: 识别到的列头行号（0-based，相对于 rows2d）
+//   - keyValueLines: 全文中的 key: value 形式元数据行（收货机构/单据编号/收货人/电话/地址等）
 export async function parsePDF(
   buffer: ArrayBuffer
-): Promise<{ pages: string[]; fullText: string }> {
+): Promise<{ pages: string[]; fullText: string; rows2d?: (string | number | null)[][]; headerRow?: number; keyValueLines?: string[] }> {
   const pdfjsLib = await import("pdfjs-dist");
 
   const isServer = typeof window === "undefined";
@@ -95,15 +101,179 @@ export async function parsePDF(
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const text = textContent.items
-      .map((item) => ("str" in item ? (item as { str: string }).str : ""))
-      .join(" ");
-    pages.push(text);
+    // ====== 关键：按视觉行分组 ======
+    // PDF 的 textContent.items 顺序通常是按"行从左到右、行从上到下"，但同一行的多段可能来自
+    // 不同的 text block，因此不能简单用 transform[5]（y 坐标）分组。
+    // 我们用"y 坐标聚类"——相邻 y 距离小于阈值（如字号 * 0.7）则视为同一行。
+    const items = textContent.items as Array<{
+      str?: string;
+      transform?: number[];
+      width?: number;
+      height?: number;
+    }>;
+    const lines: { y: number; parts: string[] }[] = [];
+    for (const it of items) {
+      const str = it.str || "";
+      // 跳过空 token 和纯空白（避免空行）
+      if (!str.replace(/\s/g, "")) continue;
+      // y 坐标：transform[5] 是 PDF 坐标系（左下为原点，y 越大越靠上）
+      const y = Array.isArray(it.transform) && it.transform.length >= 6 ? it.transform[5] : 0;
+      // 字号高度：transform[3] 是缩放因子；粗略用 height 字段
+      const fontHeight = (Array.isArray(it.transform) && it.transform.length >= 4) ? Math.abs(it.transform[3]) || 10 : 10;
+      const tol = fontHeight * 0.7; // 行间合并阈值
+      if (lines.length > 0 && Math.abs(lines[lines.length - 1].y - y) <= tol) {
+        // 同行：追加
+        // 如果上一个 token 以空白结尾或下一个 token 以空白开头，省略拼接空格
+        const last = lines[lines.length - 1].parts;
+        if (/[\s]$/.test(last[last.length - 1]) || /^[\s]/.test(str)) {
+          last.push(str);
+        } else {
+          last.push(" " + str);
+        }
+      } else {
+        lines.push({ y, parts: [str] });
+      }
+    }
+    // 按 y 倒序（PDF 坐标系 y 越大越靠上，对应文档越靠前）
+    lines.sort((a, b) => b.y - a.y);
+    const pageText = lines.map((l) => l.parts.join("").replace(/[ \t]+/g, " ").trim()).filter(Boolean).join("\n");
+    pages.push(pageText);
   }
+
+  const fullText = pages.join("\n---PAGE_BREAK---\n");
+
+  // ====== 二维表抽取（自动列头识别） ======
+  // 关键点：PDF 的"视觉行"经 pdfjs 解析后，同一行的多列 token 用单空格分隔
+  // （不是多空格），所以需要用"列数对齐"策略而不是"多空格 split"
+  const allLines = fullText.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const HEADER_KEYWORDS = [
+    "物品类别", "物品编码", "物品名称", "物品品牌", "规格型号",
+    "订货单位", "发货数量", "订货数量", "应发数量",
+    "批次号", "生产日期", "辅助单位", "备注", "序号",
+  ];
+  let headerRowIdx = -1;
+  for (let i = 0; i < Math.min(allLines.length, 30); i++) {
+    const ln = allLines[i];
+    let hits = 0;
+    for (const kw of HEADER_KEYWORDS) if (ln.includes(kw)) hits++;
+    if (hits >= 3) { headerRowIdx = i; break; }
+  }
+  let rows2d: (string | number | null)[][] | undefined;
+  let detectedHeaderRow: number | undefined;
+  let hasSeqCol = false;
+  if (headerRowIdx >= 0) {
+    // 把表头按单空格 split（因为 PDF 视觉行内 token 是单空格分隔的）
+    const headerLine = allLines[headerRowIdx];
+    let headerCols = headerLine.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+    // 如果表头不包含"序号"但数据行明显是"数字+内容"模式（首个 token 是 1/2/3...），
+    // 自动在表头前面加一列"序号"以保证列对齐
+    hasSeqCol = headerCols.includes("序号") || headerCols[0] === "序号";
+    if (!hasSeqCol && headerCols[0] !== "序号") {
+      // 检查下一行（第一条数据行）的第一个 token 是否是纯数字
+      const firstDataLineIdx = headerRowIdx + 1;
+      if (firstDataLineIdx < allLines.length) {
+        const firstDataLine = allLines[firstDataLineIdx];
+        const firstToken = firstDataLine.split(/\s+/)[0];
+        if (/^\d+$/.test(firstToken) && Number(firstToken) <= 200) {
+          // 大概率有"序号"列（但 PDF 把序号和类别都给了中文"物品类别"在 col_0，实际数据是 col_0=序号 col_1=类别）
+          headerCols = ["序号", ...headerCols];
+          hasSeqCol = true;
+        }
+      }
+    }
+    if (headerCols.length >= 3) {
+      // 关键：rows2d 包含表头之前的"key:value 元数据行"和表头行。
+      // 这样 excelToRawData 的 preHeaderFields 提取能扫到它们。
+      // 之后再加表头本身。
+      // 但为了不破坏"headerRow=0"的语义（让所有元数据行算在表头之前），
+      // 我们把元数据行放在表头行之前（rows2d 前面）。
+      const metaRowsBefore: string[][] = [];
+      const dataRows: string[][] = [];
+      for (let i = 0; i < allLines.length; i++) {
+        if (i === headerRowIdx) continue; // 表头行单独处理
+        const line = allLines[i];
+        if (line.length < 3) continue;
+        // 元数据行（key:value 形式）：原样保留到 rows2d（cell[0] = "key：value"）
+        if (/^[^\s：:]{1,12}[：:][^\s：:]/.test(line)) {
+          metaRowsBefore.push([line]);
+          continue;
+        }
+        // 页码/分割线跳过
+        if (/^第\s*\d+\s*页/.test(line)) continue;
+        if (/^\d+\s*\/\s*\d+/.test(line)) continue;
+        if (/合计|合\s*计/.test(line)) continue;
+        const tokens = line.split(/\s+/).filter(Boolean);
+        if (tokens.length < headerCols.length - 1) continue;
+        // 关键：PDF 解析时可能把"规格型号"列（值含 "/" "kg" "件" 等）错误切分成多个 token
+        // 这里做一个"前向合并"——如果当前 token 是数字/单位（"件/袋/箱"等）且前一个 token
+        // 以 "/" 或 "*" 结尾（"1.25kg*12瓶/"），则把它们合并
+        const merged: string[] = [];
+        for (let k = 0; k < tokens.length; k++) {
+          const tk = tokens[k];
+          if (merged.length > 0) {
+            const prev = merged[merged.length - 1];
+            if (/[/\\*]$/.test(prev) && !/^\d+$/.test(tk) && !/^[A-Z]+\d/.test(tk)) {
+              merged[merged.length - 1] = prev + tk;
+              continue;
+            }
+            if (/[xX×]\d+$/.test(prev) && /^(件|袋|包|桶|盒|箱|片|个|只|条|kg|g|ml|L)$/.test(tk)) {
+              merged[merged.length - 1] = prev + tk;
+              continue;
+            }
+          }
+          merged.push(tk);
+        }
+        const finalTokens = merged;
+        if (finalTokens.length < headerCols.length - 1) continue;
+        // 去重：跨页重复出现的表头行（"物品类别 物品编码 ..."）跳过
+        if (finalTokens.length >= headerCols.length - 1) {
+          const headerWithoutSeq = headerCols.filter(h => h !== "序号");
+          if (finalTokens.slice(0, headerWithoutSeq.length).every((tk, i) => tk === headerWithoutSeq[i])) continue;
+        }
+        let cells: string[];
+        if (finalTokens.length === headerCols.length) {
+          cells = finalTokens;
+        } else if (finalTokens.length > headerCols.length) {
+          // 多 token：启发式找到"规格型号"列，把多余 token 合并到那一列
+          // 规格型号通常是"1.25kg*12瓶/件"等含 "/" "x" "kg" 的复合值
+          const specHints = /规格|型号|spec|说明/;
+          let specIdx = -1;
+          for (let k = 1; k < headerCols.length; k++) {
+            if (specHints.test(headerCols[k])) { specIdx = k; break; }
+          }
+          if (specIdx > 0) {
+            const extra = finalTokens.length - headerCols.length;
+            cells = finalTokens.slice(0, specIdx);
+            const merged = finalTokens.slice(specIdx, specIdx + 1 + extra).join(" ");
+            cells.push(merged);
+            cells.push(...finalTokens.slice(specIdx + 1 + extra));
+            while (cells.length < headerCols.length) cells.push("");
+            if (cells.length > headerCols.length) cells.length = headerCols.length;
+          } else {
+            cells = finalTokens.slice(0, headerCols.length - 1);
+            cells.push(finalTokens.slice(headerCols.length - 1).join(" "));
+          }
+        } else {
+          cells = [...finalTokens];
+          while (cells.length < headerCols.length) cells.push("");
+        }
+        dataRows.push(cells);
+      }
+      rows2d = [...metaRowsBefore, headerCols, ...dataRows];
+      // 重新计算 headerRow：元数据行数 = 表头行在 rows2d 中的索引
+      detectedHeaderRow = metaRowsBefore.length;
+    }
+  }
+
+  // 提取 key:value 元数据行
+  const keyValueLines = allLines.filter((l) => /^[^\s：:]{1,12}[：:][^\s：:]/.test(l));
 
   return {
     pages,
-    fullText: pages.join("\n---PAGE_BREAK---\n"),
+    fullText,
+    rows2d,
+    headerRow: detectedHeaderRow,
+    keyValueLines,
   };
 }
 

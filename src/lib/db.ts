@@ -13,6 +13,7 @@ import { neon } from "@neondatabase/serverless";
 import { OrderItem, OutboundOrder, ParseRule, ValidationError, TransferOrder } from "@/types";
 import { promises as fs } from "fs";
 import * as path from "path";
+import { v4 as uuidv4 } from "uuid";
 
 // 数据文件路径（无数据库时的回退方案）
 const DATA_DIR = path.join(process.cwd(), ".data");
@@ -787,6 +788,11 @@ export async function saveRule(rule: ParseRule): Promise<ParseRule> {
     const sql = getSql();
     const now = new Date().toISOString();
 
+  // 兜底：id 为空时生成一个，避免空 id 写入数据库后无法查询
+  if (!rule.id) {
+    rule.id = uuidv4();
+  }
+
     await sql`
       INSERT INTO rules (
         id, name, description, file_type,
@@ -830,6 +836,9 @@ export async function saveRule(rule: ParseRule): Promise<ParseRule> {
   // 本地文件存储回退
   const store = await readLocalStore();
   const now = new Date().toISOString();
+  if (!rule.id) {
+    rule.id = uuidv4();
+  }
   store.rules[rule.id] = {
     ...rule,
     updatedAt: now,
