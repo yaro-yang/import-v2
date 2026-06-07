@@ -509,14 +509,24 @@ function processRows(
   onProgress?: ProgressCallback
 ) {
   // 跳过合计行
-  let filteredData = rawData;
-  if (rule.postProcessing?.skipTotalRow) {
-    const pattern = rule.postProcessing.totalRowPattern || "合计";
-    filteredData = rawData.filter((row) => {
-      const rowText = Object.values(row.cells).join(" ");
-      return !rowText.includes(pattern);
-    });
-  }
+  // 关键：合计行识别是数据正确性的基础，不该依赖配置。
+  // 无论 rule.postProcessing?.skipTotalRow 是什么值，**始终**过滤含"合计"/"小计"/"总计"等行——
+  // 这是数据正确性硬保证，避免 AI 没设 skipTotalRow=true 时把合计行当数据行（数量=30等假数据）。
+  // 之前用 `if (rule.postProcessing?.skipTotalRow)` 判断，导致 AI 漏设时合计行被错误保留为数据。
+  const TOTAL_ROW_PATTERNS = ["合计", "小计", "总计", "合 计"];
+  const configuredPattern = rule.postProcessing?.totalRowPattern || "合计";
+  const filteredData = rawData.filter((row) => {
+    const rowText = Object.values(row.cells).join(" ");
+    // 命中配置的 pattern 或常见合计行特征
+    if (rowText.includes(configuredPattern)) return false;
+    for (const p of TOTAL_ROW_PATTERNS) {
+      if (rowText.includes(p)) return false;
+    }
+    // 启发式：首列（"序号"列对应的值）是"合计"或"小计"等
+    const firstCol = row.cells["col_0"] || row.cells["序号"] || "";
+    if (typeof firstCol === "string" && TOTAL_ROW_PATTERNS.includes(firstCol.trim())) return false;
+    return true;
+  });
 
   // 按外部编码聚合（同一 externalCode 的多行 → 共享收货信息，每行一个 SKU）
   // transfer 模式（调拨单）：每行一个独立 OrderItem，各自保留门店/收件人/地址信息

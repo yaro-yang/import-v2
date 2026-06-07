@@ -1092,7 +1092,13 @@ function convertAIResponse(
           : undefined,
       },
       postProcessing: {
-        skipTotalRow: (parsed.skipTotalRow as boolean) || false,
+        // 关键：强制用启发式检测的 hasTotalRow（fileContent 中是否含"合计"/"小计"）覆盖 AI 的返回值
+        // 避免 AI 漏设 skipTotalRow=true 时合计行被错误保留为数据行（如"合计 | 30 | 30 | 30"被当成 30 个 SKU）
+        skipTotalRow: (() => {
+          if ((parsed.skipTotalRow as boolean) === true) return true;
+          const fc = (request.fileContent || "");
+          return fc.includes("合计") || fc.includes("小计") || fc.includes("总计");
+        })(),
         totalRowPattern: (parsed.totalRowPattern as string) || "合计",
         textRecordMarker: (parsed.textRecordMarker as string) || undefined,
         textSeparator: (parsed.textSeparator as string) || undefined,
