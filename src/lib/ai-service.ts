@@ -860,6 +860,38 @@ function convertAIResponse(
         }
       }
     }
+
+    // ===== externalCode 兜底 #2：列名含"日期/时间"或值是日期格式 → 强制清空 =====
+    // 实际业务中"出库日期/发货日期/打印时间"等是日期字段，不是单据编号
+    // AI 偶尔会把"出库日期"错配成 externalCode（"出库"+"单号"语义混淆）
+    // 规则：列名含"日期/时间/年月日" → 清空；或该列首行值匹配 YYYY-MM-DD → 清空
+    const colName2 = extCodeMapping.columnName;
+    const looksLikeDateColumn = /日期|时间|年月日|发货日|打印日|出库日|调拨日|配送日|到货日|期望日/.test(colName2);
+    if (looksLikeDateColumn) {
+      extCodeMapping.columnName = undefined;
+      const extFieldMapping2 = fieldMappings.find((fm) => fm.targetField === "externalCode");
+      if (extFieldMapping2) {
+        extFieldMapping2.suggestedSource = "";
+        extFieldMapping2.note = `AI 原选了"${colName2}"（日期列），外部编码无对应字段，已清空请手动填写`;
+        extFieldMapping2.confidence = 0.1;
+      }
+    } else {
+      // 列名看起来不像日期，但首行值是日期格式 → 同样清空
+      // 在 fileContent 中按 cell 找 "colName2: 2026-05-30 ..." 或表头行 cell 含日期
+      const cellMatch = (request.fileContent || "").match(new RegExp(
+        `(?:${colName2}[：:]\\s*|.*?\\|\\s*)(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2})`,
+        "m"
+      ));
+      if (cellMatch) {
+        extCodeMapping.columnName = undefined;
+        const extFieldMapping2 = fieldMappings.find((fm) => fm.targetField === "externalCode");
+        if (extFieldMapping2) {
+          extFieldMapping2.suggestedSource = "";
+          extFieldMapping2.note = `AI 原选了"${colName2}"（首行值是日期 ${cellMatch[1]}），外部编码无对应字段，已清空请手动填写`;
+          extFieldMapping2.confidence = 0.1;
+        }
+      }
+    }
   }
 
   const tailFields: FieldMapping[] = (parsed.tailFields as FieldMapping[]) || [];
