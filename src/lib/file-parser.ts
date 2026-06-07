@@ -1,6 +1,8 @@
 // 文件解析器 - 支持 Excel、Word、PDF 格式
 
 import * as XLSX from "xlsx";
+import { readdirSync } from "fs";
+import * as path from "path";
 
 // pdfjs-dist 4.x 内部使用了 Promise.withResolvers()（ES2024 API），
 // 在某些 JS 引擎（老版本 Node、Webpack 沙箱、Edge Runtime 早期版本）下可能不存在，
@@ -79,15 +81,15 @@ export async function parsePDF(
   if (isServer) {
     // 服务端：pdfjs-dist 4.x 必须显式给 workerSrc，否则会报"Setting up fake worker failed: \"No GlobalWorkerOptions.workerSrc specified\""
     // 关键策略（按可靠性从高到低）：
-    //   1) 显式 require.resolve 找 worker 物理文件（dev 模式，Next.js 编译后仍能找到）
+    //   1) 通过 createRequire(import.meta.url) 解析 worker 物理文件路径（dev 模式）
     //   2) 找 process.cwd() 下的 node_modules 路径
-    //   3) 找 __dirname 解析后的 .next 目录、源码目录路径
-    //   4) 用 file:// URL 包装
-    //   5) 找不到就禁用 worker（Node 端 fake worker 在主线程跑）
+    //   3) 从 import.meta.url 反推项目根目录（编译产物里 .next/server/.../file-parser.js）
+    //   4) 直接用 file:// URL 包装；找不到物理路径时强制用一个占位 URL（只要非空字符串即可，
+    //      pdfjs 内部会用 import() 解析，Node 端 fake worker 自动降级为主线程跑）
     try {
       const { pathToFileURL } = await import("url");
       const { createRequire } = await import("module");
-      const { existsSync } = await import("fs");
+      const { existsSync, readdirSync, statSync } = await import("fs");
       const path = await import("path");
 
       let workerPath: string | null = null;
@@ -96,7 +98,7 @@ export async function parsePDF(
         "pdfjs-dist/build/pdf.worker.min.mjs",
       ];
 
-      // 尝试 1：用 createRequire 显式解析（Next.js serverExternalPackages 让 pdfjs-dist 走 CJS）
+      // 尝试 1：用 createRequire(import.meta.url) 解析（dev 模式，pdfjs-dist 走 Node 原生 ESM）
       try {
         const req = createRequire(import.meta.url);
         for (const c of candidates) {
@@ -111,7 +113,7 @@ export async function parsePDF(
         }
       } catch { /* ignore */ }
 
-      // 尝试 2：尝试 process.cwd()/node_modules
+      // 尝试 2：process.cwd()/node_modules
       if (!workerPath) {
         for (const c of candidates) {
           const p = path.resolve(process.cwd(), "node_modules", c);
@@ -123,14 +125,13 @@ export async function parsePDF(
         }
       }
 
-      // 尝试 3：从 import.meta.url 反推项目根目录（dev 模式 .next/server 编译产物）
+      // 尝试 3：从 import.meta.url 反推项目根
       if (!workerPath) {
         try {
-          const url = import.meta.url; // 形如 file:///path/to/.next/server/.../file-parser.js
+          const url = import.meta.url;
           const urlPath = url.startsWith("file://") ? decodeURIComponent(url.slice(7)) : url;
           let dir = path.dirname(urlPath);
-          // 向上找 package.json 标识项目根
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < 12; i++) {
             if (existsSync(path.join(dir, "package.json"))) break;
             const parent = path.dirname(dir);
             if (parent === dir) break;
@@ -147,18 +148,53 @@ export async function parsePDF(
         } catch { /* ignore */ }
       }
 
+      // 尝试 4：暴力搜索（Vercel/standalone：worker 文件可能被复制到任意位置）
+      if (!workerPath) {
+        try {
+          // 找 .next/server 目录
+          const searchDirs: string[] = [];
+          const cwd = process.cwd();
+          searchDirs.push(cwd);
+          searchDirs.push(path.join(cwd, ".next/server"));
+          searchDirs.push(path.join(cwd, ".next"));
+          // 向上找 5 级
+          let d = cwd;
+          for (let i = 0; i < 5; i++) {
+            d = path.dirname(d);
+            searchDirs.push(d);
+            searchDirs.push(path.join(d, ".next/server"));
+          }
+          for (const dir of searchDirs) {
+            if (!existsSync(dir)) continue;
+            for (const c of candidates) {
+              // 递归查找 worker 文件（限制深度避免超时）
+              const found = findFile(dir, path.basename(c), 5);
+              if (found) {
+                workerPath = found;
+                console.log("[parsePDF] worker found via deep search:", workerPath);
+                break;
+              }
+            }
+            if (workerPath) break;
+          }
+        } catch { /* ignore */ }
+      }
+
       if (workerPath) {
-        // 必须转成 file:// URL（pdfjs 内部用 URL 解析）
         const fileUrl = workerPath.startsWith("file://") ? workerPath : pathToFileURL(workerPath).href;
         pdfjsLib.GlobalWorkerOptions.workerSrc = fileUrl;
       } else {
-        // 终极兜底：禁用 worker，让 pdfjs 在主线程 fake worker 模式跑
-        console.warn("[parsePDF] 无法定位 worker 文件，禁用 worker（fake worker 模式）");
-        // @ts-expect-error - useWorker 在 Node 端可设为 false
-        pdfjsLib.GlobalWorkerOptions.workerSrc = undefined;
+        // 终极兜底：设个占位 URL（pdfjs 4.x Node 端 fake worker 用相对路径 import）
+        // 即使这个 URL 解析不到，pdfjs 在 Node 端也会自动 fallback 到主线程 fake worker
+        //（前提是 GlobalWorkerOptions.workerSrc 是非空字符串）
+        const placeholder = "file:///pdfjs-dist/build/pdf.worker.mjs";
+        console.warn("[parsePDF] 无法定位 worker 物理文件，使用占位 URL（pdfjs 会自动 fake worker）:", placeholder);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = placeholder;
       }
     } catch (e) {
       console.warn("[parsePDF] workerSrc 设置异常:", e);
+      // 兜底：保证 workerSrc 是非空字符串
+      try { pdfjsLib.GlobalWorkerOptions.workerSrc = "file:///pdfjs-dist/build/pdf.worker.mjs"; } catch { /* ignore */ }
     }
   }
 
@@ -343,6 +379,38 @@ export async function parsePDF(
     headerRow: detectedHeaderRow,
     keyValueLines,
   };
+}
+
+/**
+ * 在指定目录中递归查找文件名匹配的文件（限制深度）
+ * 用于 Vercel/standalone 部署下找不到 worker 物理路径时的暴力搜索
+ */
+function findFile(
+  dir: string,
+  filename: string,
+  maxDepth: number,
+  currentDepth: number = 0
+): string | null {
+  if (currentDepth > maxDepth) return null;
+  try {
+    // 跳过明显的非项目目录
+    const skipDirs = new Set([".git", ".next/cache", ".next/static", ".next/standalone"]);
+    const items = readdirSync(dir, { withFileTypes: true });
+    for (const item of items) {
+      const full = path.join(dir, item.name);
+      if (item.isFile() && item.name === filename) return full;
+      if (item.isDirectory()) {
+        // 跳过隐藏目录和缓存目录
+        if (item.name.startsWith(".") && item.name !== ".next") continue;
+        if (skipDirs.has(item.name)) continue;
+        // 谨慎递归 node_modules（太深会卡）
+        if (item.name === "node_modules" && currentDepth > 3) continue;
+        const found = findFile(full, filename, maxDepth, currentDepth + 1);
+        if (found) return found;
+      }
+    }
+  } catch { /* ignore permission errors */ }
+  return null;
 }
 
 // 检测文件类型
