@@ -388,7 +388,6 @@ export function RuleEditor({
                         矩阵
                       </span>
                     )}
-                    )}
                   </div>
                   {aiInfo && (
                     <p className="text-[11px] text-[#86909c] mt-1 leading-tight truncate">
