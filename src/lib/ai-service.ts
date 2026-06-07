@@ -22,6 +22,11 @@ function getAIConfig(): AIModelConfig {
   };
 }
 
+// 转义正则元字符（用于把表头列名作为字面量嵌入正则）
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // 构建 Prompt（引导 AI 输出精确的列名匹配）
 // 注：prompt 越短 AI 响应越快
 function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
@@ -887,9 +892,11 @@ function convertAIResponse(
     if (metaKeyMatch) {
       return { matched: true, reason: "元数据行 key" };
     }
-    // 首行值是日期格式："出库日期: 2026-05-30 ..." 或 cell 后跟日期
+    // 首行值是日期格式：colName 作为某 cell 的值出现，且它的**后一个 cell** 是日期 YYYY-MM-DD
+    // 即 "出库日期 | 2026-05-30" 这种——colName 是表头，后面紧跟一个日期值（不是隔着整行）
+    // 注意：colName 后面必须紧跟日期（距离不超过 1 个 |），避免 "收货机构 | xxx | ... | 2026-05-29" 这种误伤
     const dateValueMatch = (request.fileContent || "").match(new RegExp(
-      `(?:${colName}[：:]\\s*|.*?\\|\\s*)(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2})`,
+      `(?:^|\\|)\\s*${escapeRegex(colName)}\\s*\\|\\s*(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2})\\b`,
       "m"
     ));
     if (dateValueMatch) {

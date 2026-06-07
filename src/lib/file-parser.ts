@@ -78,56 +78,87 @@ export async function parsePDF(
 
   if (isServer) {
     // 服务端：pdfjs-dist 4.x 必须显式给 workerSrc，否则会报"Setting up fake worker failed: \"No GlobalWorkerOptions.workerSrc specified\""
-    // 关键策略：
-    //   1) 优先用 `import.meta.resolve`（Node 20+ 内置）走 ESM 包解析，最稳
-    //   2) 兜底用 `createRequire(import.meta.url).resolve`
-    //   3) 最后兜底用 `process.cwd()/node_modules/...`（dev/本地生产 build）
-    //   配合 next.config.ts 的 serverExternalPackages + outputFileTracingIncludes
-    //   让 Vercel/standalone build 也保留 worker 文件
+    // 关键策略（按可靠性从高到低）：
+    //   1) 显式 require.resolve 找 worker 物理文件（dev 模式，Next.js 编译后仍能找到）
+    //   2) 找 process.cwd() 下的 node_modules 路径
+    //   3) 找 __dirname 解析后的 .next 目录、源码目录路径
+    //   4) 用 file:// URL 包装
+    //   5) 找不到就禁用 worker（Node 端 fake worker 在主线程跑）
     try {
       const { pathToFileURL } = await import("url");
+      const { createRequire } = await import("module");
+      const { existsSync } = await import("fs");
+      const path = await import("path");
+
       let workerPath: string | null = null;
       const candidates = [
         "pdfjs-dist/build/pdf.worker.mjs",
         "pdfjs-dist/build/pdf.worker.min.mjs",
       ];
-      // 1) import.meta.resolve（Node 20+ ESM 标准，同步）
-      const meta = import.meta as { resolve?: (s: string) => string };
-      if (typeof meta.resolve === "function") {
+
+      // 尝试 1：用 createRequire 显式解析（Next.js serverExternalPackages 让 pdfjs-dist 走 CJS）
+      try {
+        const req = createRequire(import.meta.url);
         for (const c of candidates) {
           try {
-            const resolved = meta.resolve(c);
-            if (resolved) {
-              workerPath = resolved.startsWith("file://") ? resolved : pathToFileURL(resolved).href;
+            const resolved = req.resolve(c);
+            if (resolved && existsSync(resolved)) {
+              workerPath = resolved;
+              console.log("[parsePDF] worker resolved via createRequire:", workerPath);
               break;
             }
           } catch { /* try next */ }
         }
-      }
-      // 2) createRequire 兜底
+      } catch { /* ignore */ }
+
+      // 尝试 2：尝试 process.cwd()/node_modules
       if (!workerPath) {
-        const { createRequire } = await import("module");
-        const requireFromHere = createRequire(import.meta.url);
         for (const c of candidates) {
-          try {
-            const resolved = requireFromHere.resolve(c);
-            if (resolved) {
-              workerPath = pathToFileURL(resolved).href;
-              break;
-            }
-          } catch { /* try next */ }
+          const p = path.resolve(process.cwd(), "node_modules", c);
+          if (existsSync(p)) {
+            workerPath = p;
+            console.log("[parsePDF] worker resolved via process.cwd():", workerPath);
+            break;
+          }
         }
       }
-      // 3) process.cwd() 兜底（dev/本地生产 build）
+
+      // 尝试 3：从 import.meta.url 反推项目根目录（dev 模式 .next/server 编译产物）
       if (!workerPath) {
-        const path = await import("path");
-        const fallbackPath = path.resolve(process.cwd(), candidates[0]);
-        workerPath = pathToFileURL(fallbackPath).href;
+        try {
+          const url = import.meta.url; // 形如 file:///path/to/.next/server/.../file-parser.js
+          const urlPath = url.startsWith("file://") ? decodeURIComponent(url.slice(7)) : url;
+          let dir = path.dirname(urlPath);
+          // 向上找 package.json 标识项目根
+          for (let i = 0; i < 10; i++) {
+            if (existsSync(path.join(dir, "package.json"))) break;
+            const parent = path.dirname(dir);
+            if (parent === dir) break;
+            dir = parent;
+          }
+          for (const c of candidates) {
+            const p = path.join(dir, "node_modules", c);
+            if (existsSync(p)) {
+              workerPath = p;
+              console.log("[parsePDF] worker resolved via import.meta.url walk:", workerPath);
+              break;
+            }
+          }
+        } catch { /* ignore */ }
       }
-      pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+
+      if (workerPath) {
+        // 必须转成 file:// URL（pdfjs 内部用 URL 解析）
+        const fileUrl = workerPath.startsWith("file://") ? workerPath : pathToFileURL(workerPath).href;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = fileUrl;
+      } else {
+        // 终极兜底：禁用 worker，让 pdfjs 在主线程 fake worker 模式跑
+        console.warn("[parsePDF] 无法定位 worker 文件，禁用 worker（fake worker 模式）");
+        // @ts-expect-error - useWorker 在 Node 端可设为 false
+        pdfjsLib.GlobalWorkerOptions.workerSrc = undefined;
+      }
     } catch (e) {
-      console.warn("[parsePDF] 无法定位 pdf worker 路径:", e);
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      console.warn("[parsePDF] workerSrc 设置异常:", e);
     }
   }
 
