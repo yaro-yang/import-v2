@@ -833,12 +833,97 @@ function convertAIResponse(
     };
   });
 
-  // ===== 外部编码列名兜底修正：AI 偶尔会把"配送汇总单号"当 externalCode =====
-  // 实际业务中"配送汇总单号"是父级汇总单号（多 SKU 共享），不是单据级唯一编号
-  // 而"配送单号"才是每条运单/出库单唯一的外部编码
-  // 规则：如果 externalCode.columnName 含"汇总"或"父单"等关键词，强制清空让用户手填
-  // （启发式：检测表头中是否同时存在"配送单号"或"单据号"，是的话优先用）
+  // ===== 外部编码/收货门店列名兜底修正 =====
+  // 实际业务中以下情况必须清空 columnName（让用户手填）：
+  //   1) externalCode 选了"配送汇总单号"（父级汇总单号，多 SKU 共享，不是单据级编号）
+  //   2) externalCode/storeName 选了"出库日期/打印时间/仓库/配送方式"等**元数据字段**（在 key:value 行里，不在表头）
+  //   3) externalCode/storeName 选了某个日期格式的列（值是 YYYY-MM-DD）
+  //   4) AI 幻觉的列名——columnName 在真实表头行中找不到对应 cell
   const extCodeMapping = fieldMappingsFull.find((m) => m.targetField === "externalCode");
+  const storeNameMapping = fieldMappingsFull.find((m) => m.targetField === "storeName");
+
+  // 找真正的表头行（启发式，跳过 --- Sheet: 标题行、跳过含 "：" 的元数据行）
+  const realHeaderCells: Set<string> = (() => {
+    const fcLines = (request.fileContent || "").split("\n");
+    for (let i = 0; i < Math.min(fcLines.length, 15); i++) {
+      const ln = fcLines[i];
+      if (/^---\s*Sheet:/.test(ln.trim())) continue;
+      // 表头判定：先按 | / ｜ / \t 拆 cell
+      const cells = ln.replace(/^行\d+:\s*/, "")
+        .split(/\s*[|｜]\s*|\t+/)
+        .map((p) => p.trim())
+        .filter((p) => p && !(p.startsWith("【") && p.includes("】")));
+      if (cells.length < 3) continue;
+      // 元数据行过滤：含 "key：value" 格式的 cell ≥2 个 → 是元数据行，跳过
+      // （真表头的 cell 通常只是列名，不会带冒号+值）
+      const keyValueCells = cells.filter((c) => /[：:]\S/.test(c)).length;
+      if (keyValueCells >= 2) continue;
+      // 也要排除整行就是一个 key:value 串的情况（如"调拨单号：xxx"）
+      if (cells.length === 1 && /[：:]\S/.test(cells[0])) continue;
+      // 简单 key:value 单 cell 模式（如"出库日期：2026-05-30"）也跳过
+      if (keyValueCells > 0 && cells.every((c) => /[：:]/.test(c))) continue;
+      // 检查是否像表头：至少 2 个 cell 含常见表头关键词
+      const headerHints = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "日期", "仓库", "出库", "门店", "价格", "金额", "重量", "体积", "配送", "发货", "调拨", "单号", "备注", "序号", "电话", "地址", "联系人", "规格型号"];
+      const hits = cells.filter((c) => headerHints.some((kw) => c.includes(kw))).length;
+      if (hits >= 2) {
+        return new Set(cells);
+      }
+    }
+    return new Set<string>();
+  })();
+
+  /**
+   * 判断 columnName 是否像一个"日期/元数据列"（不应该被选为 externalCode/storeName）
+   * - 含"日期/时间/年月日/打印日/出库日"等 → true
+   * - 出现在元数据行（"出库日期：2026-05-30"）的 key 位置上 → true
+   * - 该列对应的首行值是日期格式 YYYY-MM-DD → true
+   */
+  const isDateOrMetadataColumn = (colName: string): { matched: boolean; reason: string } => {
+    if (/日期|时间|年月日|发货日|打印日|出库日|调拨日|配送日|到货日|期望日|下单日|制单日|审核日|交货日/.test(colName)) {
+      return { matched: true, reason: "日期字段" };
+    }
+    // 出现在元数据行："出库日期：2026-05-30" 的 key 部分（key 后面接冒号+值）
+    const metaKeyMatch = (request.fileContent || "").match(new RegExp(`(?:^|\\|)\\s*${colName}\\s*[：:]\\s*\\S`, "m"));
+    if (metaKeyMatch) {
+      return { matched: true, reason: "元数据行 key" };
+    }
+    // 首行值是日期格式："出库日期: 2026-05-30 ..." 或 cell 后跟日期
+    const dateValueMatch = (request.fileContent || "").match(new RegExp(
+      `(?:${colName}[：:]\\s*|.*?\\|\\s*)(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2})`,
+      "m"
+    ));
+    if (dateValueMatch) {
+      return { matched: true, reason: `首行值是日期 ${dateValueMatch[1]}` };
+    }
+    // 真实表头中找不到该 columnName（AI 幻觉）
+    if (realHeaderCells.size > 0 && !realHeaderCells.has(colName)) {
+      // 进一步容错：宽松匹配（含关键词的部分匹配）
+      const fuzzy = Array.from(realHeaderCells).some((c) => c === colName || c.includes(colName) || colName.includes(c));
+      if (!fuzzy) {
+        return { matched: true, reason: "表头中找不到该列名" };
+      }
+    }
+    return { matched: false, reason: "" };
+  };
+
+  const clearInvalidColumn = (
+    mapping: FieldMapping | undefined,
+    fieldDisplayLabel: string,
+  ) => {
+    if (!mapping || !mapping.columnName) return;
+    const colName = mapping.columnName;
+    const check = isDateOrMetadataColumn(colName);
+    if (!check.matched) return;
+    mapping.columnName = undefined;
+    const displayMapping = fieldMappings.find((fm) => fm.targetField === mapping.targetField);
+    if (displayMapping) {
+      displayMapping.suggestedSource = "";
+      displayMapping.note = `AI 原选了"${colName}"（${check.reason}），${fieldDisplayLabel}无对应字段，已清空请手动填写`;
+      displayMapping.confidence = 0.1;
+    }
+  };
+
+  // externalCode：清掉"配送汇总单号"
   if (extCodeMapping && extCodeMapping.columnName) {
     const colName = extCodeMapping.columnName;
     const isParentSummary = /汇总|父单|总单/.test(colName);
@@ -860,39 +945,11 @@ function convertAIResponse(
         }
       }
     }
-
-    // ===== externalCode 兜底 #2：列名含"日期/时间"或值是日期格式 → 强制清空 =====
-    // 实际业务中"出库日期/发货日期/打印时间"等是日期字段，不是单据编号
-    // AI 偶尔会把"出库日期"错配成 externalCode（"出库"+"单号"语义混淆）
-    // 规则：列名含"日期/时间/年月日" → 清空；或该列首行值匹配 YYYY-MM-DD → 清空
-    const colName2 = extCodeMapping.columnName;
-    const looksLikeDateColumn = /日期|时间|年月日|发货日|打印日|出库日|调拨日|配送日|到货日|期望日/.test(colName2);
-    if (looksLikeDateColumn) {
-      extCodeMapping.columnName = undefined;
-      const extFieldMapping2 = fieldMappings.find((fm) => fm.targetField === "externalCode");
-      if (extFieldMapping2) {
-        extFieldMapping2.suggestedSource = "";
-        extFieldMapping2.note = `AI 原选了"${colName2}"（日期列），外部编码无对应字段，已清空请手动填写`;
-        extFieldMapping2.confidence = 0.1;
-      }
-    } else {
-      // 列名看起来不像日期，但首行值是日期格式 → 同样清空
-      // 在 fileContent 中按 cell 找 "colName2: 2026-05-30 ..." 或表头行 cell 含日期
-      const cellMatch = (request.fileContent || "").match(new RegExp(
-        `(?:${colName2}[：:]\\s*|.*?\\|\\s*)(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2})`,
-        "m"
-      ));
-      if (cellMatch) {
-        extCodeMapping.columnName = undefined;
-        const extFieldMapping2 = fieldMappings.find((fm) => fm.targetField === "externalCode");
-        if (extFieldMapping2) {
-          extFieldMapping2.suggestedSource = "";
-          extFieldMapping2.note = `AI 原选了"${colName2}"（首行值是日期 ${cellMatch[1]}），外部编码无对应字段，已清空请手动填写`;
-          extFieldMapping2.confidence = 0.1;
-        }
-      }
-    }
   }
+
+  // externalCode + storeName：清掉日期/元数据/不存在的列名
+  clearInvalidColumn(extCodeMapping, "外部编码");
+  clearInvalidColumn(storeNameMapping, "收货门店");
 
   const tailFields: FieldMapping[] = (parsed.tailFields as FieldMapping[]) || [];
   const hasTailInfo = (parsed.hasTailInfo as boolean) || tailFields.length > 0;
@@ -914,6 +971,9 @@ function convertAIResponse(
     const cleaned = line.replace(/^行\d+:\s*/, "");
     const parts = cleaned.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
     if (parts.length < 3) return false;
+    // 排除元数据行：≥2 个 cell 含"key：value"形式（真表头 cell 不带冒号+值）
+    const keyValueCells = parts.filter((c) => /[：:]\S/.test(c)).length;
+    if (keyValueCells >= 2) return false;
     let hits = 0;
     for (const p of parts) {
       if (HEADER_HINT_KEYWORDS_FOR_MATRIX.some((kw) => p.includes(kw))) hits++;
