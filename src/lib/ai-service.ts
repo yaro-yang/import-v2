@@ -66,6 +66,10 @@ ${contentPreview}
    - 卡片式 → cardMode=true, cardStartMarker="▶ 调拨记录"（或文件中实际标记）
    - 矩阵式 → matrixMode=true
 4. 找不到的字段 columnName=null, confidence=0.2
+5. **外部编码（externalCode）选列规则**：
+   - 优先选"配送单号/单据号/订单号"等**单据级唯一编号**（每行 SKU 各不相同的号）
+   - **不要选**"配送汇总单号"——它是父级汇总单号（多行 SKU 共享），不是单据级编号
+   - 如果两类都有（如"配送汇总单号"和"配送单号"并存），强制选不带"汇总"的"配送单号"
 
 ## 输出 JSON 结构（请按文件实际内容填值，不要照抄示例值）
 {
@@ -206,7 +210,7 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
     recipientName: { keywords: ["收货人", "收件人", "收件人姓名", "联系人"], priority: 6 },
     recipientPhone: { keywords: ["收货电话", "收货人手机号", "联系电话", "收件人电话", "联系方式", "手机", "电话"], priority: 7 },
     recipientAddress: { keywords: ["收货地址", "收件人地址", "详细地址", "地址"], priority: 8 },
-    externalCode: { keywords: ["配送发货单", "发货单", "调拨单号", "配送单号", "单据编号", "单据号", "订单号", "外部编码", "运单号", "单号"], priority: 9 },
+    externalCode: { keywords: ["配送单号", "配送发货单", "发货单", "调拨单号", "单据编号", "单据号", "订单号", "外部编码", "运单号", "单号", "配送汇总单号"], priority: 9 },
     remark: { keywords: ["备注", "说明", "附注"], priority: 10 },
   };
 
@@ -828,6 +832,35 @@ function convertAIResponse(
       defaultValue: defaultVal,
     };
   });
+
+  // ===== 外部编码列名兜底修正：AI 偶尔会把"配送汇总单号"当 externalCode =====
+  // 实际业务中"配送汇总单号"是父级汇总单号（多 SKU 共享），不是单据级唯一编号
+  // 而"配送单号"才是每条运单/出库单唯一的外部编码
+  // 规则：如果 externalCode.columnName 含"汇总"或"父单"等关键词，强制清空让用户手填
+  // （启发式：检测表头中是否同时存在"配送单号"或"单据号"，是的话优先用）
+  const extCodeMapping = fieldMappingsFull.find((m) => m.targetField === "externalCode");
+  if (extCodeMapping && extCodeMapping.columnName) {
+    const colName = extCodeMapping.columnName;
+    const isParentSummary = /汇总|父单|总单/.test(colName);
+    if (isParentSummary) {
+      // 启发式兜底：在 fileContent 全文中找不带"汇总"的更优候选
+      const allHeaders = (request.fileContent || "").split("\n").slice(0, 5);
+      const betterCandidate = allHeaders
+        .join(" | ")
+        .split(/\s*[|｜]\s*|\t+/)
+        .map((h) => h.replace(/^行\d+:\s*/, "").trim())
+        .find((h) => /配送单号|单据号|订单号|运单号/.test(h) && !/汇总|父单|总单/.test(h));
+      if (betterCandidate) {
+        extCodeMapping.columnName = betterCandidate;
+        // 同步更新 fieldMappings（display 提示用）
+        const extFieldMapping = fieldMappings.find((fm) => fm.targetField === "externalCode");
+        if (extFieldMapping) {
+          extFieldMapping.suggestedSource = betterCandidate;
+          extFieldMapping.note = `AI 原选了"${colName}"（汇总单号），已自动改为"${betterCandidate}"（单据级唯一编号）`;
+        }
+      }
+    }
+  }
 
   const tailFields: FieldMapping[] = (parsed.tailFields as FieldMapping[]) || [];
   const hasTailInfo = (parsed.hasTailInfo as boolean) || tailFields.length > 0;
