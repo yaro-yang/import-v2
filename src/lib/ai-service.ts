@@ -31,7 +31,12 @@ function buildAnalyzePrompt(request: AIAnalyzeRequest): string {
    - 标准表：表头含"物品编码/名称/数量"等，数据紧接其后
    - 多区域：表前/表后有key:value元数据行，中间是数据表
    - 卡片式：含"▶ 调拨记录"等分隔符，每张卡片内有收货门店/收货人/电话/地址
-   - 矩阵式：表头含≥2个门店列（"银泰"等）且无收货人/电话，是库存分配表`
+   - **矩阵式（库存分配表）**：
+     * 表头前部是标准字段（仓库名称/货主名称/SKU名称/SKU条码/外部商品编码/库存数量/可用数量/分配数量 等）
+     * 表头靠后位置（最后几列）出现 ≥2 个**非标准字段**的专有名称列（如"银泰/金桥/金银潭/门店B/门店D/分店名"等）
+     * 数据行每个单元格是各门店对应的分配/库存数量
+     * 这种表本身**没有外部单号和收件人**，是"货主对各门店的库存分配清单"
+     * 识别后请设 matrixMode=true，并把后几列的门店名放到 storeColumnNames`
     : request.fileType === "word"
       ? "Word纯文本段落。"
       : "PDF文本。多页PDF每页可能含多个订单。注意key: value对。";
@@ -827,6 +832,55 @@ function convertAIResponse(
   const tailFields: FieldMapping[] = (parsed.tailFields as FieldMapping[]) || [];
   const hasTailInfo = (parsed.hasTailInfo as boolean) || tailFields.length > 0;
 
+  // ===== 矩阵模式兜底：AI 可能没识别出矩阵，但启发式分析能识别 =====
+  // 基于 fileContent 文本做轻量级检测：
+  //   1) 取表头行（"行1: ..."）按 | 拆分
+  //   2) 找 ≥2 个不在标准字段关键词内的"短专有名词"列（如 银泰/金桥/门店B/门店D）
+  //   3) 同时全文无"收货人/电话/单据号"等单据特征
+  //   满足以上则强制覆盖 matrixMode=true，并修正 storeName/skuQuantity mapping
+  const isAIResultMatrix = !!(parsed.matrixMode);
+  let overrideMatrixMode = false;
+  let detectedStoreColumns: string[] = [];
+  if (!isAIResultMatrix) {
+    const fcLines = (request.fileContent || "").split("\n").slice(0, 1);
+    if (fcLines[0]) {
+      const firstLine = fcLines[0].replace(/^行\d+:\s*/, "");
+      const headerParts = firstLine.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
+      const stdKw = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结", "单价", "金额", "价格"];
+      const storeKw = ["店", "门店", "分店", "商场", "银泰", "金桥", "金银潭", "万象", "万达", "广场", "世纪"];
+      const candidates = headerParts.filter((h) => {
+        if (stdKw.some((k) => h.includes(k))) return false;
+        if (!storeKw.some((k) => h.includes(k))) return false;
+        if (h.length > 8) return false;
+        return true;
+      });
+      // 全文无单据特征
+      const allText = request.fileContent || "";
+      const hasDocKw = ["收货人", "收件人", "联系电话", "收货地址", "单据号", "配送单号", "运单号", "调拨单号"].some((k) => allText.includes(k));
+      if (candidates.length >= 2 && !hasDocKw) {
+        overrideMatrixMode = true;
+        detectedStoreColumns = candidates;
+      }
+    }
+  }
+
+  // 如果覆盖了矩阵模式，更新 mappingsFull 中的 storeName/skuQuantity 为 matrix_transpose
+  if (overrideMatrixMode) {
+    for (const m of fieldMappingsFull) {
+      if (m.targetField === "storeName" || m.targetField === "skuQuantity") {
+        m.mode = "matrix_transpose";
+        m.columnName = "矩阵转置自动填充";
+      }
+      if (m.targetField === "externalCode") {
+        m.mode = "static_value";
+        m.staticValue = "";
+        m.defaultValue = "";
+        m.columnName = undefined;
+        m.rowKeyPattern = undefined;
+      }
+    }
+  }
+
   return {
     suggestedRule: {
       name: `${request.fileName} - AI生成规则`,
@@ -849,8 +903,15 @@ function convertAIResponse(
         cardMode: parsed.cardMode
           ? { enabled: true, startMarker: (parsed.cardStartMarker as string) || "" }
           : undefined,
-        matrixMode: parsed.matrixMode
-          ? { enabled: true }
+        // matrixMode：AI 识别 OR 后端启发式兜底
+        matrixMode: (parsed.matrixMode || overrideMatrixMode)
+          ? {
+              enabled: true,
+              valueColumnNamesRow: (parsed.headerRow as number) || 0,
+              storeColumnNames: detectedStoreColumns.length > 0
+                ? detectedStoreColumns
+                : undefined,
+            }
           : undefined,
         compositeMode: parsed.compositeMode
           ? { enabled: true, separator: (parsed.compositeSeparator as string) || "\n", pattern: "(.+?)x(\\d+)" }

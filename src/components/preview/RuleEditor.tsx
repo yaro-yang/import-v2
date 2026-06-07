@@ -224,6 +224,33 @@ export function RuleEditor({
 
   return (
     <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+      {/* === 矩阵模式提示横幅（当 dataRegion.matrixMode 启用时显示） === */}
+      {rule?.dataRegion?.matrixMode?.enabled && (
+        <div className="flex items-start gap-3 p-3.5 rounded-xl bg-gradient-to-r from-[#fff7e6] to-[#fff1d6] border border-[#ff7d00]/30">
+          <div className="w-9 h-9 rounded-lg bg-[#ff7d00]/10 flex items-center justify-center flex-shrink-0 text-[#ff7d00]">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[#7a4a00]">
+              已识别为【矩阵库存分配表】
+            </p>
+            <p className="text-xs text-[#874d00] mt-1 leading-relaxed">
+              门店列：
+              <span className="font-mono font-semibold text-[#7a4a00]">
+                {(rule.dataRegion.matrixMode.storeColumnNames || []).join("、") || "（自动检测中）"}
+              </span>
+              <br />
+              收货门店/SKU发货数量将由矩阵转置自动按门店拆分；外部编码/收件人信息无需填写
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* === 顶部提示横幅 === */}
       <div className="flex items-start gap-3 p-3.5 rounded-xl bg-gradient-to-r from-[#f0fdfd] to-[#e8fafa] border border-[#0fc6c2]/25">
         <div className="w-9 h-9 rounded-lg bg-[#0fc6c2]/10 flex items-center justify-center flex-shrink-0 text-[#0fc6c2]">

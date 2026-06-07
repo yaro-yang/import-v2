@@ -821,7 +821,7 @@ export default function HistoryPage() {
                       {COL_SKU_NAME.label}
                     </th>
                     <th
-                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-right border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
+                      className="sticky top-0 z-20 bg-gradient-to-b from-[#f6f8f9] to-[#eef1f4] px-3 py-2.5 text-[11px] font-semibold text-[#4e5969] text-left border-r border-b-2 border-[#e5e6eb] border-b-[#0fc6c2]/40 whitespace-nowrap tracking-wide uppercase"
                       scope="col"
                     >
                       {COL_SKU_QTY.label}
@@ -1092,7 +1092,7 @@ export default function HistoryPage() {
                         </td>
                         <td
                           className={cn(
-                            "px-3 py-2.5 text-sm text-right border-r border-b border-[#f2f3f5] tabular-nums",
+                            "px-3 py-2.5 text-sm text-left border-r border-b border-[#f2f3f5] tabular-nums",
                             rowBg,
                             row.kind === "empty-group" && "italic text-[#c9cdd4]"
                           )}
