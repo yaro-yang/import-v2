@@ -76,10 +76,10 @@ export function RuleSelector({
       ) : (
         <>
           {/* 搜索 + 新建 */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mb-3">
             <div className="relative flex-1">
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86909c]"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#86909c] pointer-events-none"
                 fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"
               >
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -89,8 +89,19 @@ export function RuleSelector({
                 placeholder="搜索已有解析规则..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-[#d0d7de] rounded-lg outline-none focus:border-[#0fc6c2] focus:ring-1 focus:ring-[#0fc6c2]/20 placeholder:text-[#b5bbc3]"
+                className="w-full pl-10 pr-10 py-2.5 text-sm bg-[#f7f8fa] border border-[#e5e6eb] rounded-xl outline-none transition-all duration-200 focus:bg-white focus:border-[#0fc6c2] focus:ring-2 focus:ring-[#0fc6c2]/10 placeholder:text-[#b5bbc3] text-[#1d2129]"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#e5e6eb] flex items-center justify-center text-[#86909c] hover:bg-[#c9cdd4] hover:text-[#4e5969] transition-colors"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
             </div>
             <Button size="sm" onClick={onCreateNew}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
