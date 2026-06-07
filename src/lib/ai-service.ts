@@ -834,16 +834,44 @@ function convertAIResponse(
 
   // ===== 矩阵模式兜底：总是跑一遍"启发式矩阵检测"（无论 AI 是否设 matrixMode）=====
   // 基于 fileContent 真实表头检测门店列：
-  //   1) 取表头行按 | 或 \t 拆分
-  //   2) 找 ≥2 个不在标准字段关键词内的"短专有名词"列
+  //   1) 跳过 `--- Sheet: ---` 标题行，找第一个像表头的行（含 ≥2 个常见表头关键词）
+  //   2) 按 | 或 \t 拆分；找 ≥2 个不在标准字段关键词内的"短专有名词"列
   //   3) 同时全文无"收货人/电话/单据号"等单据特征
   // 满足以上 → 强制启用 matrixMode，并把 storeName/skuQuantity 改为 matrix_transpose
   //            columnName 不写死具体门店名——由矩阵转置从 storeColumnNames 自动取
   let detectedStoreColumns: string[] = [];
-  const fcLines = (request.fileContent || "").split("\n").slice(0, 1);
-  if (fcLines[0]) {
-    const firstLine = fcLines[0].replace(/^行\d+:\s*/, "");
-    const headerParts = firstLine.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
+  const HEADER_HINT_KEYWORDS_FOR_MATRIX = [
+    "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态",
+    "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "价格",
+    "金额", "重量", "体积", "门店",
+  ];
+  const looksLikeHeaderRow = (line: string): boolean => {
+    const cleaned = line.replace(/^行\d+:\s*/, "");
+    const parts = cleaned.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
+    if (parts.length < 3) return false;
+    let hits = 0;
+    for (const p of parts) {
+      if (HEADER_HINT_KEYWORDS_FOR_MATRIX.some((kw) => p.includes(kw))) hits++;
+      if (hits >= 2) return true;
+    }
+    return false;
+  };
+
+  const allFcLines = (request.fileContent || "").split("\n");
+  let headerLine: string | null = null;
+  for (let li = 0; li < Math.min(allFcLines.length, 12); li++) {
+    const ln = allFcLines[li];
+    // 跳过 `--- Sheet: ... ---` 标题行
+    if (/^---\s*Sheet:/.test(ln.trim())) continue;
+    if (looksLikeHeaderRow(ln)) {
+      headerLine = ln;
+      break;
+    }
+  }
+
+  if (headerLine) {
+    const cleaned = headerLine.replace(/^行\d+:\s*/, "");
+    const headerParts = cleaned.split(/\s*[|｜]\s*|\t+/).map((p) => p.trim()).filter((p) => p && !(p.startsWith("【") && p.includes("】")));
     const stdKw = ["编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类", "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结", "单价", "金额", "价格", "重量", "体积", "辅助", "总计", "小计", "合计"];
     const storeKw = ["店", "门店", "分店", "商场", "银泰", "金桥", "金银潭", "万象", "万达", "广场", "世纪"];
     // 候选：非标准字段关键词 且 短(≤8字) 且 非纯数字
@@ -869,6 +897,12 @@ function convertAIResponse(
 
   // 最终矩阵模式：AI 识别 OR 启发式检测到 ≥2 个门店列
   const finalMatrixMode = !!(parsed.matrixMode) || detectedStoreColumns.length >= 2;
+
+  // 最终 storeColumnNames 优先用 AI 返回的，缺失时用启发式检测的
+  const aiMatrixStoreNames = (parsed.matrixMode as Record<string, unknown> | undefined)?.storeColumnNames as string[] | undefined;
+  const finalStoreColumnNames = (aiMatrixStoreNames && aiMatrixStoreNames.length > 0)
+    ? aiMatrixStoreNames
+    : detectedStoreColumns;
 
   // 强制修正 storeName/skuQuantity 为 matrix_transpose（清掉 AI 误填的 columnName）
   if (finalMatrixMode) {
@@ -916,8 +950,8 @@ function convertAIResponse(
           ? {
               enabled: true,
               valueColumnNamesRow: (parsed.headerRow as number) || 0,
-              storeColumnNames: detectedStoreColumns.length > 0
-                ? detectedStoreColumns
+              storeColumnNames: finalStoreColumnNames.length > 0
+                ? finalStoreColumnNames
                 : undefined,
             }
           : undefined,

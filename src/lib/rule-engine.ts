@@ -715,40 +715,51 @@ function transposeMatrix(rawData: RawDataRow[], rule: ParseRule): RawDataRow[] {
   const hasValidConfig = storeIndices.length > 0 && storeNames.length === storeIndices.length;
 
   if (!hasValidConfig) {
-    // 兜底：从 cells 命名 key 中推断索引
+    // 兜底：用 cells.__headerColIdx__ 反向表（headerName → colIdx）查索引
+    // 这是 excelToRawData 阶段显式保存的映射，**避免"按值匹配"在空值场景不可靠的问题**
+    // （如"银泰"列首行值是空字符串时，cells[col_7]=cells[col_13]=""，值匹配会把所有空值列都匹配上）
     const firstDataRow = rawData[0];
-    const namedKeys = Object.keys(firstDataRow.cells).filter(
-      (k) => !k.startsWith("col_") && !k.startsWith("_transposed")
-    );
+    if (!firstDataRow) return rawData;
+    const cells = firstDataRow.cells as Record<string, unknown>;
+    const headerColIdx = (cells["__headerColIdx__"] as Record<string, number> | undefined) || {};
 
-    if (storeNames.length > 0) {
-      // 有名称没索引：按名匹配（注意同名会映射多个）
-      for (const name of storeNames) {
-        for (let c = 0; c < 200; c++) {
-          if (firstDataRow.cells[`col_${c}`] === firstDataRow.cells[name] && firstDataRow.cells[name] !== "") {
-            storeIndices.push(c);
+    const newStoreIndices: number[] = [];
+    const newStoreNames: string[] = [];
+    for (const name of storeNames) {
+      // 1) 直接匹配
+      let idx = headerColIdx[name];
+      // 2) 包含匹配（在 headerColIdx keys 中）
+      if (idx === undefined) {
+        for (const [hk, hi] of Object.entries(headerColIdx)) {
+          if (hk === name || hk.includes(name) || name.includes(hk)) {
+            idx = hi;
             break;
           }
         }
       }
+      if (idx !== undefined && !newStoreIndices.includes(idx)) {
+        newStoreIndices.push(idx);
+        newStoreNames.push(name);
+      }
     }
+    // 同步写回 storeNames/storeIndices
+    storeNames.length = 0;
+    storeNames.push(...newStoreNames);
+    storeIndices.length = 0;
+    storeIndices.push(...newStoreIndices);
 
     if (storeIndices.length === 0) {
+      // 最后兜底：扫描所有 headerColIdx keys，把"非标准字段"全当门店列
       const standardKeywords = [
         "编码", "名称", "数量", "规格", "单位", "SKU", "条码", "库存", "状态", "备注", "序号", "分类",
         "品牌", "仓库", "日期", "货主", "商品", "分配", "结余", "在库", "可用", "待移", "移入", "冻结",
         "单品", "价格", "金额", "总价",
       ];
       const isStandard = (n: string) => standardKeywords.some((kw) => n.includes(kw));
-      for (const name of namedKeys) {
-        if (name && !isStandard(name) && name.length <= 30) {
-          storeNames.push(name);
-          for (let c = 0; c < 200; c++) {
-            if (firstDataRow.cells[`col_${c}`] === firstDataRow.cells[name]) {
-              storeIndices.push(c);
-              break;
-            }
-          }
+      for (const [hk, hi] of Object.entries(headerColIdx)) {
+        if (hk && !isStandard(hk) && hk.length <= 30) {
+          if (!storeNames.includes(hk)) storeNames.push(hk);
+          if (!storeIndices.includes(hi)) storeIndices.push(hi);
         }
       }
     }
@@ -1097,6 +1108,15 @@ export function excelToRawData(
       cells[headerName] = String(rowData[col] ?? "");
       cells[`col_${col}`] = String(rowData[col] ?? "");
     }
+    // ===== 关键：保存 headerName → colIdx 反向映射 =====
+    // 解决空值场景下"值匹配"不可靠的问题（如"银泰"列首行值是空字符串时）
+    // 下游 transposeMatrix 用这个表直接查 storeColumnIndices
+    const headerColIdx: Record<string, number> = {};
+    for (let col = 0; col < rowData.length; col++) {
+      const headerName = headers[col] || `col_${col}`;
+      if (!(headerName in headerColIdx)) headerColIdx[headerName] = col;
+    }
+    (cells as Record<string, unknown>)["__headerColIdx__"] = headerColIdx;
 
     rows.push({ rowIndex: r, cells, tailFields: {} });
   }
