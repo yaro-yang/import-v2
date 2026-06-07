@@ -775,8 +775,7 @@ function convertAIResponse(
 
     fieldMappings.push({
       targetField: (m.targetField as string) || "",
-      suggestedSource,
-        || (staticVal ? `${staticVal}` : ""),
+      suggestedSource: suggestedSource || (staticVal ? `${staticVal}` : ""),
       confidence: (m.confidence as number) || (colName ? 0.7 : 0.3),
       note: (m.note as string) || (colName ? `AI识别到列名"${colName}"` : "未找到明确对应，请手动填写"),
     });
