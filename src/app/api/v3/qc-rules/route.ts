@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Partial<QCRule>;
     const rule = await saveQCRule({
-      id: body.id,
+      ...(body.id ? { id: body.id } : {}),
       name: body.name || "新规则",
       exceptionSubType: body.exceptionSubType || "qc_appearance",
       conditionField: body.conditionField || "damage_level",
