@@ -1083,7 +1083,7 @@ export async function getQCRules(): Promise<QCRule[]> {
   return (result as Record<string, unknown>[]).map(mapQCRuleRow);
 }
 
-export async function saveQCRule(rule: Omit<QCRule, "createdAt" | "updatedAt"> & { id?: string }): Promise<QCRule> {
+export async function saveQCRule(rule: Omit<QCRule, "createdAt" | "updatedAt" | "id"> & { id?: string }): Promise<QCRule> {
   const id = rule.id || uuidv4();
   const now = new Date().toISOString();
 

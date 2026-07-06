@@ -1,7 +1,6 @@
 // V3 品控规则配置 API
 import { NextRequest, NextResponse } from "next/server";
 import { getQCRules, saveQCRule, deleteQCRule } from "@/lib/db-v3";
-import { v4 as uuidv4 } from "uuid";
 import { ApiResponse, QCRule } from "@/types";
 
 async function ensureInit() {
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Partial<QCRule>;
     const rule = await saveQCRule({
-      ...(body.id ? { id: body.id } : {}),
+      id: body.id,
       name: body.name || "新规则",
       exceptionSubType: body.exceptionSubType || "qc_appearance",
       conditionField: body.conditionField || "damage_level",
