@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { OrderItem, ValidationError, TEMPERATURE_LEVELS } from "@/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { StatBlock, Divider, StatusDot } from "@/components/ui/TableDecorations";
 import {
   validateOrders,
   findBatchDuplicates,
@@ -174,7 +173,7 @@ export function DataPreviewTable({
       duplicateCodes: duplicateKeys,
       duplicateOrderIds,
     };
-  }, [orders, externalErrors, originalErrorValues, revision]);
+  }, [orders, externalErrors, originalErrorValues]);
 
   // 当 externalErrors 到达时，记录每个错误字段的当前值作为"问题值"
   useEffect(() => {
@@ -236,6 +235,7 @@ export function DataPreviewTable({
 
   // 触发重校验（动态对比当前值与原始问题值）
   const markDirty = (_id: string, _field: string) => {
+    void _id; void _field;
     setRevision(Date.now());
   };
 

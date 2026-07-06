@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { MOCK_USERS, CurrentUser, EXCEPTION_TYPE_LABELS, ExceptionType } from "@/types";

@@ -550,7 +550,6 @@ function heuristicAnalysis(request: AIAnalyzeRequest): AIAnalyzeResponse {
   const isMatrixMode = matrixStoreColumns.length >= 2;
 
   // ===== 第七步：构建建议的解析规则 =====
-  const baseName = request.fileName.replace(/\.[^.]+$/, "");
   const suggestedRuleFieldMappings: FieldMapping[] = mappings.map((m) => {
     // 在矩阵模式下，storeName 来自矩阵列名转置
     if (isPureMatrixInventoryTable && m.targetField === "storeName") {

@@ -51,7 +51,7 @@ export function FileUploader({
         onFileSelect(file);
       }
     },
-    [onFileSelect]
+    [onFileSelect, validateFile]
   );
 
   const handleDrop = useCallback(
