@@ -263,3 +263,244 @@ export interface ApiResponse<T> {
   error?: string;
   message?: string;
 }
+
+// ============================================================
+// V3 运单全流程管理系统 - 类型定义
+// ============================================================
+
+// 异常类型（物流类 + 品控类）
+export type ExceptionType =
+  // 物流类异常（手工上报）
+  | "lost"           // 丢件
+  | "damaged"        // 破损
+  | "rejected"       // 客户拒收
+  | "timeout"        // 超时未签收
+  | "address_error"  // 收货地址错误
+  // 品控类异常（扫描自动触发）
+  | "qc_quantity"    // 数量不符
+  | "qc_appearance"  // 外观破损
+  | "qc_spec"        // 规格不符
+  | "qc_label"       // 标签错误
+  | "qc_batch";      // 批次异常
+
+export const EXCEPTION_TYPE_LABELS: Record<ExceptionType, string> = {
+  lost: "丢件",
+  damaged: "破损",
+  rejected: "客户拒收",
+  timeout: "超时未签收",
+  address_error: "收货地址错误",
+  qc_quantity: "数量不符",
+  qc_appearance: "外观破损",
+  qc_spec: "规格不符",
+  qc_label: "标签错误",
+  qc_batch: "批次异常",
+};
+
+// 异常来源
+export type ExceptionSource = "manual" | "scan_trigger";
+
+// 工单状态
+export type TicketStatus = 
+  | "pending"          // 待审批
+  | "level1_review"    // 一级审批中
+  | "level2_review"    // 二级审批中
+  | "executing"        // 执行中
+  | "completed"        // 已完成
+  | "rejected_final";  // 最终驳回（超过重提次数）
+
+export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  pending: "待审批",
+  level1_review: "一级审批中",
+  level2_review: "二级审批中",
+  executing: "执行中",
+  completed: "已完成",
+  rejected_final: "已驳回",
+};
+
+// 审批动作
+export type ApprovalAction = "approve" | "reject" | "escalate";
+
+// 审批触发方式
+export type ApprovalTrigger = "manual" | "auto_timeout" | "auto_escalation";
+
+// 赔付方向
+export type CompensationDirection = "to_customer" | "from_supplier";
+
+// 批次状态
+export type BatchStatus = "normal" | "qc_hold" | "released";
+
+// 扫描QC结果
+export type QCResult = "pass" | "fail";
+
+// 执行动作类型
+export type ExecutionAction =
+  | "release"           // 放行货物
+  | "return_supplier"   // 退回供应商
+  | "repurchase"        // 重新采购
+  | "downgrade"         // 降级处理
+  | "claim"             // 理赔
+  | "resend"            // 重新发货
+  | "return_warehouse"; // 退货入库
+
+// ===== 数据模型 =====
+
+// 运单本地快照
+export interface WaybillSnapshot {
+  id: string;
+  waybillId: string;           // V2 outbound_orders.id
+  externalCode?: string;
+  storeName?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  recipientAddress?: string;
+  totalAmount: number;
+  skuCount: number;
+  rawData: Record<string, unknown>;
+  syncedAt: string;
+  dataVersion: number;
+}
+
+// 接口同步日志
+export interface ApiSyncLog {
+  id: string;
+  requestId: string;
+  apiName: string;
+  requestParams: Record<string, unknown>;
+  responseStatus?: number;
+  responseSummary?: string;
+  durationMs: number;
+  success: boolean;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+// 异常工单
+export interface ExceptionTicket {
+  id: string;
+  ticketNo: string;
+  waybillSnapshotId?: string;
+  waybillSnapshot?: WaybillSnapshot;
+  exceptionType: ExceptionType;
+  exceptionSource: ExceptionSource;
+  description: string;
+  amount: number;
+  reporter: string;
+  reporterRole: string;
+  status: TicketStatus;
+  currentLevel: number;
+  rejectCount: number;
+  maxRejectCount: number;
+  timeoutAt?: string;
+  version: number;
+  approvalRecords?: ApprovalRecord[];
+  compensationRecord?: CompensationRecord;
+  executionAction?: ExecutionAction;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 审批记录
+export interface ApprovalRecord {
+  id: string;
+  ticketId: string;
+  ticketNo: string;
+  approver: string;
+  approverRole: string;
+  level: number;
+  action: ApprovalAction;
+  opinion?: string;
+  triggeredBy: ApprovalTrigger;
+  createdAt: string;
+}
+
+// 赔付记录
+export interface CompensationRecord {
+  id: string;
+  ticketId: string;
+  approvalRecordId?: string;
+  compensationDirection: CompensationDirection;
+  amount: number;
+  status: "pending" | "processed";
+  description?: string;
+  createdAt: string;
+}
+
+// 库存记录
+export interface InventoryRecord {
+  id: string;
+  skuCode: string;
+  skuName?: string;
+  warehouse?: string;
+  quantity: number;
+  lockedQuantity: number;
+  availableQuantity: number;
+  batchNo?: string;
+  status: "available" | "qc_hold" | "locked";
+  updatedAt: string;
+}
+
+// 扫描记录
+export interface ScanRecord {
+  id: string;
+  waybillSnapshotId?: string;
+  externalCode?: string;
+  skuCode: string;
+  skuName?: string;
+  batchNo?: string;
+  scanTime: string;
+  operator: string;
+  deviceId?: string;
+  qcResult: QCResult;
+  failReason?: string;
+  triggeredRuleId?: string;
+  triggeredRuleName?: string;
+  batchStatus: BatchStatus;
+  ticketId?: string;
+  createdAt: string;
+}
+
+// 品控规则
+export interface QCRule {
+  id: string;
+  name: string;
+  exceptionSubType: ExceptionType;
+  conditionField: string;
+  conditionOperator: "gt" | "lt" | "gte" | "lte" | "eq" | "neq" | "contains";
+  conditionValue: string;
+  severity: "low" | "medium" | "high" | "critical";
+  autoCreateTicket: boolean;
+  approvalLevel: number;
+  enabled: boolean;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 审批配置
+export interface ApprovalConfig {
+  id: string;
+  configKey: string;
+  configValue: string;
+  description?: string;
+  updatedAt: string;
+}
+
+// 角色类型
+export type UserRole = "operator" | "qc_supervisor" | "level1_approver" | "level2_approver" | "admin";
+
+// 当前用户信息
+export interface CurrentUser {
+  id: string;
+  name: string;
+  role: UserRole;
+  warehouse?: string;
+}
+
+// 模拟用户（演示用）
+export const MOCK_USERS: CurrentUser[] = [
+  { id: "user_op_01", name: "张三（操作员）", role: "operator", warehouse: "WH-01" },
+  { id: "user_qc_01", name: "李四（品控主管）", role: "qc_supervisor", warehouse: "WH-01" },
+  { id: "user_l1_01", name: "王五（一级审批）", role: "level1_approver", warehouse: "WH-01" },
+  { id: "user_l2_01", name: "赵六（二级审批）", role: "level2_approver", warehouse: "WH-01" },
+  { id: "user_admin", name: "管理员", role: "admin", warehouse: "WH-01" },
+];
