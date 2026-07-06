@@ -8,9 +8,9 @@ import { promises as fs } from "fs";
 import * as path from "path";
 import {
   WaybillSnapshot, ApiSyncLog, ExceptionTicket, ApprovalRecord,
-  CompensationRecord, InventoryRecord, ScanRecord, QCRule, ApprovalConfig,
-  TicketStatus, ExceptionType, QCResult, BatchStatus, ApprovalAction,
-  ApprovalTrigger, CompensationDirection, ExecutionAction, ExceptionSource,
+  CompensationRecord, InventoryRecord, ScanRecord, QCRule,
+  TicketStatus, ExceptionType, QCResult, BatchStatus,
+  CompensationDirection, ExecutionAction, ExceptionSource,
 } from "@/types";
 import { DEFAULT_CONFIG } from "./config";
 import { getDefaultQCRules } from "./qc-engine";
@@ -897,7 +897,6 @@ export async function updateInventory(
 ): Promise<void> {
   if (!hasDatabase()) {
     const store = await readV3Store();
-    const key = `${skuCode}_${batchNo || ""}`;
     let record = Object.values(store.inventory).find(
       (i) => i.skuCode === skuCode && (i.batchNo || "") === (batchNo || "")
     );
@@ -981,14 +980,6 @@ export async function createScanRecord(data: {
 
   if (!hasDatabase()) {
     const store = await readV3Store();
-
-    // 幂等检查：同一运单+同一SKU+未关闭工单存在时，只追加记录不创建工单
-    const existingTicket = Object.values(store.exceptionTickets).find(
-      (t) =>
-        t.waybillSnapshotId === data.waybillSnapshotId &&
-        t.exceptionSource === "scan_trigger" &&
-        !["completed", "rejected_final"].includes(t.status)
-    );
 
     const record: ScanRecord = {
       ...data,

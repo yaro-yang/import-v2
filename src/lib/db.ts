@@ -75,6 +75,7 @@ const FALLBACK_DATABASE_URL =
 // 聚合 key = externalCode + 收货门店 + 收件人 + 电话 + 地址
 // 同一 externalCode 下不同门店会被拆成多个 outbound_order（卡片式文件常见）
 // 同一门店不同 SKU 合并为同一条 outbound_order
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function groupItemsIntoOutboundOrders(items: OrderItem[]): OutboundOrder[] {
   const groups = new Map<string, OutboundOrder>();
 
@@ -365,8 +366,9 @@ function groupItemsIntoOutboundOrdersByStore(
  */
 export async function saveOrders(
   items: OrderItem[],
-  _mode: "outbound" | "transfer" = "outbound"
+  _mode?: "outbound" | "transfer"
 ): Promise<{ savedOutbounds: number; savedTransfers: number }> {
+  void _mode;
   if (items.length === 0) return { savedOutbounds: 0, savedTransfers: 0 };
 
   // 统一走 transfer 落库路径（即使 rule 是 outbound 模式也生成 3 层结构）
@@ -764,7 +766,7 @@ export async function deleteTransferOrder(id: string): Promise<boolean> {
     return hadTransfer || removed > 0;
   }
   const sql = getSql();
-  const result = await sql`DELETE FROM transfer_orders WHERE id = ${id}`;
+  await sql`DELETE FROM transfer_orders WHERE id = ${id}`;
   // 始终返回 true（幂等：不存在也视为成功）
   return true;
 }

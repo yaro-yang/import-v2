@@ -89,7 +89,7 @@ export async function parsePDF(
     try {
       const { pathToFileURL } = await import("url");
       const { createRequire } = await import("module");
-      const { existsSync, readdirSync, statSync } = await import("fs");
+      const { existsSync } = await import("fs");
       const path = await import("path");
 
       let workerPath: string | null = null;
@@ -431,8 +431,9 @@ export function getAcceptTypes(): string {
 export function parseTextLines(
   text: string,
   recordMarker?: string,
-  _separator?: string
+  separator?: string
 ): { sections: string[]; lines: string[] } {
+  void separator;
   const lines = text.split("\n");
 
   const sections: string[] = [];

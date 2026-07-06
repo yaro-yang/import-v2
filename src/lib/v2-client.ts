@@ -3,7 +3,7 @@
 // 包含鉴权、超时、重试、降级等机制
 
 import { v4 as uuidv4 } from "uuid";
-import { WaybillSnapshot, ApiSyncLog, OutboundOrder } from "@/types";
+import { ApiSyncLog, OutboundOrder } from "@/types";
 import { DEFAULT_CONFIG } from "./config";
 
 const V2_BASE = DEFAULT_CONFIG.v2Api.baseUrl;
@@ -59,7 +59,6 @@ async function fetchWithAuth<T>(
   };
 
   let lastError: string | null = null;
-  let lastStatus: number | undefined;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -77,7 +76,6 @@ async function fetchWithAuth<T>(
       });
 
       clearTimeout(timeoutId);
-      lastStatus = response.status;
       const durationMs = Date.now() - startTime;
 
       if (!response.ok) {
