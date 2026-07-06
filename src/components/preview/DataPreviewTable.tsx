@@ -84,6 +84,7 @@ export function DataPreviewTable({
 
   // 强制 useMemo 重新计算：每次编辑更新为当前时间戳
   const [revision, setRevision] = useState(Date.now());
+  void revision;
 
   // 记录外部错误中每个字段的原始问题值：key=`${orderId}|${field}`，value=原始值
   const [originalErrorValues, setOriginalErrorValues] = useState<Map<string, string>>(new Map());

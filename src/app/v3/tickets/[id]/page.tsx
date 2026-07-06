@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
-import { ExceptionTicket, ApprovalRecord, EXCEPTION_TYPE_LABELS, TICKET_STATUS_LABELS, MOCK_USERS, CurrentUser } from "@/types";
+import { ExceptionTicket, EXCEPTION_TYPE_LABELS, TICKET_STATUS_LABELS, MOCK_USERS, CurrentUser } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
@@ -263,7 +263,7 @@ export default function TicketDetailPage() {
             <div className="bg-white rounded-xl border border-[#e5e6eb] p-6 card-enhanced">
               <h2 className="text-base font-semibold text-[#1d2129] mb-4">审批记录（审计日志）</h2>
               <div className="space-y-3">
-                {ticket.approvalRecords.map((r, i) => (
+                {ticket.approvalRecords.map((r) => (
                   <div key={r.id} className="flex items-start gap-3 p-3 bg-[#f7f8fa] rounded-lg">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                       r.action === "approve" ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"

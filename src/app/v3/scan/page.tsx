@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
-import { MOCK_USERS, CurrentUser, EXCEPTION_TYPE_LABELS } from "@/types";
+import { MOCK_USERS, CurrentUser } from "@/types";
 
 function initV3() {
   return fetch("/api/v3/init").catch(() => {});
@@ -217,7 +217,7 @@ export default function ScanPage() {
                 <path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" />
                 <line x1="7" y1="12" x2="17" y2="12" />
               </svg>
-              <p>填写左侧表单并点击"执行品控检测"</p>
+              <p>填写左侧表单并点击&ldquo;执行品控检测&rdquo;</p>
             </div>
           ) : (
             <div className="space-y-4">

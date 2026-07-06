@@ -20,7 +20,7 @@ export function FileUploader({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const validateFile = (file: File): boolean => {
+  const validateFile = useCallback((file: File): boolean => {
     setError(null);
 
     if (file.size === 0) {
@@ -43,7 +43,7 @@ export function FileUploader({
     }
 
     return true;
-  };
+  }, [maxSize, accept]);
 
   const handleFile = useCallback(
     (file: File) => {
