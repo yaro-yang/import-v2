@@ -4,7 +4,7 @@ import {
   createTicket, getTickets, getWaybillSnapshot, upsertWaybillSnapshot,
 } from "@/lib/db-v3";
 import { getWaybillDetail, getWaybillByExternalCode } from "@/lib/v2-client";
-import { ApiResponse, ExceptionType, ExceptionSource, OutboundOrder } from "@/types";
+import { ApiResponse, ExceptionType, ExceptionSource, OutboundOrder, TicketStatus } from "@/types";
 
 async function ensureInit() {
   try {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tickets = await getTickets({
-      status: searchParams.get("status") as ExceptionTicket["status"] || undefined,
+      status: searchParams.get("status") as TicketStatus || undefined,
       exceptionType: searchParams.get("exceptionType") as ExceptionType || undefined,
       waybillCode: searchParams.get("waybillCode") || undefined,
       reporter: searchParams.get("reporter") || undefined,

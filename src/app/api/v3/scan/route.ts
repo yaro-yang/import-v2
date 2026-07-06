@@ -1,6 +1,5 @@
 // V3 扫描操作 API
 import { NextRequest, NextResponse } from "next/server";
-import { v4 as uuidv4 } from "uuid";
 import {
   createScanRecord, getWaybillSnapshot, upsertWaybillSnapshot,
   hasOpenScanTicket, createTicket, getQCRules, updateInventory,
@@ -8,7 +7,7 @@ import {
 import { verifySkuBelongsToWaybill } from "@/lib/v2-client";
 import { executeQCEngine, determineExceptionFromMatches } from "@/lib/qc-engine";
 import { DEFAULT_CONFIG } from "@/lib/config";
-import { ApiResponse, ScanRecord, ExceptionTicket, OutboundOrder } from "@/types";
+import { ApiResponse, OutboundOrder } from "@/types";
 
 // 确保 DB 初始化
 async function ensureInit() {
@@ -104,8 +103,6 @@ export async function POST(request: NextRequest) {
       description,
     });
 
-    const now = new Date().toISOString();
-
     // 5. 记录扫描结果
     if (qcResult.result === "pass") {
       await createScanRecord({
@@ -156,7 +153,6 @@ export async function POST(request: NextRequest) {
 
     // 设置审批超时
     const qcHoldTimeout = DEFAULT_CONFIG.qcHold.timeoutHours;
-    const pendingTimeout = DEFAULT_CONFIG.timeout.pendingTimeoutHours;
     const timeoutAt = new Date(Date.now() + qcHoldTimeout * 60 * 60 * 1000).toISOString();
 
     await createScanRecord({
