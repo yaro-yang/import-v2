@@ -2,10 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createTicket, getTickets, getWaybillSnapshot, upsertWaybillSnapshot,
-  getWaybillSnapshotByExternalCode,
 } from "@/lib/db-v3";
 import { getWaybillDetail, getWaybillByExternalCode } from "@/lib/v2-client";
-import { DEFAULT_CONFIG } from "@/lib/config";
 import { ApiResponse, ExceptionType, ExceptionSource, OutboundOrder } from "@/types";
 
 async function ensureInit() {

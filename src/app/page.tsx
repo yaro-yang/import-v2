@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { FileUploader } from "@/components/upload/FileUploader";
 import { RuleSelector } from "@/components/upload/RuleSelector";
@@ -335,7 +335,6 @@ export default function HomePage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let doneReceived = false;
       // 同步标记：error/done 已被处理（避免 React state 异步更新导致后续误判）
       let finished: "done" | "error" | null = null;
 
@@ -374,7 +373,6 @@ export default function HomePage() {
             setParseProgress((processed / total) * 100);
             if (event.message) setParseMessage(event.message as string);
           } else if (event.type === "done") {
-            doneReceived = true;
             finished = "done";
             const result = event.result as ParseResult;
             setOrders(result.orders);

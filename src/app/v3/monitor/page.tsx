@@ -138,7 +138,7 @@ export default function MonitorPage() {
             <div className="bg-[#fff7e8] border border-[#ffe4ba] rounded-xl p-4">
               <p className="text-sm font-medium text-[#d97b00]">⚠️ V2 服务不可用</p>
               <p className="text-xs text-[#ba7517] mt-1">
-                系统正在使用本地缓存数据（降级模式）。数据来源标注为"本地缓存"，可能非最新状态。V2服务恢复后将自动同步。
+                系统正在使用本地缓存数据（降级模式）。数据来源标注为&ldquo;本地缓存&rdquo;，可能非最新状态。V2服务恢复后将自动同步。
               </p>
             </div>
           )}

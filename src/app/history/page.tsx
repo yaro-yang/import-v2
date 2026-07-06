@@ -82,7 +82,7 @@ export default function HistoryPage() {
   const [orders, setOrders] = useState<OutboundOrder[]>([]);
   const [total, setTotal] = useState(0);
   // DB 全量计数（用于"总数"/"调拨单"/"出库单" 角标）
-  const [totalTransfers, setTotalTransfers] = useState(0);
+  const [, setTotalTransfers] = useState(0);
   const [totalOutbounds, setTotalOutbounds] = useState(0);
   // 调拨单展开/收起状态：默认全部收起（仅显示首行）
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -484,8 +484,6 @@ export default function HistoryPage() {
   const totalSkuCount = groups.reduce((sum, g) => sum + g.totalSku, 0);
   const totalQtyCount = groups.reduce((sum, g) => sum + g.totalQty, 0);
   const totalPages = Math.ceil(total / pageSize);
-  const transferCount = groups.filter((g) => g.kind === "transfer").length;
-  const outboundCount = groups.filter((g) => g.kind === "outbound").length;
 
   // 重复校验：同一外部编码下，(SKU编码 + 收货门店) 不能重复
   // 空外部编码（"（无编码）"）组不做重复校验
