@@ -8,7 +8,7 @@ const navItems = [
   { href: "/", label: "导入下单", icon: "import" },
   { href: "/rules", label: "解析规则", icon: "settings" },
   { href: "/history", label: "已导入运单", icon: "list" },
-  { href: "/v3/tickets", label: "V3 运单全流程", icon: "v3" },
+  /*{ href: "/v3/tickets", label: "V3 运单全流程", icon: "v3" },*/
 ];
 
 function SidebarIcon({ type }: { type: string }) {
@@ -172,7 +172,7 @@ export function Navigation() {
             {pathname === "/" && "导入下单"}
             {pathname.startsWith("/rules") && "解析规则管理"}
             {pathname.startsWith("/history") && "已导入运单"}
-            {/* {pathname.startsWith("/v3") && "V3 运单全流程管理"} */}
+            {pathname.startsWith("/v3") && "V3 运单全流程管理"}
           </h2>
         </div>
         <div className="flex items-center gap-3 lg:gap-4 text-sm text-[#86909c]">
