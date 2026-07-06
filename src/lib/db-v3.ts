@@ -11,6 +11,7 @@ import {
   CompensationRecord, InventoryRecord, ScanRecord, QCRule,
   TicketStatus, ExceptionType, QCResult, BatchStatus,
   CompensationDirection, ExecutionAction, ExceptionSource,
+  ApprovalAction, ApprovalTrigger,
 } from "@/types";
 import { DEFAULT_CONFIG } from "./config";
 import { getDefaultQCRules } from "./qc-engine";
