@@ -61,31 +61,32 @@ export function executeQCEngine(
 function evaluateRule(rule: QCRule, context: ScanContext): RuleMatch {
   const fieldValue = getContextField(context, rule.conditionField);
   const threshold = parseConditionValue(rule.conditionValue, rule.conditionField);
+  const numValue = Number(fieldValue);
 
   let matched = false;
   let reason = "";
 
   switch (rule.conditionOperator) {
     case "gt":
-      matched = fieldValue > threshold;
+      matched = numValue > threshold;
       reason = matched
         ? `${rule.conditionField}(${fieldValue}) > 阈值(${threshold})，触发规则`
         : `${rule.conditionField}(${fieldValue}) ≤ 阈值(${threshold})，未触发`;
       break;
     case "lt":
-      matched = fieldValue < threshold;
+      matched = numValue < threshold;
       reason = matched
         ? `${rule.conditionField}(${fieldValue}) < 阈值(${threshold})，触发规则`
         : `${rule.conditionField}(${fieldValue}) ≥ 阈值(${threshold})，未触发`;
       break;
     case "gte":
-      matched = fieldValue >= threshold;
+      matched = numValue >= threshold;
       reason = matched
         ? `${rule.conditionField}(${fieldValue}) ≥ 阈值(${threshold})，触发规则`
         : `${rule.conditionField}(${fieldValue}) < 阈值(${threshold})，未触发`;
       break;
     case "lte":
-      matched = fieldValue <= threshold;
+      matched = numValue <= threshold;
       reason = matched
         ? `${rule.conditionField}(${fieldValue}) ≤ 阈值(${threshold})，触发规则`
         : `${rule.conditionField}(${fieldValue}) > 阈值(${threshold})，未触发`;

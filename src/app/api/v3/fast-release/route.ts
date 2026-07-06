@@ -1,7 +1,7 @@
 // V3 快速放行 API（品控主管专用）
 import { NextRequest, NextResponse } from "next/server";
-import { getTicketById, updateTicketStatus, createScanRecord, updateInventory, getScanRecords } from "@/lib/db-v3";
-import { ApiResponse, TicketStatus } from "@/types";
+import { getTicketById, updateTicketStatus, updateInventory, getScanRecords } from "@/lib/db-v3";
+import { ApiResponse } from "@/types";
 
 async function ensureInit() {
   try {
