@@ -8,6 +8,19 @@ function initV3() {
   return fetch("/api/v3/init").catch(() => {});
 }
 
+type ScanResult = {
+  scanResult: "pass" | "fail" | "duplicate";
+  message: string;
+  failReason?: string;
+  ruleMatches?: { ruleId?: string; ruleName: string; reason: string; severity: string }[];
+  ticketId?: string;
+  ticketNo?: string;
+  batchStatus?: string;
+  timeoutAt?: string;
+  existingTicketId?: string;
+  existingTicketNo?: string;
+};
+
 export default function ScanPage() {
   const [user, setUser] = useState<CurrentUser>(MOCK_USERS[0]);
   const [waybillId, setWaybillId] = useState("");
@@ -21,7 +34,7 @@ export default function ScanPage() {
   const [batchValid, setBatchValid] = useState(true);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [result, setResult] = useState<ScanResult | null>(null);
 
   useEffect(() => {
     initV3();
@@ -236,14 +249,14 @@ export default function ScanPage() {
                     {result.scanResult === "pass" ? "✅ 品控通过" : result.scanResult === "duplicate" ? "⚠️ 重复扫描" : "❌ 品控异常"}
                   </span>
                 </div>
-                <p className="text-sm text-[#4e5969]">{result.message as string}</p>
+                <p className="text-sm text-[#4e5969]">{result.message}</p>
               </div>
 
-              {(result.ruleMatches as Array<Record<string, string>>)?.length > 0 && (
+              {result.ruleMatches && result.ruleMatches.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-[#4e5969] mb-2">规则命中详情</h3>
                   <div className="space-y-2">
-                    {(result.ruleMatches as Array<Record<string, string>>).map((m, i) => (
+                    {result.ruleMatches.map((m, i) => (
                       <div key={i} className="p-3 bg-[#f7f8fa] rounded-lg text-xs">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-medium text-[#1d2129]">{m.ruleName}</span>
@@ -266,9 +279,9 @@ export default function ScanPage() {
               {result.ticketId && (
                 <div className="p-3 bg-[#e8fafa] rounded-lg">
                   <p className="text-sm text-[#0bada9]">
-                    已自动创建工单：<strong>{result.ticketNo as string}</strong>
+                    已自动创建工单：<strong>{result.ticketNo}</strong>
                   </p>
-                  <p className="text-xs text-[#4a9a95] mt-1">批次已锁定（品控暂扣），超时 {result.timeoutAt ? new Date(result.timeoutAt as string).toLocaleString("zh-CN") : "-"}</p>
+                  <p className="text-xs text-[#4a9a95] mt-1">批次已锁定（品控暂扣），超时 {result.timeoutAt ? new Date(result.timeoutAt).toLocaleString("zh-CN") : "-"}</p>
                 </div>
               )}
             </div>
