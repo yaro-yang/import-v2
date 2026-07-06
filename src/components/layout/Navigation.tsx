@@ -172,7 +172,7 @@ export function Navigation() {
             {pathname === "/" && "导入下单"}
             {pathname.startsWith("/rules") && "解析规则管理"}
             {pathname.startsWith("/history") && "已导入运单"}
-            {pathname.startsWith("/v3") && "V3 运单全流程管理"}
+            {/* {pathname.startsWith("/v3") && "V3 运单全流程管理"} */}
           </h2>
         </div>
         <div className="flex items-center gap-3 lg:gap-4 text-sm text-[#86909c]">
