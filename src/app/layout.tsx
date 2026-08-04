@@ -28,11 +28,10 @@ export default function RootLayout({
             paddingTop: 0,
             paddingBottom: 24,
             width: "calc(100% - 240px)",
+            boxSizing: "border-box",
           }}
         >
-          <div className="w-full max-w-[1280px]">
-            {children}
-          </div>
+          {children}
         </main>
         <Toaster
           position="top-center"
