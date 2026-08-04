@@ -53,23 +53,25 @@ async function writeLocalStore(store: LocalStore): Promise<void> {
   await fs.writeFile(ORDERS_FILE, JSON.stringify(store, null, 2), "utf-8");
 }
 
+// 解析数据库连接串：
+// 优先使用 DATABASE_URL；若未设置但存在 Vercel Postgres 的 POSTGRES_URL，则自动采用
+function resolveDatabaseUrl(): string | undefined {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL;
+}
+
 // 是否有数据库连接
 function hasDatabase(): boolean {
-  return !!(process.env.DATABASE_URL || FALLBACK_DATABASE_URL);
+  return !!resolveDatabaseUrl();
 }
 
 // 获取数据库连接
 function getSql() {
-  const url = process.env.DATABASE_URL || FALLBACK_DATABASE_URL;
+  const url = resolveDatabaseUrl();
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
   return neon(url);
 }
-
-// 兜底配置：未设置环境变量时使用（仅供个人项目/本地开发用，勿用于公开仓库）
-const FALLBACK_DATABASE_URL =
-  "postgresql://neondb_owner:npg_mVh6iMlYUyc4@ep-ancient-mode-apjafd5f-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
 // ====== 按 externalCode 把 OrderItem[] 聚合成 OutboundOrder[] ======
 // 聚合 key = externalCode + 收货门店 + 收件人 + 电话 + 地址

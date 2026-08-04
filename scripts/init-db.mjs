@@ -1,7 +1,11 @@
 // 数据库初始化脚本
 import { neon } from "@neondatabase/serverless";
 
-const DATABASE_URL = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_mVh6iMlYUyc4@ep-ancient-mode-apjafd5f-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require";
+const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+if (!DATABASE_URL) {
+  console.error("❌ 缺少数据库连接：请设置 DATABASE_URL 或 POSTGRES_URL 环境变量");
+  process.exit(1);
+}
 
 const sql = neon(DATABASE_URL);
 

@@ -2,6 +2,7 @@
 // 在服务端 API 路由中首次调用时自动建表
 
 import { initDB } from "@/lib/db";
+import { initV3DB } from "@/lib/db-v3";
 
 let dbReady = false;
 let dbInitPromise: Promise<void> | null = null;
@@ -18,7 +19,10 @@ export async function ensureDB(): Promise<void> {
       dbInitPromise = null;
     }
   }
-  dbInitPromise = initDB().then(() => {
+  dbInitPromise = (async () => {
+    await initDB();   // V2 业务表（orders / rules）
+    await initV3DB(); // V3 异常工单等表
+  })().then(() => {
     dbReady = true;
     dbInitPromise = null;
   });
