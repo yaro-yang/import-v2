@@ -659,7 +659,7 @@ export default function HomePage() {
   return (
     <div className="space-y-4 lg:space-y-5 page-container">
       {/* 吸顶操作区：标题 + 步骤指示器 一体卡片 */}
-      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-3.5 space-y-3">
+      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] px-0 pt-2 pb-3.5 space-y-3">
         {/* 标题 + 描述 一体卡片 */}
         <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
           <div className="flex items-center gap-3 p-4 lg:p-4.5">
