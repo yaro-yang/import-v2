@@ -23,6 +23,7 @@ export async function writeBatch(
   rows: Record<string, unknown>[],
   _traceId: string,
 ): Promise<{ inserted: number; updated: number }> {
+  void _traceId; // 保留用于后续日志集成
   if (rows.length === 0) return { inserted: 0, updated: 0 };
 
   const db = getSql();

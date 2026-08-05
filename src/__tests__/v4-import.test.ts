@@ -8,17 +8,6 @@
 // ============================================================
 describe("V4 上传接口", () => {
   test("上传文件后应在 1 秒内返回 task_id", async () => {
-    const startTime = Date.now();
-
-    // 模拟上传请求
-    const formData = new FormData();
-    formData.append("file", new Blob(["test"]), "test.xlsx");
-    formData.append("ruleId", "rule_test");
-
-    // 实际测试需要 mock fetch 和数据库
-    // 这里验证核心逻辑：taskId 格式和响应结构
-    const elapsed = Date.now() - startTime;
-
     // 模拟响应
     const mockResponse = {
       task_id: expect.stringMatching(/^task_[a-z0-9]{12}$/),
@@ -48,35 +37,17 @@ describe("V4 上传接口", () => {
 // 2. 任务创建与 Outbox 写入在同一数据库事务
 // ============================================================
 describe("Transactional Outbox", () => {
-  test("任务创建失败时 Outbox 事件不应写入", async () => {
+  test("任务创建失败时 Outbox 事件不应写入", () => {
     // 模拟事务回滚
-    let taskCreated = false;
-    let outboxCreated = false;
-
-    try {
-      // 模拟：任务创建失败
-      throw new Error("DB Error");
-    } catch {
-      // 事务回滚，outbox 不应写入
-      outboxCreated = false;
-    }
+    const taskCreated = false;
+    const outboxCreated = false;
 
     expect(taskCreated).toBe(false);
     expect(outboxCreated).toBe(false);
   });
 
-  test("Outbox 事件写入失败时任务应回滚", async () => {
-    let taskCreated = false;
-    let outboxCreated = false;
-
-    try {
-      taskCreated = true;
-      // 模拟 Outbox 写入失败
-      throw new Error("Outbox write failed");
-    } catch {
-      taskCreated = false; // 回滚
-    }
-
+  test("Outbox 事件写入失败时任务应回滚", () => {
+    const taskCreated = false; // 事务回滚
     expect(taskCreated).toBe(false);
   });
 
@@ -120,13 +91,9 @@ describe("Dispatcher 可靠性", () => {
 // ============================================================
 describe("Worker 幂等性", () => {
   test("同一批次重复消费应被跳过", () => {
-    const batchId = "task_test_0";
     const alreadyProcessing = true;
-
-    if (alreadyProcessing) {
-      // lockBatch 返回 null，跳过处理
-      expect(true).toBe(true); // 不应再次处理
-    }
+    // lockBatch 返回 null，跳过处理
+    expect(alreadyProcessing).toBe(true);
   });
 
   test("已完成批次不应再次处理", () => {
@@ -184,10 +151,7 @@ describe("部分行失败处理", () => {
   });
 
   test("部分成功时任务状态应为 PARTIAL_SUCCESS", () => {
-    const totalRows = 100;
-    const successRows = 95;
     const failedRows = 5;
-
     const status = failedRows > 0 ? "PARTIAL_SUCCESS" : "COMPLETED";
     expect(status).toBe("PARTIAL_SUCCESS");
   });
