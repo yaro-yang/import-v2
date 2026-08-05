@@ -68,7 +68,7 @@ ${contentPreview}
    - **表前/表后元数据**（storeName/externalCode/recipient*）：先看表头是否有该列名；
      - 有 → mode="column_name" + columnName=表头中的原列名
      - 没有但内容里有"调拨单号：xxx"等key:value形式 → mode="row_field" + rowKeyPattern=文件中实际出现的key（如"调拨单号"、"收货人"、"收货电话"等）
-   - **卡片式**：SKU 字段对应卡片内小表表头（如"物品编码"），storeName/externalCode/recipient* 由 cardMode 模式自动从卡片内提取，**不写字段映射**（设 mode="column_name", columnName=null）
+   - **卡片式**：SKU 字段对应卡片内小表表头（如"物品编码"）。storeName/externalCode/recipient* 如果在卡片头部的 key:value 对中有（如"调入门店：XX店"、"收货人：张三"），则设 mode="row_field" + rowKeyPattern=文件中实际出现的key（如"调入门店"、"收货人"、"收货电话"、"收货地址"）。如果确实没有，才设 mode="column_name", columnName=null
    - **矩阵式**：storeName/skuQuantity 用 mode="matrix_transpose"（自动处理），其他字段按上面规则
 3. 模式标志：
    - 卡片式 → cardMode=true, cardStartMarker="▶ 调拨记录"（或文件中实际标记）
@@ -659,11 +659,23 @@ function getDataCells(line: string): string[] {
  * 匹配规则：
  *   1) cell === keyword（精确匹配）
  *   2) cell 以 keyword + 中文冒号/英文冒号 开头（label-value 格式，如"收货人：张三"）
+ *   3) cell 以 keyword 开头，后面紧跟可选标记字符（*、#、①-⑨、空格、|）和冒号（如"物品编码*：SKU001"）
+ *   4) cell === keyword + 标记后缀（如"物品编码*"、"发货数量#"）— 列名带标记的场景
  * 不做纯子串匹配，因为中文字符没有空格分隔，子串匹配会误判。
  */
 function isCellMatchKeyword(cell: string, keyword: string): boolean {
   if (cell === keyword) return true;
   if (cell.startsWith(keyword + "：") || cell.startsWith(keyword + ":")) return true;
+
+  // 支持列名带常见后缀标记：物品编码*、发货数量①、商品名称# 等
+  // 后缀字符列表：* # ①-⑨ (U+2460-U+2468)
+  const suffixPattern = /^([\*\#\u2460-\u2468\u2469-\u2473\u3251-\u325F\u32B1-\u32BF]|[\s\|])/;
+  const afterKw = cell.slice(keyword.length);
+  if (afterKw.length > 0 && suffixPattern.test(afterKw)) {
+    // 检查去掉后缀后是否匹配 keyword
+    if (cell.startsWith(keyword)) return true;
+  }
+
   return false;
 }
 

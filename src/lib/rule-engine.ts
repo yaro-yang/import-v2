@@ -369,11 +369,14 @@ function buildOrderFromCard(
           if (cell.includes(kw)) {
             const kwIdx = cell.indexOf(kw);
             const after = cell.substring(kwIdx + kw.length);
-            const sepMatch = after.match(/^\s*[|｜：:]\s*(.+?)(?:\s*[|｜]|$)/);
+            // 支持多种分隔符：| ｜ ： : = → （空格分隔）
+            const sepMatch = after.match(/^\s*[|｜：:=→\s]\s*(.+?)(?:\s*[|｜]|$)/);
             if (sepMatch) {
               const v = sepMatch[1].trim();
               if (v && v !== "·" && v !== "-") return v;
             }
+            // 如果分隔符匹配失败，但 after 非空且不含分隔符（如 "编码*"），说明只是后缀标记
+            // 此时不提取值，继续在相邻单元格找
           }
         }
       }
@@ -394,9 +397,27 @@ function buildOrderFromCard(
         const defaults = cardHeaderDefaults[mapping.targetField] || [];
         value = extractFromCardHeader(defaults);
       }
-      // 最后再尝试 column_name 等普通模式
+      // 再尝试 column_name 等普通模式
       if (!value) {
         value = extractFieldValue(cardRows[0], mapping);
+      }
+      // 最后兜底：全文正则扫描，匹配 "关键词：值" 或 "关键词|值" 格式
+      if (!value) {
+        const defaults = cardHeaderDefaults[mapping.targetField] || [];
+        for (const kw of defaults) {
+          for (const row of cardRows) {
+            const cellsText = Object.values(row.cells).join(" | ");
+            const match = cellsText.match(new RegExp(`${kw}\\s*[：:|｜]\\s*(.+?)(?:\\s*[|｜]|$)`, "i"));
+            if (match) {
+              const v = match[1].trim();
+              if (v && v !== "·" && v !== "-" && v !== kw) {
+                value = v;
+                break;
+              }
+            }
+          }
+          if (value) break;
+        }
       }
       if (value) setOrderField(baseOrder, mapping.targetField, value);
     }
@@ -924,6 +945,19 @@ function extractFieldValue(row: RawDataRow, mapping?: FieldMapping): string {
     case "column_name": {
       const named = mapping.columnName ? (row.cells[mapping.columnName] || "") : "";
       if (named) return named;
+
+      // 模糊匹配兜底：AI 返回的 columnName 可能不带后缀（如"物品编码"），
+      // 但实际表头带后缀（如"物品编码*"），尝试在 cells 的 key 中做包含匹配
+      if (mapping.columnName) {
+        const fuzzyKey = Object.keys(row.cells).find(
+          (k) => k.includes(mapping.columnName!) && !k.startsWith("col_")
+        );
+        if (fuzzyKey) {
+          const fuzzyVal = row.cells[fuzzyKey] || "";
+          if (fuzzyVal) return fuzzyVal;
+        }
+      }
+
       // 列名查找失败，用列索引兜底
       if (mapping.columnIndex !== undefined) return row.cells[`col_${mapping.columnIndex}`] || "";
       return mapping.defaultValue || "";
