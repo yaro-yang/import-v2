@@ -133,12 +133,24 @@ export function RuleEditor({
     rule?.postProcessing?.skipTotalRow ?? false
   );
 
-  // 核心：合并 AI 预填值到默认映射
+  // 核心：合并 AI 预填值到默认映射（含低置信度）
   const [mappings, setMappings] = useState<FieldMapping[]>(() => {
     if (rule?.fieldMappings && rule.fieldMappings.length > 0) {
       return defaultMappings.map((def) => {
         const aiMap = rule!.fieldMappings!.find((m) => m.targetField === def.targetField);
-        return aiMap ? { ...def, ...aiMap } : def;
+        const merged = aiMap ? { ...def, ...aiMap } : def;
+        // 低置信度兜底：如果 rule.fieldMappings 里 columnName 为空，但 aiFieldMappings 有 suggestedSource，
+        // 且 suggestedSource 不是"匹配:"格式（即直接是列名），则用它填入 columnName
+        if (!merged.columnName) {
+          const aiInfo = aiFieldMappings.find((fm) => fm.targetField === def.targetField);
+          const src = aiInfo?.suggestedSource || "";
+          // suggestedSource 格式：直接列名（如"收货地址"）、或 "匹配: \"xxx\""、或空字符串
+          const isDirectName = src && !src.startsWith("匹配:") && !src.startsWith("从") && !src.startsWith("基于") && !src.startsWith("矩阵") && !src.startsWith("关键字:");
+          if (isDirectName) {
+            merged.columnName = src;
+          }
+        }
+        return merged;
       });
     }
     return defaultMappings;

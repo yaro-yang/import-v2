@@ -827,11 +827,28 @@ function convertAIResponse(
       defaultVal = "";
     }
 
+    // 低置信度兜底：AI 返回 columnName 为 null 时，从同索引的 suggestedSource 里提取可用列名
+    // 确保无论置信度高低，AI 推荐的值都填入输入框
+    const aiInfo = fieldMappings.find((fm) => fm.targetField === targetField);
+    let fallbackColName = (m.columnName as string) || undefined;
+    if (!fallbackColName && aiInfo?.suggestedSource) {
+      const src = aiInfo.suggestedSource;
+      // suggestedSource 格式：直接列名（如"收货地址"）、"匹配: \"xxx\""、"从行N提取"xxx""等
+      // 尝试提取干净的列名
+      const matchMatch = src.match(/匹配:\s*"?([^"]+)"?/);
+      if (matchMatch) {
+        fallbackColName = matchMatch[1];
+      } else if (!src.startsWith("匹配:") && !src.startsWith("从") && !src.startsWith("基于") && !src.startsWith("矩阵") && !src.startsWith("关键字:") && src.length > 0 && src.length <= 30) {
+        // 直接是列名（如"收货地址"）
+        fallbackColName = src;
+      }
+    }
+
     return {
       targetField,
       mode,
       columnIndex: m.columnIndex as number | undefined,
-      columnName: (m.columnName as string) || undefined,
+      columnName: fallbackColName,
       regexPattern: m.regexPattern as string | undefined,
       regexGroup: m.regexGroup as number | undefined,
       rowKeyPattern: m.rowKeyPattern as string | undefined,
