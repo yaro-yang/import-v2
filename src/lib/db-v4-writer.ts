@@ -19,9 +19,9 @@ function getSql() {
  */
 export async function writeBatch(
   taskId: string,
-  batchIndex: number,
+  _batchIndex: number,
   rows: Record<string, unknown>[],
-  traceId: string,
+  _traceId: string,
 ): Promise<{ inserted: number; updated: number }> {
   const db = getSql();
   let inserted = 0;

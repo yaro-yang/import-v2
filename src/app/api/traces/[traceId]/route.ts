@@ -10,17 +10,7 @@ export async function GET(
   const { traceId } = await params;
 
   try {
-    const [events, tasks] = await Promise.all([
-      getTraceEvents(traceId),
-      (async () => {
-        try {
-          // 从 trace_events 中找到关联的 task
-          return null;
-        } catch {
-          return null;
-        }
-      })(),
-    ]);
+    const events = await getTraceEvents(traceId);
 
     // 尝试找关联任务
     let task = null;

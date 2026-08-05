@@ -11,8 +11,6 @@
  */
 
 import * as XLSX from "xlsx";
-import * as fs from "fs";
-import { readFile } from "fs/promises";
 import {
   lockBatch,
   completeBatch,
@@ -24,8 +22,6 @@ import {
   atomicUpdateTaskProgress,
 } from "@/lib/db-v4";
 import { getRuleById } from "@/lib/db";
-import { executeRule } from "@/lib/rule-engine";
-import { parseExcel } from "@/lib/file-parser";
 
 // ============================================================
 // 错误码定义
@@ -162,7 +158,6 @@ export async function processBatch(payload: {
         allRows.push(...rows);
       }
     } else {
-      const buffer = await readFile(file_path);
       // 非 Excel 文件暂用空数据
       allRows = [];
     }

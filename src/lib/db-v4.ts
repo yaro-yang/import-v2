@@ -537,10 +537,6 @@ export async function getTaskErrors(taskId: string, filters?: {
   const pageSize = filters?.page_size || 50;
   const offset = (page - 1) * pageSize;
 
-  // 先获取总数
-  let countQuery = db`SELECT COUNT(*) as cnt FROM import_task_errors WHERE task_id = ${taskId}`;
-  let errorsQuery = db`SELECT * FROM import_task_errors WHERE task_id = ${taskId}`;
-
   if (filters?.batch !== undefined) {
     // 无法直接追加条件，改用单独查询
     const batch = filters.batch;
