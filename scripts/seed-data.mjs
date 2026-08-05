@@ -135,7 +135,7 @@ async function generateExcelFile() {
 
   // 先获取 SKU 列表用于随机抽取
   const skuRows = await sql`
-    SELECT sku_code, name, spec, unit FROM sku_master ORDER BY RANDOM() LIMIT 5000
+    SELECT sku_code, sku_name, sku_spec, sku_unit FROM sku_master ORDER BY RANDOM() LIMIT 5000
   `;
 
   const skuCodes = skuRows.map((s) => s.sku_code);
@@ -179,10 +179,10 @@ async function generateExcelFile() {
 
       const skuName = isIllegal && s === 0
         ? "非法SKU商品"
-        : skuRows.find((r) => r.sku_code === skuCode)?.name || "未知商品";
+        : skuRows.find((r) => r.sku_code === skuCode)?.sku_name || "未知商品";
 
-      const skuSpec = skuRows.find((r) => r.sku_code === skuCode)?.spec || "500g";
-      const skuUnit = skuRows.find((r) => r.sku_code === skuCode)?.unit || "件";
+      const skuSpec = skuRows.find((r) => r.sku_code === skuCode)?.sku_spec || "500g";
+      const skuUnit = skuRows.find((r) => r.sku_code === skuCode)?.sku_unit || "件";
 
       rows.push({
         外部编码: s === 0 ? externalCode : "",
