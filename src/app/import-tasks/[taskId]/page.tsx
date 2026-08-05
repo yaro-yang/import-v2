@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 
 interface TaskDetail {
@@ -17,372 +18,297 @@ interface TaskDetail {
   trace_id: string;
   created_at: string;
   completed_at: string | null;
-  batches?: Array<{
-    batch_index: number;
-    start_row: number;
-    end_row: number;
-    status: string;
-    retry_count: number;
-    performance?: {
-      parse_duration_ms: number;
-      rule_duration_ms: number;
-      validate_duration_ms: number;
-      insert_duration_ms: number;
-      total_duration_ms: number;
-    };
-  }>;
 }
 
-interface TaskError {
-  id: string;
+interface BatchInfo {
   batch_index: number;
+  start_row: number;
+  end_row: number;
+  status: string;
+  retry_count: number;
+  locked_at: string | null;
+  completed_at: string | null;
+  performance: {
+    parse_duration_ms: number;
+    rule_duration_ms: number;
+    validate_duration_ms: number;
+    insert_duration_ms: number;
+    total_duration_ms: number;
+  } | null;
+}
+
+interface ErrorInfo {
+  id: string;
   row_number: number;
   field_name: string;
   raw_value: string;
   error_code: string;
   error_reason: string;
-  created_at: string;
 }
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  PENDING: { label: "等待处理", color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-200" },
-  PROCESSING: { label: "处理中", color: "text-blue-600", bg: "bg-blue-50 border-blue-200" },
-  COMPLETED: { label: "已完成", color: "text-green-600", bg: "bg-green-50 border-green-200" },
-  PARTIAL_SUCCESS: { label: "部分成功", color: "text-orange-600", bg: "bg-orange-50 border-orange-200" },
-  FAILED: { label: "失败", color: "text-red-600", bg: "bg-red-50 border-red-200" },
+const STATUS_MAP: Record<string, { label: string; bg: string; text: string }> = {
+  PENDING: { label: "等待处理", bg: "bg-amber-50", text: "text-amber-600" },
+  PROCESSING: { label: "处理中", bg: "bg-sky-50", text: "text-sky-600" },
+  COMPLETED: { label: "已完成", bg: "bg-emerald-50", text: "text-emerald-600" },
+  PARTIAL_SUCCESS: { label: "部分成功", bg: "bg-orange-50", text: "text-orange-600" },
+  FAILED: { label: "失败", bg: "bg-rose-50", text: "text-rose-600" },
 };
 
-const ERROR_CODE_MAP: Record<string, string> = {
-  E001: "SKU不存在",
-  E002: "必填字段缺失",
-  E003: "电话格式错误",
-  E004: "数量不是正数",
-  E005: "外部编码重复",
-  E006: "规则映射失败",
-  E007: "数据库写入失败",
-  E008: "文件格式不支持",
-};
+function formatMs(ms: number) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
 
-export default function TaskDetailPage({
-  params,
-}: {
-  params: Promise<{ taskId: string }>;
-}) {
-  const { taskId } = use(params);
+export default function TaskDetailPage() {
+  const params = useParams();
+  const taskId = params.taskId as string;
+
   const [task, setTask] = useState<TaskDetail | null>(null);
-  const [errors, setErrors] = useState<TaskError[]>([]);
+  const [batches, setBatches] = useState<BatchInfo[]>([]);
+  const [errors, setErrors] = useState<ErrorInfo[]>([]);
   const [errorTotal, setErrorTotal] = useState(0);
-  const [errorPage, setErrorPage] = useState(1);
-  const [errorFilter, setErrorFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const fetchTask = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const res = await fetch(`/api/import-tasks/${taskId}?include=batches`);
-      const data = await res.json();
-      setTask(data);
-    } catch (err) {
-      console.error("获取任务详情失败:", err);
+      const [taskRes, batchRes, errRes] = await Promise.all([
+        fetch(`/api/import-tasks/${taskId}`),
+        fetch(`/api/import-tasks/${taskId}/batches`),
+        fetch(`/api/import-tasks/${taskId}/errors`),
+      ]);
+      const [taskData, batchData, errData] = await Promise.all([
+        taskRes.json(),
+        batchRes.json(),
+        errRes.json(),
+      ]);
+      setTask(taskData);
+      setBatches(batchData.batches || []);
+      setErrors(errData.errors || []);
+      setErrorTotal(errData.total || 0);
+    } catch {
+      // 静默
     } finally {
       setLoading(false);
     }
   }, [taskId]);
 
-  const fetchErrors = useCallback(async () => {
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(errorPage));
-      params.set("page_size", "20");
-      if (errorFilter) params.set("error_code", errorFilter);
-
-      const res = await fetch(`/api/import-tasks/${taskId}/errors?${params}`);
-      const data = await res.json();
-      setErrors(data.errors || []);
-      setErrorTotal(data.total || 0);
-    } catch (err) {
-      console.error("获取错误详情失败:", err);
-    }
-  }, [taskId, errorPage, errorFilter]);
-
-  // 同时触发 dispatch
-  const triggerDispatch = useCallback(async () => {
-    try {
-      await fetch("/api/import-tasks/dispatch", { method: "POST" });
-    } catch {
-      // 静默失败
-    }
-  }, []);
-
   useEffect(() => {
-    fetchTask();
-    fetchErrors();
-
-    // 轮询更新
-    const interval = setInterval(() => {
-      fetchTask();
-      fetchErrors();
-      triggerDispatch();
-    }, 2000);
-
+    fetchAll();
+    const interval = setInterval(fetchAll, 2000);
     return () => clearInterval(interval);
-  }, [fetchTask, fetchErrors, triggerDispatch]);
+  }, [fetchAll]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-[#86909c]">加载中...</div>
+      <div className="max-w-5xl mx-auto space-y-6 animate-pulse">
+        <div className="h-8 bg-gray-100 rounded-xl w-48" />
+        <div className="bg-white rounded-2xl border border-gray-100 p-8">
+          <div className="space-y-4">
+            <div className="h-4 bg-gray-100 rounded w-1/3" />
+            <div className="h-4 bg-gray-50 rounded w-1/2" />
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!task) {
     return (
-      <div className="text-center py-20">
-        <p className="text-[#86909c]">任务不存在</p>
-        <Link href="/import-tasks" className="text-[#0fc6c2] text-sm mt-2 inline-block">
-          返回任务列表
-        </Link>
+      <div className="max-w-5xl mx-auto text-center py-24">
+        <p className="text-gray-400">任务不存在</p>
       </div>
     );
   }
 
   const statusInfo = STATUS_MAP[task.status] || STATUS_MAP.PENDING;
-  const progress = task.total_rows > 0
-    ? Math.round((task.processed_rows / task.total_rows) * 100)
-    : 0;
-
-  // 计算预计剩余时间
-  const startedAt = task.created_at ? new Date(task.created_at).getTime() : Date.now();
-  const elapsed = (Date.now() - startedAt) / 1000;
-  const rowsPerSec = elapsed > 0 ? task.processed_rows / elapsed : 0;
-  const remainingRows = task.total_rows - task.processed_rows;
-  const estimatedRemaining = rowsPerSec > 0 ? remainingRows / rowsPerSec : 0;
+  const progress = task.total_rows > 0 ? Math.round(((task.success_rows + task.failed_rows) / task.total_rows) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* 面包屑 */}
-      <div className="flex items-center gap-2 text-sm text-[#86909c]">
-        <Link href="/import-tasks" className="hover:text-[#0fc6c2]">
-          导入任务
+    <div className="space-y-8 max-w-5xl mx-auto">
+      {/* 面包屑 + 标题 */}
+      <div>
+        <Link href="/import-tasks" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-teal-500 transition-colors mb-3">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          返回任务列表
         </Link>
-        <span>/</span>
-        <span className="text-[#1d2129]">{task.task_id}</span>
-      </div>
-
-      {/* 任务概览 */}
-      <div className={`rounded-xl border p-6 ${statusInfo.bg}`}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-[#1d2129]">{task.file_name}</h1>
-            <div className="flex items-center gap-3 mt-2 text-sm text-[#86909c]">
-              <span>Task: {task.task_id}</span>
-              <span>Trace: {task.trace_id}</span>
-            </div>
-          </div>
-          <span className={`inline-flex px-3 py-1.5 rounded-full text-sm font-medium ${statusInfo.color} bg-white/80`}>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-gray-900">{task.file_name}</h1>
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${statusInfo.bg} ${statusInfo.text}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current" />
             {statusInfo.label}
           </span>
         </div>
-
-        {/* 进度条 */}
-        <div className="mt-5">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-[#86909c]">
-              进度: {task.processed_rows} / {task.total_rows} ({progress}%)
-            </span>
-            {task.status === "PROCESSING" && (
-              <span className="text-[#86909c]">
-                吞吐: {rowsPerSec.toFixed(1)} 行/秒 | 预计剩余: {estimatedRemaining.toFixed(0)}秒
-              </span>
-            )}
-          </div>
-          <div className="w-full h-3 bg-white rounded-full overflow-hidden border border-[#e5e6eb]">
-            <div
-              className="h-full bg-gradient-to-r from-[#0fc6c2] to-[#0bada9] rounded-full transition-all duration-700"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* 统计卡片 */}
-        <div className="grid grid-cols-4 gap-4 mt-5">
-          <div className="bg-white/80 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-[#1d2129]">{task.total_rows.toLocaleString()}</div>
-            <div className="text-xs text-[#86909c] mt-1">总行数</div>
-          </div>
-          <div className="bg-white/80 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-[#00b42a]">{task.success_rows.toLocaleString()}</div>
-            <div className="text-xs text-[#86909c] mt-1">成功</div>
-          </div>
-          <div className="bg-white/80 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-[#f53f3f]">{task.failed_rows.toLocaleString()}</div>
-            <div className="text-xs text-[#86909c] mt-1">失败</div>
-          </div>
-          <div className="bg-white/80 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-[#1d2129]">
-              {task.completed_batches} / {task.total_batches}
-            </div>
-            <div className="text-xs text-[#86909c] mt-1">批次数</div>
-          </div>
-        </div>
-
-        {task.degraded && (
-          <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-700">
-            ⚠️ SKU 校验已降级：本次导入未经过商品主数据完整校验，数据可能需要后续复核。
-          </div>
-        )}
+        <p className="text-sm text-gray-400 mt-1.5 font-mono">{task.task_id}</p>
       </div>
 
-      {/* 批次详情 */}
-      {task.batches && task.batches.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-[#e5e6eb] p-6">
-          <h2 className="text-base font-semibold text-[#1d2129] mb-4">批次处理详情</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#fafbfc] border-b border-[#e5e6eb]">
-                  <th className="text-left px-4 py-2.5 font-medium text-[#86909c]">批次</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">行范围</th>
-                  <th className="text-center px-4 py-2.5 font-medium text-[#86909c]">状态</th>
-                  <th className="text-center px-4 py-2.5 font-medium text-[#86909c]">重试</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">解析(ms)</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">规则(ms)</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">校验(ms)</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">写入(ms)</th>
-                  <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">总耗时(ms)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#f2f3f5]">
-                {task.batches.map((batch) => (
-                  <tr key={batch.batch_index} className="hover:bg-[#fafbfc]">
-                    <td className="px-4 py-3 font-medium">#{batch.batch_index + 1}</td>
-                    <td className="px-4 py-3 text-right text-[#86909c]">
-                      {batch.start_row} - {batch.end_row}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                        batch.status === "COMPLETED" ? "bg-green-100 text-green-700" :
-                        batch.status === "PROCESSING" ? "bg-blue-100 text-blue-700" :
-                        batch.status === "FAILED" ? "bg-red-100 text-red-700" :
-                        "bg-yellow-100 text-yellow-700"
-                      }`}>
-                        {batch.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center text-[#86909c]">{batch.retry_count}</td>
-                    {batch.performance ? (
-                      <>
-                        <td className="px-4 py-3 text-right text-[#86909c]">{batch.performance.parse_duration_ms}</td>
-                        <td className="px-4 py-3 text-right text-[#86909c]">{batch.performance.rule_duration_ms}</td>
-                        <td className="px-4 py-3 text-right text-[#86909c]">{batch.performance.validate_duration_ms}</td>
-                        <td className="px-4 py-3 text-right text-[#86909c]">{batch.performance.insert_duration_ms}</td>
-                        <td className="px-4 py-3 text-right font-medium text-[#1d2129]">{batch.performance.total_duration_ms}</td>
-                      </>
-                    ) : (
-                      <td colSpan={5} className="px-4 py-3 text-center text-[#c9cdd4]">—</td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* 概览卡片 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "总行数", value: task.total_rows.toLocaleString(), icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+          { label: "成功", value: task.success_rows.toLocaleString(), color: "text-emerald-500", bg: "bg-emerald-50", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+          { label: "失败", value: task.failed_rows.toLocaleString(), color: task.failed_rows > 0 ? "text-rose-500" : "text-gray-400", bg: task.failed_rows > 0 ? "bg-rose-50" : "bg-gray-50", icon: "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" },
+          { label: "批次", value: `${task.completed_batches}/${task.total_batches}`, icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
+        ].map((card, i) => (
+          <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{card.label}</span>
+              <div className={`w-8 h-8 rounded-lg ${card.bg || "bg-teal-50"} flex items-center justify-center`}>
+                <svg className={`w-4 h-4 ${card.color || "text-teal-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
+                </svg>
+              </div>
+            </div>
+            <div className={`text-2xl font-bold ${card.color || "text-gray-900"} tabular-nums`}>{card.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 进度条 */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium text-gray-700">处理进度</span>
+          <span className="text-sm text-gray-400 tabular-nums">{progress}%</span>
+        </div>
+        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-all duration-700"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-3 text-xs text-gray-400">
+          <span>创建：{new Date(task.created_at).toLocaleString("zh-CN")}</span>
+          <span>{task.completed_at ? `完成：${new Date(task.completed_at).toLocaleString("zh-CN")}` : ""}</span>
+        </div>
+      </div>
+
+      {/* 降级提示 */}
+      {task.degraded && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <div>
+            <p className="font-semibold text-amber-700 text-sm">SKU 校验已降级</p>
+            <p className="text-amber-600 text-sm mt-1">数据库连接异常，当前使用本地缓存进行 SKU 校验，可能影响准确性。</p>
           </div>
         </div>
       )}
 
-      {/* 错误详情 */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#e5e6eb] p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-[#1d2129]">
-            错误详情 ({errorTotal})
-          </h2>
-          <select
-            value={errorFilter}
-            onChange={(e) => { setErrorFilter(e.target.value); setErrorPage(1); }}
-            className="text-sm border border-[#e5e6eb] rounded-lg px-3 py-1.5 outline-none focus:border-[#0fc6c2]"
-          >
-            <option value="">全部类型</option>
-            {Object.entries(ERROR_CODE_MAP).map(([code, label]) => (
-              <option key={code} value={code}>{code} - {label}</option>
-            ))}
-          </select>
-        </div>
+      {/* Trace 快捷入口 */}
+      <div className="flex items-center gap-3">
+        <Link
+          href={`/import-tasks/trace/${task.trace_id}`}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl hover:from-teal-600 hover:to-cyan-600 transition-all shadow-md shadow-teal-500/25"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          查看全链路 Trace
+        </Link>
+        <span className="text-xs text-gray-400 font-mono">{task.trace_id}</span>
+      </div>
 
+      {/* 批次详情 */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">批次详情</h2>
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">#</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">行范围</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">状态</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">重试</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">解析</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">规则</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">校验</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">写入</th>
+                  <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">总耗时</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batches.map((b) => {
+                  const bStatus = STATUS_MAP[b.status] || STATUS_MAP.PENDING;
+                  return (
+                    <tr key={b.batch_index} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
+                      <td className="py-4 px-5 font-mono text-gray-400">{b.batch_index}</td>
+                      <td className="py-4 px-5 text-gray-700 tabular-nums">{b.start_row}–{b.end_row}</td>
+                      <td className="py-4 px-5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bStatus.bg} ${bStatus.text}`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {bStatus.label}
+                        </span>
+                      </td>
+                      <td className="py-4 px-5 text-gray-400 tabular-nums">{b.retry_count}</td>
+                      {b.performance ? (
+                        <>
+                          <td className="py-4 px-5 text-gray-600 tabular-nums font-mono text-xs">{formatMs(b.performance.parse_duration_ms)}</td>
+                          <td className="py-4 px-5 text-gray-600 tabular-nums font-mono text-xs">{formatMs(b.performance.rule_duration_ms)}</td>
+                          <td className="py-4 px-5 text-gray-600 tabular-nums font-mono text-xs">{formatMs(b.performance.validate_duration_ms)}</td>
+                          <td className="py-4 px-5 text-gray-600 tabular-nums font-mono text-xs">{formatMs(b.performance.insert_duration_ms)}</td>
+                          <td className="py-4 px-5 text-right font-semibold text-teal-600 tabular-nums font-mono text-xs">{formatMs(b.performance.total_duration_ms)}</td>
+                        </>
+                      ) : (
+                        <td colSpan={5} className="py-4 px-5 text-gray-300">-</td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* 错误明细 */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          错误明细
+          <span className="ml-2 text-sm font-normal text-gray-400">({errorTotal})</span>
+        </h2>
         {errors.length === 0 ? (
-          <div className="text-center py-10 text-[#86909c]">
-            {task.status === "PROCESSING" ? "处理中..." : "暂无错误"}
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-gray-400 text-sm">无错误记录</p>
           </div>
         ) : (
-          <>
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-[#fafbfc] border-b border-[#e5e6eb]">
-                    <th className="text-left px-4 py-2.5 font-medium text-[#86909c]">批次</th>
-                    <th className="text-right px-4 py-2.5 font-medium text-[#86909c]">行号</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-[#86909c]">字段</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-[#86909c]">错误码</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-[#86909c]">原因</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-[#86909c]">原始值</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                    <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">行号</th>
+                    <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">字段</th>
+                    <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">错误码</th>
+                    <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">原因</th>
+                    <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider">原始值(脱敏)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#f2f3f5]">
-                  {errors.map((err) => (
-                    <tr key={err.id} className="hover:bg-[#fafbfc]">
-                      <td className="px-4 py-3">#{err.batch_index + 1}</td>
-                      <td className="px-4 py-3 text-right">{err.row_number}</td>
-                      <td className="px-4 py-3">{err.field_name}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex px-2 py-0.5 rounded text-xs bg-red-50 text-red-600 font-medium">
-                          {err.error_code}
-                        </span>
+                <tbody>
+                  {errors.map((e) => (
+                    <tr key={e.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
+                      <td className="py-4 px-5 font-mono text-gray-400 tabular-nums">{e.row_number}</td>
+                      <td className="py-4 px-5 font-medium text-gray-700">{e.field_name}</td>
+                      <td className="py-4 px-5">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 text-xs font-mono font-medium">{e.error_code}</span>
                       </td>
-                      <td className="px-4 py-3 text-[#86909c] max-w-[300px] truncate">
-                        {err.error_reason}
-                      </td>
-                      <td className="px-4 py-3 text-[#86909c] max-w-[150px] truncate font-mono text-xs">
-                        {err.raw_value || "—"}
-                      </td>
+                      <td className="py-4 px-5 text-gray-600">{e.error_reason}</td>
+                      <td className="py-4 px-5 text-gray-400 font-mono text-xs max-w-48 truncate" title={e.raw_value}>{e.raw_value}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
-            {/* 分页 */}
-            {errorTotal > 20 && (
-              <div className="flex items-center justify-center gap-3 mt-4">
-                <button
-                  onClick={() => setErrorPage(Math.max(1, errorPage - 1))}
-                  disabled={errorPage === 1}
-                  className="text-sm px-3 py-1.5 rounded border border-[#e5e6eb] disabled:opacity-30 hover:border-[#0fc6c2]"
-                >
-                  上一页
-                </button>
-                <span className="text-sm text-[#86909c]">
-                  第 {errorPage} / {Math.ceil(errorTotal / 20)} 页
-                </span>
-                <button
-                  onClick={() => setErrorPage(errorPage + 1)}
-                  disabled={errorPage >= Math.ceil(errorTotal / 20)}
-                  className="text-sm px-3 py-1.5 rounded border border-[#e5e6eb] disabled:opacity-30 hover:border-[#0fc6c2]"
-                >
-                  下一页
-                </button>
-              </div>
-            )}
-          </>
+          </div>
         )}
-      </div>
-
-      {/* Trace 链接 */}
-      <div className="text-center">
-        <Link
-          href={`/import-tasks/trace/${task.trace_id}`}
-          className="text-sm text-[#0fc6c2] hover:underline"
-        >
-          查看全链路 Trace →
-        </Link>
-      </div>
+      </section>
     </div>
   );
 }
