@@ -1093,6 +1093,16 @@ export default function HomePage() {
                   </svg>
                   查看运单列表
                 </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => (window.location.href = "/import-tasks")}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
+                    <polyline points="9 11 12 14 22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  异步任务列表
+                </Button>
               </div>
             </div>
           </div>

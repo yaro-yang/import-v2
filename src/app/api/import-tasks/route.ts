@@ -4,28 +4,25 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import {
-  initV4Tables,
-  createImportTask,
-  createBatch,
-  createOutboxEvents,
-  insertTraceEvent,
-} from "@/lib/db-v4";
+import { neon } from "@neondatabase/serverless";
 import { getRuleById } from "@/lib/db";
-import { parseExcel } from "@/lib/file-parser";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 const BATCH_SIZE = 1000; // 每批处理 1000 行
 
+function getSql() {
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!url) throw new Error("数据库连接未配置");
+  return neon(url);
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const traceId = `trace_${uuidv4().replace(/-/g, "").slice(0, 12)}`;
+  const taskId = `task_${uuidv4().replace(/-/g, "").slice(0, 12)}`;
 
   try {
-    // 初始化表
-    await initV4Tables();
-
     // 解析 multipart form
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -53,7 +50,7 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, fileName);
     await writeFile(filePath, buffer);
 
-    // 快速预扫描获取总行数（只读文件结构，不完整解析）
+    // 快速预扫描获取总行数
     let totalRows = 0;
     try {
       const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
@@ -63,96 +60,77 @@ export async function POST(request: NextRequest) {
         for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
           const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 1 });
-          // 减去表头行
           totalRows += Math.max(0, data.length - 1);
         }
       } else {
-        // Word/PDF：无法简单预扫描，用默认值
         totalRows = 10000;
       }
     } catch {
-      // 预扫描失败，用默认值
       totalRows = 10000;
     }
 
     const totalBatches = Math.max(1, Math.ceil(totalRows / BATCH_SIZE));
 
-    // 记录 Trace 事件
-    await insertTraceEvent({
-      trace_id: traceId,
-      task_id: "",
-      event_name: "FileUploaded",
-      message: `文件 ${file.name} 上传成功, ${totalRows} 行, ${totalBatches} 批次`,
-    });
-
     // ============================================================
-    // Transactional Outbox：创建任务 + 创建批次 + 写入 Outbox 事件
-    // 在同一事务中完成（这里简化实现，后续可改用 db transaction）
+    // Transactional Outbox：任务 + 批次 + Outbox 在同一事务中
+    // 使用 PostgreSQL BEGIN/COMMIT 手动事务
     // ============================================================
+    const db = getSql();
+    const now = new Date().toISOString();
 
-    // 1. 创建任务
-    const task = await createImportTask({
-      file_name: file.name,
-      file_path: filePath,
-      rule_id: ruleId,
-      total_rows: totalRows,
-      total_batches: totalBatches,
-      batch_size: BATCH_SIZE,
-      trace_id: traceId,
-    });
+    // 使用原生 SQL 事务保证原子性
+    await db`BEGIN`;
+    try {
+      // 1. 创建任务
+      await db`
+        INSERT INTO import_tasks (id, file_name, file_path, rule_id, status, total_rows, processed_rows, success_rows, failed_rows, total_batches, completed_batches, trace_id, degraded, created_at)
+        VALUES (${taskId}, ${file.name}, ${filePath}, ${ruleId}, 'PENDING', ${totalRows}, 0, 0, 0, ${totalBatches}, 0, ${traceId}, FALSE, ${now})
+      `;
 
-    // 更新 trace event 的 task_id
-    await insertTraceEvent({
-      trace_id: traceId,
-      task_id: task.id,
-      event_name: "ImportTaskCreated",
-      message: `任务 ${task.id} 已创建`,
-    });
+      // 2. 创建批次 + Outbox 事件
+      for (let i = 0; i < totalBatches; i++) {
+        const startRow = i * BATCH_SIZE + 1;
+        const endRow = Math.min((i + 1) * BATCH_SIZE, totalRows);
+        const batchId = `${taskId}_${i}`;
 
-    // 2. 创建批次
-    const outboxEvents: Array<{
-      aggregate_id: string;
-      event_type: string;
-      payload: Record<string, unknown>;
-    }> = [];
+        await db`
+          INSERT INTO import_task_batches (id, task_id, batch_index, start_row, end_row, status, retry_count)
+          VALUES (${batchId}, ${taskId}, ${i}, ${startRow}, ${endRow}, 'PENDING', 0)
+          ON CONFLICT (task_id, batch_index) DO NOTHING
+        `;
 
-    for (let i = 0; i < totalBatches; i++) {
-      const startRow = i * BATCH_SIZE + 1;
-      const endRow = Math.min((i + 1) * BATCH_SIZE, totalRows);
+        await db`
+          INSERT INTO event_outbox (id, aggregate_id, event_type, payload, status, created_at)
+          VALUES (${uuidv4()}, ${taskId}, 'ImportBatchCreated', ${JSON.stringify({
+            task_id: taskId,
+            batch_index: i,
+            start_row: startRow,
+            end_row: endRow,
+            file_path: filePath,
+            rule_id: ruleId,
+            trace_id: traceId,
+            schema_version: "1.0",
+          })}, 'PENDING', ${now})
+        `;
+      }
 
-      await createBatch(task.id, i, startRow, endRow);
+      // 3. 记录 Trace 事件
+      await db`
+        INSERT INTO trace_events (id, trace_id, task_id, event_name, event_status, message, occurred_at)
+        VALUES (${uuidv4()}, ${traceId}, ${taskId}, 'ImportTaskCreated', 'OK', ${`任务 ${taskId} 已创建, ${totalRows} 行, ${totalBatches} 批次`}, ${now})
+      `;
 
-      // 3. 写入 Outbox 事件（同一逻辑事务）
-      outboxEvents.push({
-        aggregate_id: task.id,
-        event_type: "ImportBatchCreated",
-        payload: {
-          task_id: task.id,
-          batch_index: i,
-          start_row: startRow,
-          end_row: endRow,
-          file_path: filePath,
-          rule_id: ruleId,
-          trace_id: traceId,
-        },
-      });
+      await db`COMMIT`;
+    } catch (error) {
+      await db`ROLLBACK`;
+      throw error;
     }
 
-    // 批量写入 Outbox
-    await createOutboxEvents(outboxEvents);
-
-    await insertTraceEvent({
-      trace_id: traceId,
-      task_id: task.id,
-      event_name: "OutboxEventsCreated",
-      message: `${totalBatches} 个批次 Outbox 事件已写入`,
-    });
-
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(3);
-    console.log(`[import-tasks] 任务 ${task.id} 创建完成, 耗时 ${elapsed}s`);
+    console.log(`[import-tasks] 任务 ${taskId} 创建完成, 耗时 ${elapsed}s`);
 
     return NextResponse.json({
-      task_id: task.id,
+      task_id: taskId,
       trace_id: traceId,
       status: "PENDING",
       total_rows: totalRows,

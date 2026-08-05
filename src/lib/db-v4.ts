@@ -428,8 +428,10 @@ export async function atomicUpdateTaskProgress(taskId: string, data: {
 
 export async function createBatch(taskId: string, batchIndex: number, startRow: number, endRow: number): Promise<ImportTaskBatch> {
   const db = getSql();
+  // 使用可预测的 id 格式：task_id + "_" + batch_index
+  const batchId = `${taskId}_${batchIndex}`;
   const batch: ImportTaskBatch = {
-    id: uuidv4(),
+    id: batchId,
     task_id: taskId,
     batch_index: batchIndex,
     start_row: startRow,
