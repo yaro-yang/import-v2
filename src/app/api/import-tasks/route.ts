@@ -1,13 +1,12 @@
 // POST /api/import-tasks - 上传文件并创建异步导入任务
 // 核心要求：1秒内返回 task_id，不等待后台处理完成
 // 使用 Transactional Outbox 模式确保任务创建和事件投递的一致性
+// Vercel Serverless 兼容：文件内容存数据库 BYTEA，不写本地磁盘
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { neon } from "@neondatabase/serverless";
 import { getRuleById } from "@/lib/db";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
 const BATCH_SIZE = 1000; // 每批处理 1000 行
 
@@ -41,14 +40,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "解析规则不存在" }, { status: 404 });
     }
 
-    // 保存文件到临时目录
-    const uploadDir = path.join(process.cwd(), ".uploads");
-    await mkdir(uploadDir, { recursive: true });
-
+    // 文件内容读入内存（不写磁盘，Vercel Serverless 兼容）
     const buffer = Buffer.from(await file.arrayBuffer());
-    const fileName = `${Date.now()}_${file.name}`;
-    const filePath = path.join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
 
     // 快速预扫描获取总行数
     let totalRows = 0;
@@ -73,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     // ============================================================
     // Transactional Outbox：任务 + 批次 + Outbox 在同一事务中
-    // 使用 PostgreSQL BEGIN/COMMIT 手动事务
+    // 文件内容以 BYTEA 存入 import_tasks.file_data
     // ============================================================
     const db = getSql();
     const now = new Date().toISOString();
@@ -81,13 +74,13 @@ export async function POST(request: NextRequest) {
     // 使用原生 SQL 事务保证原子性
     await db`BEGIN`;
     try {
-      // 1. 创建任务
+      // 1. 创建任务（file_data 存文件二进制内容）
       await db`
-        INSERT INTO import_tasks (id, file_name, file_path, rule_id, status, total_rows, processed_rows, success_rows, failed_rows, total_batches, completed_batches, trace_id, degraded, created_at)
-        VALUES (${taskId}, ${file.name}, ${filePath}, ${ruleId}, 'PENDING', ${totalRows}, 0, 0, 0, ${totalBatches}, 0, ${traceId}, FALSE, ${now})
+        INSERT INTO import_tasks (id, file_name, file_data, rule_id, status, total_rows, processed_rows, success_rows, failed_rows, total_batches, completed_batches, trace_id, degraded, created_at)
+        VALUES (${taskId}, ${file.name}, ${buffer}, ${ruleId}, 'PENDING', ${totalRows}, 0, 0, 0, ${totalBatches}, 0, ${traceId}, FALSE, ${now})
       `;
 
-      // 2. 创建批次 + Outbox 事件
+      // 2. 创建批次 + Outbox 事件（file_path 不再需要，Worker 从 DB 读）
       for (let i = 0; i < totalBatches; i++) {
         const startRow = i * BATCH_SIZE + 1;
         const endRow = Math.min((i + 1) * BATCH_SIZE, totalRows);
@@ -106,7 +99,6 @@ export async function POST(request: NextRequest) {
             batch_index: i,
             start_row: startRow,
             end_row: endRow,
-            file_path: filePath,
             rule_id: ruleId,
             trace_id: traceId,
             schema_version: "1.0",

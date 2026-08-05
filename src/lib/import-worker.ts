@@ -1,6 +1,5 @@
-import { readFile } from "fs/promises";
-import { resolve } from "path";
 import * as XLSX from "xlsx";
+import { neon } from "@neondatabase/serverless";
 import { getRuleById } from "./db";
 import {
   lockBatch,
@@ -16,26 +15,29 @@ import { analyzeFileWithAI } from "./ai-service";
 import { maskValue, classifyError, toStandardErrorCode, type V4ErrorCode } from "./v4-core";
 import type { ParseRule, OrderItem, ValidationError } from "../types";
 
+function getSql() {
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!url) throw new Error("数据库连接未配置");
+  return neon(url);
+}
+
 export interface ProcessBatchParams {
   task_id: string;
   batch_index: number;
   start_row: number;
   end_row: number;
-  file_path: string;
   rule_id: string;
   trace_id: string;
 }
 
-async function readExcelAllSheets(filePath: string): Promise<(string | number | null)[][]> {
-  let buf: Buffer;
-  if (/^https?:\/\//.test(filePath)) {
-    // 部署到 Vercel 等无本地磁盘环境：从 Blob 存储拉取
-    const res = await fetch(filePath);
-    const ab = await res.arrayBuffer();
-    buf = Buffer.from(ab);
-  } else {
-    buf = await readFile(resolve(process.cwd(), filePath));
+// 从数据库 import_tasks.file_data 读取文件二进制内容（Vercel Serverless 无本地磁盘）
+async function readExcelFromDB(taskId: string): Promise<(string | number | null)[][]> {
+  const db = getSql();
+  const rows = await db`SELECT file_data FROM import_tasks WHERE id = ${taskId}` as Array<{ file_data: Buffer | null }>;
+  if (!rows.length || !rows[0].file_data) {
+    throw new Error(`任务 ${taskId} 文件数据不存在`);
   }
+  const buf = Buffer.from(rows[0].file_data);
   const wb = XLSX.read(buf, { type: "buffer", cellStyles: false });
   const sheetName = wb.SheetNames[0];
   const ws = wb.Sheets[sheetName];
@@ -94,7 +96,7 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
   successCount: number;
   errorCount: number;
 }> {
-  const { task_id, batch_index, file_path, rule_id, trace_id, start_row, end_row } = params;
+  const { task_id, batch_index, rule_id, trace_id, start_row, end_row } = params;
   const batchId = `${task_id}_${batch_index}`;
 
   // 考点8：悲观锁防重复消费（幂等）
@@ -106,16 +108,16 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
   }
 
   const startedAt = Date.now();
-  // 解析阶段
+  // 解析阶段：从 DB 读取文件二进制
   const parseStart = Date.now();
-  const data = await readExcelAllSheets(file_path);
+  const data = await readExcelFromDB(task_id);
   const rule = await resolveRule(data, rule_id);
   const rawData = excelToRawData(data, rule);
   const parseMs = Date.now() - parseStart;
 
   // 规则/AI 阶段
   const ruleStart = Date.now();
-  const { orders, errors } = await executeRule(rawData, rule, file_path);
+  const { orders, errors } = await executeRule(rawData, rule, `task_${task_id}`);
   const ruleMs = Date.now() - ruleStart;
 
   // 切片当前批次（按行区间）
@@ -202,5 +204,5 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
 }
 
 // 供脚本 / 测试使用
-export const V4Worker = { processBatch, readExcelAllSheets };
+export const V4Worker = { processBatch, readExcelFromDB };
 export default V4Worker;

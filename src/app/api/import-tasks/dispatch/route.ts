@@ -61,7 +61,6 @@ export async function POST() {
           batch_index: payload.batch_index,
           start_row: payload.start_row,
           end_row: payload.end_row,
-          file_path: payload.file_path,
           rule_id: payload.rule_id,
           trace_id: payload.trace_id,
         });

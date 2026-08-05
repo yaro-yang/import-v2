@@ -16,7 +16,7 @@ export type OutboxStatus = "PENDING" | "SENT" | "FAILED";
 export interface ImportTask {
   id: string;
   file_name: string;
-  file_path: string;
+  file_data?: Buffer | null;
   rule_id: string;
   status: TaskStatus;
   total_rows: number;
@@ -136,12 +136,12 @@ export async function initV4Tables(): Promise<void> {
     )
   `;
 
-  // import_tasks - 导入任务主表
+  // import_tasks - 导入任务主表（file_data BYTEA 存文件二进制）
   await db`
     CREATE TABLE IF NOT EXISTS import_tasks (
       id TEXT PRIMARY KEY,
       file_name TEXT NOT NULL,
-      file_path TEXT NOT NULL,
+      file_data BYTEA,
       rule_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'PENDING',
       total_rows INTEGER NOT NULL DEFAULT 0,
@@ -156,6 +156,8 @@ export async function initV4Tables(): Promise<void> {
       completed_at TIMESTAMP WITH TIME ZONE
     )
   `;
+  // 迁移：旧表补 file_data 列
+  await db`ALTER TABLE import_tasks ADD COLUMN IF NOT EXISTS file_data BYTEA`;
 
   // import_task_batches - 处理单元状态表
   await db`
@@ -304,7 +306,7 @@ export async function batchCheckSkus(skuCodes: string[]): Promise<Map<string, Sk
 
 export async function createImportTask(data: {
   file_name: string;
-  file_path: string;
+  file_data?: Buffer;
   rule_id: string;
   total_rows: number;
   total_batches: number;
@@ -317,7 +319,7 @@ export async function createImportTask(data: {
   const task: ImportTask = {
     id: taskId,
     file_name: data.file_name,
-    file_path: data.file_path,
+    file_data: data.file_data ?? null,
     rule_id: data.rule_id,
     status: "PENDING",
     total_rows: data.total_rows,
@@ -333,8 +335,8 @@ export async function createImportTask(data: {
   };
 
   await db`
-    INSERT INTO import_tasks (id, file_name, file_path, rule_id, status, total_rows, processed_rows, success_rows, failed_rows, total_batches, completed_batches, trace_id, degraded, created_at)
-    VALUES (${task.id}, ${task.file_name}, ${task.file_path}, ${task.rule_id}, ${task.status}, ${task.total_rows}, ${task.processed_rows}, ${task.success_rows}, ${task.failed_rows}, ${task.total_batches}, ${task.completed_batches}, ${task.trace_id}, ${task.degraded}, ${task.created_at})
+    INSERT INTO import_tasks (id, file_name, file_data, rule_id, status, total_rows, processed_rows, success_rows, failed_rows, total_batches, completed_batches, trace_id, degraded, created_at)
+    VALUES (${task.id}, ${task.file_name}, ${task.file_data ?? null}, ${task.rule_id}, ${task.status}, ${task.total_rows}, ${task.processed_rows}, ${task.success_rows}, ${task.failed_rows}, ${task.total_batches}, ${task.completed_batches}, ${task.trace_id}, ${task.degraded}, ${task.created_at})
   `;
 
   return task;

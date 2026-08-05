@@ -195,12 +195,12 @@ export async function initDB() {
   // V4 异步事件驱动导入系统表结构（与 V2 表共存，互不干扰）
   // ============================================================
 
-  // 1. 导入任务主表
+  // 1. 导入任务主表（file_data BYTEA 存文件二进制，Vercel Serverless 无本地磁盘）
   await sql`
     CREATE TABLE IF NOT EXISTS import_tasks (
       id TEXT PRIMARY KEY,
       file_name TEXT NOT NULL,
-      file_path TEXT,
+      file_data BYTEA,
       rule_id TEXT,
       status TEXT NOT NULL DEFAULT 'PENDING',
       total_rows INTEGER NOT NULL DEFAULT 0,
@@ -215,6 +215,8 @@ export async function initDB() {
       completed_at TIMESTAMPTZ
     )
   `;
+  // 迁移：给旧表加 file_data 列（如果已存在无此列的表）
+  await sql`ALTER TABLE import_tasks ADD COLUMN IF NOT EXISTS file_data BYTEA`;
   await sql`CREATE INDEX IF NOT EXISTS idx_import_tasks_status ON import_tasks(status)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_import_tasks_created_at ON import_tasks(created_at)`;
 
