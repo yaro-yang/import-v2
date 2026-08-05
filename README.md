@@ -1,8 +1,27 @@
-# 万能导入 V2 — 智能多格式批量下单系统
+# 万能导入 V4 — 异步事件驱动批量下单系统
 
-> 通过大模型（LLM）实现任意格式出库单（Excel / Word / PDF）的智能解析与导入，完成批量下单流程。
+> V4 重构：将同步阻塞式导入升级为异步事件驱动架构，支撑 10,000 单/分钟吞吐。
+> 基于 Next.js 15 (App Router) + TypeScript + Tailwind CSS v4 + Neon PostgreSQL
 
-技术栈：Next.js 15 (App Router) + TypeScript + Tailwind CSS v4 + Neon (PostgreSQL) / Supabase
+## V4 新增功能
+
+- **异步导入**：上传即返回 task_id（< 1s），后台分批并发处理
+- **Transactional Outbox**：任务创建与事件投递同事务，保证不丢失
+- **批量处理**：1,000 行/批，批量 SKU 校验 + 批量 UPSERT 写入
+- **全链路追踪**：traceId 贯穿 API → Outbox → Worker → DB
+- **监控看板**：实时吞吐、队列积压、阶段耗时 P50/P95/P99、错误分布
+- **容灾降级**：SKU 校验超时自动降级，前端明确提示
+- **精细化错误**：行级错误记录，按批次/错误码筛选分页
+
+## V4 新增页面
+
+| 页面 | 路由 | 说明 |
+|---|---|---|
+| 导入任务列表 | `/import-tasks` | 查看所有异步任务及进度 |
+| 任务详情 | `/import-tasks/[taskId]` | 任务进度、批次性能、错误详情 |
+| 监控看板 | `/import-tasks/monitor` | 吞吐量、队列积压、阶段耗时、错误分布 |
+| Trace 检索 | `/import-tasks/trace/[traceId]` | 全链路时间线 |
+| Trace 搜索 | `/import-tasks/search` | 多条件检索
 
 ---
 

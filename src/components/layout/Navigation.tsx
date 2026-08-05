@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/", label: "导入下单", icon: "import" },
+  { href: "/import-tasks", label: "导入任务", icon: "tasks" },
   { href: "/rules", label: "解析规则", icon: "settings" },
   { href: "/history", label: "已导入运单", icon: "list" },
   /*{ href: "/v3/tickets", label: "V3 运单全流程", icon: "v3" },*/
@@ -19,6 +20,13 @@ function SidebarIcon({ type }: { type: string }) {
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+      );
+    case "tasks":
+      return (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 11 12 14 22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
       );
     case "settings":
