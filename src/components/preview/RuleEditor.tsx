@@ -225,10 +225,10 @@ export function RuleEditor({
   };
 
   return (
-    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+    <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
       {/* === 矩阵模式提示横幅（当 dataRegion.matrixMode 启用时显示） === */}
       {rule?.dataRegion?.matrixMode?.enabled && (
-        <div className="flex items-start gap-3 p-3.5 rounded-xl bg-gradient-to-r from-[#fff7e6] to-[#fff1d6] border border-[#ff7d00]/30">
+        <div className="flex items-start gap-3.5 p-4 rounded-xl bg-gradient-to-r from-[#fff7e6] to-[#fff1d6] border border-[#ff7d00]/30">
           <div className="w-9 h-9 rounded-lg bg-[#ff7d00]/10 flex items-center justify-center flex-shrink-0 text-[#ff7d00]">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" />
@@ -254,7 +254,7 @@ export function RuleEditor({
       )}
 
       {/* === 顶部提示横幅 === */}
-      <div className="flex items-start gap-3 p-3.5 rounded-xl bg-gradient-to-r from-[#f0fdfd] to-[#e8fafa] border border-[#0fc6c2]/25">
+      <div className="flex items-start gap-3.5 p-4 rounded-xl bg-gradient-to-r from-[#f0fdfd] to-[#e8fafa] border border-[#0fc6c2]/25">
         <div className="w-9 h-9 rounded-lg bg-[#0fc6c2]/10 flex items-center justify-center flex-shrink-0 text-[#0fc6c2]">
           {isAI ? (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -302,7 +302,7 @@ export function RuleEditor({
       {/* === 字段映射表格 === */}
       <div className="bg-white rounded-xl border border-[#e5e6eb] overflow-hidden">
         {/* 表头 */}
-        <div className="grid grid-cols-12 gap-3 px-4 py-2.5 bg-[#fafbfc] border-b border-[#e5e6eb]">
+        <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-[#fafbfc] border-b border-[#e5e6eb]">
           <div className="col-span-4 text-xs font-semibold text-[#86909c]">目标字段</div>
           <div className="col-span-6 text-xs font-semibold text-[#86909c]">对应列名</div>
           <div className="col-span-2 text-right text-xs font-semibold text-[#86909c]">状态</div>
@@ -323,7 +323,7 @@ export function RuleEditor({
             return (
               <div
                 key={fieldDef.key}
-                className={`grid grid-cols-12 gap-3 px-4 py-2.5 items-center transition-colors hover:bg-[#fafbfc] ${
+                className={`grid grid-cols-12 gap-4 px-5 py-3 items-center transition-colors hover:bg-[#fafbfc] ${
                   fieldDef.required && !hasValue ? "bg-[#fffbfb]" : ""
                 }`}
               >

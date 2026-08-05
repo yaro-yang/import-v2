@@ -99,7 +99,7 @@ export function FileUploader({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         className={`
-          relative border-2 border-dashed rounded-xl p-8 lg:p-12 text-center cursor-pointer
+          relative border-2 border-dashed rounded-xl p-10 lg:p-16 text-center cursor-pointer
           transition-all duration-200
           ${
             isDragOver

@@ -48,7 +48,7 @@ export function RuleSelector({
     t === "excel" ? "Excel" : t === "word" ? "Word" : t === "pdf" ? "PDF" : t;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* 步骤标题 */}
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-[#0fc6c2]/10 flex items-center justify-center text-[#0fc6c2] text-sm font-bold flex-shrink-0">
@@ -58,8 +58,8 @@ export function RuleSelector({
       </div>
 
       {rules.length === 0 ? (
-        <div className="py-10 px-6 text-center bg-gradient-to-b from-[#fafbfc] to-white rounded-xl border border-dashed border-[#c9cdd4]">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#e8fafa] to-[#d4f5f3] flex items-center justify-center mx-auto mb-3.5 shadow-sm">
+        <div className="py-12 px-6 text-center bg-gradient-to-b from-[#fafbfc] to-white rounded-xl border border-dashed border-[#c9cdd4]">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#e8fafa] to-[#d4f5f3] flex items-center justify-center mx-auto mb-4 shadow-sm">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0fc6c2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
@@ -76,7 +76,7 @@ export function RuleSelector({
       ) : (
         <>
           {/* 搜索 + 新建 */}
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-4">
             <div className="relative flex-1">
               <svg
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#86909c] pointer-events-none"
@@ -112,7 +112,7 @@ export function RuleSelector({
           </div>
 
           {/* 规则列表 */}
-          <div className="space-y-2 max-h-52 overflow-y-auto">
+          <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
             {filtered.length === 0 ? (
               <p className="text-sm text-[#86909c] text-center py-4">未找到匹配的规则</p>
             ) : (
@@ -121,7 +121,7 @@ export function RuleSelector({
                   key={rule.id}
                   onClick={() => onSelectRule(rule.id)}
                   className={`
-                    flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all duration-150
+                    flex items-center gap-3.5 p-4 rounded-xl border cursor-pointer transition-all duration-150
                     ${
                       selectedRuleId === rule.id
                         ? "border-[#0fc6c2] bg-[#e8fafa] shadow-sm"

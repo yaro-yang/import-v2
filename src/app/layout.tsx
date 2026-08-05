@@ -23,10 +23,10 @@ export default function RootLayout({
             marginLeft: 240,
             marginTop: 56,
             minHeight: "calc(100vh - 56px)",
-            paddingLeft: 24,
-            paddingRight: 24,
+            paddingLeft: 32,
+            paddingRight: 32,
             paddingTop: 0,
-            paddingBottom: 24,
+            paddingBottom: 32,
             width: "calc(100% - 240px)",
             boxSizing: "border-box",
           }}
