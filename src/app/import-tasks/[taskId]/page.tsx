@@ -68,6 +68,8 @@ export default function TaskDetailPage() {
   const [errors, setErrors] = useState<ErrorInfo[]>([]);
   const [errorTotal, setErrorTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [errorFilterField, setErrorFilterField] = useState("");
+  const [errorFilterCode, setErrorFilterCode] = useState("");
 
   const fetchAll = useCallback(async () => {
     try {
@@ -122,6 +124,15 @@ export default function TaskDetailPage() {
 
   const statusInfo = STATUS_MAP[task.status] || STATUS_MAP.PENDING;
   const progress = task.total_rows > 0 ? Math.round(((task.success_rows + task.failed_rows) / task.total_rows) * 100) : 0;
+
+  // 错误筛选
+  const uniqueFields = [...new Set(errors.map((e) => e.field_name))];
+  const uniqueCodes = [...new Set(errors.map((e) => e.error_code))];
+  const filteredErrors = errors.filter((e) => {
+    if (errorFilterField && e.field_name !== errorFilterField) return false;
+    if (errorFilterCode && e.error_code !== errorFilterCode) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-8">
@@ -280,6 +291,35 @@ export default function TaskDetailPage() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            {/* 筛选栏 */}
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/30 flex items-center gap-4">
+              <span className="text-xs text-gray-400 font-medium">筛选：</span>
+              <select
+                value={errorFilterField}
+                onChange={(e) => setErrorFilterField(e.target.value)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
+              >
+                <option value="">全部字段</option>
+                {uniqueFields.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <select
+                value={errorFilterCode}
+                onChange={(e) => setErrorFilterCode(e.target.value)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
+              >
+                <option value="">全部错误码</option>
+                {uniqueCodes.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {(errorFilterField || errorFilterCode) && (
+                <button
+                  onClick={() => { setErrorFilterField(""); setErrorFilterCode(""); }}
+                  className="text-xs text-teal-500 hover:text-teal-600 font-medium"
+                >
+                  清除筛选
+                </button>
+              )}
+              <span className="text-xs text-gray-300 ml-auto">{filteredErrors.length} / {errors.length} 条</span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -292,7 +332,7 @@ export default function TaskDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {errors.map((e) => (
+                  {filteredErrors.map((e) => (
                     <tr key={e.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
                       <td className="py-4 px-5 font-mono text-gray-400 tabular-nums">{e.row_number}</td>
                       <td className="py-4 px-5 font-medium text-gray-700">{e.field_name}</td>
@@ -303,6 +343,11 @@ export default function TaskDetailPage() {
                       <td className="py-4 px-5 text-gray-400 font-mono text-xs max-w-48 truncate" title={e.raw_value}>{e.raw_value}</td>
                     </tr>
                   ))}
+                  {filteredErrors.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-gray-300 text-sm">无匹配结果</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

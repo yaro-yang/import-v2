@@ -156,6 +156,11 @@ export default function MonitorPage() {
             {data.queue_depth.alert === "yellow" && "⚠️ 队列积压，请关注"}
             {data.queue_depth.alert === "red" && "🔴 严重积压，需要扩容"}
           </div>
+          <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> 待处理 ≤ 50 批次</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> 待处理 ≤ 200 批次</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" /> 待处理 {'>'} 200 批次</span>
+          </div>
         </div>
 
         {/* 3. 阶段耗时分布 */}

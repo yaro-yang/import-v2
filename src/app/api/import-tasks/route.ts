@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { neon } from "@neondatabase/serverless";
-import { getRuleById } from "@/lib/db";
 
 const BATCH_SIZE = 1000; // 每批处理 1000 行
 
@@ -34,14 +33,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "请指定解析规则" }, { status: 400 });
     }
 
-    // 验证规则存在 与 文件读入内存 并行
-    const rulePromise = getRuleById(ruleId);
-    const bufferPromise = file.arrayBuffer().then((ab) => Buffer.from(ab));
+    // 文件读入内存（异步导入不阻塞在规则验证，Worker 自行校验）
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-    const [rule, buffer] = await Promise.all([rulePromise, bufferPromise]);
-
-    if (!rule) {
-      return NextResponse.json({ error: "解析规则不存在" }, { status: 404 });
+    // 去重：同一文件 + 同一规则，30 秒内重复上传返回已有任务
+    const db = getSql();
+    const existingTask = await db(
+      `SELECT id, status, trace_id, total_rows, total_batches
+       FROM import_tasks
+       WHERE file_name = $1 AND rule_id = $2
+         AND created_at > NOW() - INTERVAL '30 seconds'
+         AND status IN ('PENDING', 'PROCESSING')
+       ORDER BY created_at DESC LIMIT 1`,
+      [file.name, ruleId]
+    );
+    if (existingTask.length > 0) {
+      return NextResponse.json({
+        task_id: existingTask[0].id,
+        trace_id: existingTask[0].trace_id,
+        status: existingTask[0].status,
+        total_rows: existingTask[0].total_rows,
+        total_batches: existingTask[0].total_batches,
+        dedup: true,
+      });
     }
 
     // 快速预扫描获取总行数（仅读 sheet 维度信息，不解析全量数据）
@@ -72,7 +86,6 @@ export async function POST(request: NextRequest) {
     // Transactional Outbox：任务 + 批次 + Outbox 在同一事务中
     // 文件内容以 BYTEA 存入 import_tasks.file_data
     // ============================================================
-    const db = getSql();
     const now = new Date().toISOString();
 
     // 使用原生 SQL 事务保证原子性
