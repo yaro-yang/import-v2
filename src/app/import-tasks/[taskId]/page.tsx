@@ -124,7 +124,7 @@ export default function TaskDetailPage() {
   const progress = task.total_rows > 0 ? Math.round(((task.success_rows + task.failed_rows) / task.total_rows) * 100) : 0;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       {/* 面包屑 + 标题 */}
       <div>
         <Link href="/import-tasks" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-teal-500 transition-colors mb-3">

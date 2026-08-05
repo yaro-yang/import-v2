@@ -84,7 +84,7 @@ export default function TracePage() {
   }
 
   return (
-    <div className="space-y-8 max-w-3xl mx-auto">
+    <div className="space-y-8">
       {/* 头部 */}
       <div>
         <Link href="/import-tasks" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-teal-500 transition-colors mb-3">

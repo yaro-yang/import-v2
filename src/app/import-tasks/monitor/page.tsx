@@ -83,7 +83,7 @@ export default function MonitorPage() {
   const queueAlert = queueAlertStyles[data.queue_depth.alert] || queueAlertStyles.green;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       {/* 头部 */}
       <div className="flex items-center justify-between">
         <div>
