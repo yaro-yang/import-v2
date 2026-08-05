@@ -31,7 +31,7 @@ const BATCH_SIZE = 500;
 // 工具函数
 // ============================================================
 
-function randomInt(min: number, max: number): number {
+function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
@@ -40,7 +40,7 @@ function randomPick<T>(arr: T[]): T {
 }
 
 // 脱敏手机号生成
-function randomPhone(): string {
+function randomPhone() {
   const prefixes = ["139", "158", "137", "188", "176", "150", "159", "186"];
   const prefix = randomPick(prefixes);
   const suffix = String(Math.floor(Math.random() * 100000000)).padStart(8, "0");
@@ -68,7 +68,7 @@ async function initTables() {
 
   // 清理旧数据
   const before = await sql`SELECT COUNT(*) as cnt FROM sku_master`;
-  console.log(`  旧数据: ${(before as Array<{ cnt: number }>)[0]?.cnt || 0} 条`);
+  console.log(`  旧数据: ${before[0]?.cnt || 0} 条`);
 
   await sql`DELETE FROM sku_master`;
   console.log("  ✅ 旧数据已清理");
@@ -89,7 +89,7 @@ async function seedSkus() {
   let count = 0;
   for (let i = 0; i < TOTAL_SKUS; i += BATCH_SIZE) {
     const batchEnd = Math.min(i + BATCH_SIZE, TOTAL_SKUS);
-    const batch: Array<{ sku_code: string; sku_name: string; sku_spec: string; sku_unit: string }> = [];
+    const batch = [];
 
     for (let j = i; j < batchEnd; j++) {
       const skuNum = j + 1;
@@ -130,7 +130,7 @@ async function generateExcelFile() {
   // 先获取 SKU 列表用于随机抽取
   const skuRows = await sql`
     SELECT sku_code, name, spec, unit FROM sku_master ORDER BY RANDOM() LIMIT 5000
-  ` as Array<{ sku_code: string; name: string; spec: string; unit: string }>;
+  `;
 
   const skuCodes = skuRows.map((s) => s.sku_code);
   // 加入少量非法 SKU
