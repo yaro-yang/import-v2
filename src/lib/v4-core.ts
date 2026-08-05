@@ -154,3 +154,18 @@ export function aiCoverageRatio(mappings: FieldMapping[]): number {
   const aiCount = mappings.filter((m) => m.source === "ai").length;
   return aiCount / mappings.length;
 }
+
+// 内部错误码 → 标准 E001-E008 错误码映射（API/UI 使用标准码，内部逻辑用 V4ErrorCode）
+const V4_TO_STANDARD: Record<V4ErrorCode, string> = {
+  E_ORDER_NO: "E002",
+  E_SKU: "E001",
+  E_WAREHOUSE: "E006",
+  E_QTY: "E004",
+  E_PHONE: "E003",
+  E_ADDRESS: "E002",
+  E_SYSTEM: "E007",
+};
+
+export function toStandardErrorCode(code: V4ErrorCode | string): string {
+  return (V4_TO_STANDARD as Record<string, string>)[code] ?? code;
+}

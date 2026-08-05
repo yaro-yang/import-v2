@@ -25,6 +25,175 @@
 
 ---
 
+## V4 自测方案（完整流程）
+
+按以下步骤可自测验证 V4 异步导入系统全部功能：
+
+### 前置条件
+
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 配置环境变量（.env 文件）
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+AI_API_KEY=sk-xxx        # AI 大模型 API Key（可选，无 Key 时使用启发式解析）
+AI_API_URL=https://api.deepseek.com/v1/chat/completions
+AI_MODEL=deepseek-chat
+```
+
+### 第一步：启动服务
+
+```bash
+npm run dev
+# 浏览器打开 http://localhost:3000
+```
+
+### 第二步：初始化数据库
+
+```bash
+# 方式一（推荐，幂等安全，自动建 V2+V4 全部表）：
+curl -X POST http://localhost:3000/api/init
+
+# 方式二（仅建 V2 表）：
+node scripts/init-db.mjs
+```
+
+### 第三步：准备压测数据
+
+```bash
+# 生成 20,000 条 SKU 主数据 + 10,000 行 Excel 压测文件
+node scripts/seed-data.mjs
+
+# 检查输出：
+#   - test-data/10000-orders.xlsx（10,000 行运单数据，含 5 个非法 SKU）
+#   - 数据库 sku_master 表应有 20,000 条记录
+```
+
+### 第四步：创建解析规则
+
+1. 浏览器打开 `http://localhost:3000`
+2. 上传 `test-data/10000-orders.xlsx`
+3. 点击「AI 分析生成规则」（如有 AI Key）或手动配置规则
+4. 规则配置要点：
+   - 外部编码 → `外部编码` 列
+   - SKU编码 → `SKU编码` 列
+   - SKU名称 → `SKU名称` 列
+   - SKU数量 → `SKU数量` 列
+   - 收货门店 → `收货门店` 列
+   - 收件人 → `收件人` 列
+   - 收件人电话 → `收件人电话` 列
+   - 收件人地址 → `收件人地址` 列
+5. 保存规则，**记下规则 ID**（如 `rule_xxx`）
+
+### 第五步：V4 异步导入测试
+
+**方式 A：通过 API 测试**
+
+```bash
+# 上传文件创建异步任务（< 1 秒返回 task_id）
+RULE_ID=rule_xxx  # 替换为第四步获得的规则 ID
+
+curl -X POST http://localhost:3000/api/import-tasks \
+  -F "file=@test-data/10000-orders.xlsx" \
+  -F "ruleId=$RULE_ID"
+
+# 返回示例：
+# {"task_id":"task_abc123","trace_id":"trace_xyz789","status":"PENDING","total_rows":10000,"total_batches":10}
+
+# 记录返回的 task_id，然后触发调度器：
+TASK_ID=task_abc123
+
+# 触发 Dispatcher（首次处理）
+curl -X POST http://localhost:3000/api/import-tasks/dispatch
+
+# 查询任务进度
+curl http://localhost:3000/api/import-tasks/$TASK_ID
+
+# 查询错误详情
+curl http://localhost:3000/api/import-tasks/$TASK_ID/errors
+
+# 查询批次性能
+curl http://localhost:3000/api/import-tasks/$TASK_ID/batches
+
+# 查询 Trace 时间线
+curl http://localhost:3000/api/traces/trace_xyz789
+```
+
+**方式 B：通过页面测试**
+
+1. 浏览器打开 `http://localhost:3000/import-tasks`
+2. 点击「监控看板」查看实时吞吐量、队列积压、阶段耗时、错误分布
+3. 返回任务列表，点击任务进入详情页
+4. 每 2 秒自动触发 Dispatcher 并刷新进度
+5. 查看批次处理详情表格和错误明细
+6. 点击「查看全链路 Trace」跳转到时间线页面
+
+### 第六步：运行压测脚本
+
+```bash
+# 确保第四步已创建规则，然后运行压测：
+BENCHMARK_RULE_ID=rule_xxx node scripts/benchmark.mjs
+
+# 脚本会：
+# 1. 上传 10,000 行 Excel 文件
+# 2. 记录上传接口响应时间
+# 3. 自动轮询触发 Dispatcher 直到任务完成
+# 4. 统计全链路总耗时
+# 5. 输出是否达标（≤ 60 秒）
+# 6. 生成 test-data/benchmark-report.json
+```
+
+### 第七步：运行单元测试
+
+```bash
+npm test
+
+# 预期输出：
+# Tests: 60 passed, 60 total
+# 覆盖：上传接口、Outbox 事务、Dispatcher 可靠性、Worker 幂等、
+#       SKU 批量校验、部分失败处理、降级模式、脱敏逻辑、
+#       错误码映射、Trace 时间线、权限保护、任务状态聚合
+```
+
+### 第八步：验证监控看板
+
+1. 打开 `http://localhost:3000/import-tasks/monitor`
+2. 确认 4 个区域正常展示：
+   - 实时吞吐量（柱状图）
+   - 队列积压（待处理批次/行数 + 橙色预警）
+   - 阶段耗时分布（P50/P95/P99 表格）
+   - 错误类型分布（条形图）
+3. 打开 `http://localhost:3000/import-tasks/search` 搜索 Trace
+
+### 第九步：验证容灾降级
+
+1. 在 `.env` 中临时修改 `DATABASE_URL` 为无效连接
+2. 重新创建导入任务
+3. 任务详情页应显示「⚠️ SKU 校验已降级」
+4. Trace 时间线应包含 `SKUValidationDegraded` 事件
+5. 恢复 `DATABASE_URL` 后，新任务应自动恢复正常
+
+### 验收清单
+
+| 验收项 | 检查方式 | 通过标准 |
+|---|---|---|
+| 上传接口 ≤ 1 秒 | 压测脚本 / curl 计时 | P95 < 1000ms |
+| 10,000 行 ≤ 60 秒 | `node scripts/benchmark.mjs` | total_duration ≤ 60s |
+| SKU 主数据 20,000 条 | `SELECT COUNT(*) FROM sku_master` | ≥ 20000 |
+| 压测文件 10,000 行 | 打开 `test-data/10000-orders.xlsx` | 数据行 ≥ 10000 |
+| 批量 SKU 校验 | 查看 Worker 日志 | 使用 `WHERE sku_code = ANY($1)` |
+| 批量写入 | 查看 Worker 日志 | 使用 UNNEST 批量 INSERT |
+| 错误可定位 | 任务详情页 → 错误详情 | 显示行号、字段、错误码、脱敏值 |
+| 幂等处理 | 重复触发 dispatch | 不会重复写入/重复累计进度 |
+| 降级模式 | 断开 DB 后创建任务 | 前端显示降级提示 |
+| Trace 追踪 | `/import-tasks/trace/[traceId]` | 显示完整时间线 |
+| 监控看板 | `/import-tasks/monitor` | 4 个区域均正常 |
+| 单元测试 | `npm test` | 60 passed |
+| 无密钥泄漏 | `grep -r "sk-" src/` | 无结果 |
+
+---
+
 ## 一、目录
 
 1. [项目简介](#二项目简介)

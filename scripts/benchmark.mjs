@@ -206,6 +206,9 @@ async function main() {
     total_duration_seconds: parseFloat(totalDuration),
     target_met: parseFloat(totalDuration) <= 60,
     degraded: finalData.degraded,
+    batch_size: 1000,
+    concurrent_workers: 2,
+    errors_500_504: errorCount,
     batches: batches.map((b: Record<string, unknown>) => ({
       batch_index: b.batch_index,
       status: b.status,
@@ -217,6 +220,16 @@ async function main() {
   const reportPath = path.join(process.cwd(), "test-data", "benchmark-report.json");
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(`\n📄 压测报告已保存: ${reportPath}`);
+
+  // 达标判定摘要
+  if (report.target_met) {
+    console.log("\n🎉 压测达标！10,000 行全链路处理完成时间 ≤ 60 秒");
+  } else {
+    console.log("\n⚠️ 压测未达标，全链路处理时间超过 60 秒");
+  }
+  console.log(`   上传接口响应: ${report.upload_duration_ms}ms (目标 ≤ 1000ms)`);
+  console.log(`   全链路耗时:   ${report.total_duration_seconds}s (目标 ≤ 60s)`);
+  console.log(`   500/504 错误: ${report.errors_500_504} 次 (目标 0)`);
 }
 
 main().catch(console.error);

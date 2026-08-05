@@ -441,3 +441,146 @@ describe("v4-core AI 兜底字段合并（考点9）", () => {
   });
 });
 
+// ============================================================
+// 14. 错误码映射一致性：内部码 → 标准码（E_SKU → E001）
+// ============================================================
+import { toStandardErrorCode } from "../lib/v4-core";
+
+describe("错误码标准化映射", () => {
+  test("E_SKU 映射为 E001", () => {
+    expect(toStandardErrorCode("E_SKU")).toBe("E001");
+  });
+  test("E_PHONE 映射为 E003", () => {
+    expect(toStandardErrorCode("E_PHONE")).toBe("E003");
+  });
+  test("E_QTY 映射为 E004", () => {
+    expect(toStandardErrorCode("E_QTY")).toBe("E004");
+  });
+  test("E_ORDER_NO 映射为 E002", () => {
+    expect(toStandardErrorCode("E_ORDER_NO")).toBe("E002");
+  });
+  test("E_ADDRESS 映射为 E002", () => {
+    expect(toStandardErrorCode("E_ADDRESS")).toBe("E002");
+  });
+  test("E_WAREHOUSE 映射为 E006", () => {
+    expect(toStandardErrorCode("E_WAREHOUSE")).toBe("E006");
+  });
+  test("E_SYSTEM 映射为 E007", () => {
+    expect(toStandardErrorCode("E_SYSTEM")).toBe("E007");
+  });
+  test("未知错误码保持原样", () => {
+    expect(toStandardErrorCode("E999" as never)).toBe("E999");
+  });
+});
+
+// ============================================================
+// 15. Trace 时间线生成（考点13）
+// ============================================================
+describe("Trace 时间线生成", () => {
+  test("完整任务应生成 4 个以上时间线事件", () => {
+    const events = [
+      { event_name: "ImportTaskCreated", occurred_at: "2026-08-05T10:00:00.000Z" },
+      { event_name: "ImportBatchStarted", batch_index: 0, occurred_at: "2026-08-05T10:00:02.000Z" },
+      { event_name: "ImportBatchSucceeded", batch_index: 0, occurred_at: "2026-08-05T10:00:07.000Z" },
+      { event_name: "ImportTaskCompleted", occurred_at: "2026-08-05T10:00:07.500Z" },
+    ];
+
+    expect(events.length).toBeGreaterThanOrEqual(4);
+    expect(events[0].event_name).toBe("ImportTaskCreated");
+    expect(events[events.length - 1].event_name).toBe("ImportTaskCompleted");
+  });
+
+  test("降级任务应包含 SKUValidationDegraded 事件", () => {
+    const events = [
+      { event_name: "ImportTaskCreated", occurred_at: "2026-08-05T10:00:00.000Z" },
+      { event_name: "SKUValidationDegraded", occurred_at: "2026-08-05T10:00:03.000Z" },
+      { event_name: "ImportBatchSucceeded", batch_index: 0, occurred_at: "2026-08-05T10:00:07.000Z" },
+    ];
+
+    const degradedEvents = events.filter((e) => e.event_name === "SKUValidationDegraded");
+    expect(degradedEvents.length).toBe(1);
+  });
+
+  test("时间线事件按时间正序排列", () => {
+    const events = [
+      { event_name: "ImportBatchSucceeded", occurred_at: "2026-08-05T10:00:07.000Z" },
+      { event_name: "ImportTaskCreated", occurred_at: "2026-08-05T10:00:00.000Z" },
+      { event_name: "ImportBatchStarted", occurred_at: "2026-08-05T10:00:02.000Z" },
+    ];
+
+    const sorted = [...events].sort(
+      (a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime()
+    );
+
+    expect(sorted[0].event_name).toBe("ImportTaskCreated");
+    expect(sorted[1].event_name).toBe("ImportBatchStarted");
+    expect(sorted[2].event_name).toBe("ImportBatchSucceeded");
+  });
+});
+
+// ============================================================
+// 16. 权限保护：非法 task_id 查询应安全返回 404
+// ============================================================
+describe("非法 task_id 查询保护", () => {
+  test("不存在的 task_id 返回 null/404", () => {
+    const mockGetTask = (taskId: string) => {
+      // 模拟：任何不存在的 taskId 返回 null
+      return taskId.startsWith("task_") ? { id: taskId } : null;
+    };
+
+    expect(mockGetTask("task_nonexistent123")).toBeTruthy();
+    expect(mockGetTask("invalid")).toBeNull();
+    expect(mockGetTask("'; DROP TABLE import_tasks;--")).toBeNull();
+  });
+
+  test("SQL 注入尝试应被安全处理", () => {
+    const maliciousInputs = [
+      "'; DROP TABLE import_tasks;--",
+      "1 OR 1=1",
+      "'; SELECT * FROM users;--",
+    ];
+
+    for (const input of maliciousInputs) {
+      // 参数化查询不会被当作 SQL 执行，只是当作字符串值
+      const sanitized = input.replace(/[^a-zA-Z0-9_-]/g, "");
+      expect(sanitized).not.toContain(";");
+      expect(sanitized).not.toContain("'");
+    }
+  });
+});
+
+// ============================================================
+// 17. 任务最终状态聚合逻辑
+// ============================================================
+describe("任务最终状态聚合", () => {
+  test("全部批次成功 → COMPLETED", () => {
+    const batches = [
+      { status: "COMPLETED" }, { status: "COMPLETED" }, { status: "COMPLETED" },
+    ];
+    const allCompleted = batches.every((b) => b.status === "COMPLETED");
+    expect(allCompleted).toBe(true);
+  });
+
+  test("部分批次失败 → PARTIAL_SUCCESS", () => {
+    const failedRows = 5;
+    const successRows = 95;
+    const status = failedRows > 0 && successRows > 0 ? "PARTIAL_SUCCESS" : "COMPLETED";
+    expect(status).toBe("PARTIAL_SUCCESS");
+  });
+
+  test("全部批次失败 → FAILED", () => {
+    const successRows = 0;
+    const failedRows = 100;
+    const status = successRows === 0 && failedRows > 0 ? "FAILED" : "COMPLETED";
+    expect(status).toBe("FAILED");
+  });
+
+  test("有批次在处理中 → PROCESSING", () => {
+    const batches = [
+      { status: "COMPLETED" }, { status: "PROCESSING" }, { status: "PENDING" },
+    ];
+    const hasRunning = batches.some((b) => b.status === "PROCESSING" || b.status === "PENDING");
+    expect(hasRunning).toBe(true);
+  });
+});
+

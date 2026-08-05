@@ -13,7 +13,7 @@ import {
 import { writeBatch } from "./db-v4-writer";
 import { excelToRawData, executeRule } from "./rule-engine";
 import { analyzeFileWithAI } from "./ai-service";
-import { maskValue, classifyError, type V4ErrorCode } from "./v4-core";
+import { maskValue, classifyError, toStandardErrorCode, type V4ErrorCode } from "./v4-core";
 import type { ParseRule, OrderItem, ValidationError } from "../types";
 
 export interface ProcessBatchParams {
@@ -162,18 +162,19 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
   // 错误明细（考点11：行号 + 字段名 + 原始值）
   const errorRecs = batchErrors
     .filter((e) => e.severity === "error")
-    .map((e: ValidationError) => ({
-      task_id,
-      batch_index,
-      row_number: e.row + 1,
-      field_name: e.field,
-      raw_value: String(
-        (batchOrders[e.row - sliceStart] as unknown as Record<string, unknown>)?.[e.field] ?? "",
-      ),
-      error_code: classifyError(e.field, e.message) as V4ErrorCode,
-      error_reason: e.message,
-      trace_id,
-    }));
+    .map((e: ValidationError) => {
+      const rawVal = (batchOrders[e.row - sliceStart] as unknown as Record<string, unknown>)?.[e.field];
+      return {
+        task_id,
+        batch_index,
+        row_number: e.row + 1,
+        field_name: e.field,
+        raw_value: maskValue(e.field, rawVal), // 脱敏后再落库
+        error_code: toStandardErrorCode(classifyError(e.field, e.message)),
+        error_reason: e.message,
+        trace_id,
+      };
+    });
   if (errorRecs.length) await insertTaskErrors(errorRecs);
 
   // 性能日志（各阶段 ms，用于 P50/P95/P99）
