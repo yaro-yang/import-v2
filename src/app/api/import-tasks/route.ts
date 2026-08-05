@@ -43,23 +43,26 @@ export async function POST(request: NextRequest) {
     // 文件内容读入内存（不写磁盘，Vercel Serverless 兼容）
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // 快速预扫描获取总行数
+    // 快速预扫描获取总行数（仅读 sheet 维度信息，不解析全量数据）
     let totalRows = 0;
     try {
       const fileExt = file.name.split(".").pop()?.toLowerCase() || "";
       if (fileExt === "xlsx" || fileExt === "xls") {
         const XLSX = await import("xlsx");
-        const workbook = XLSX.read(buffer, { type: "buffer" });
+        const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: 0 });
         for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
-          const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 1 });
-          totalRows += Math.max(0, data.length - 1);
+          if (sheet["!ref"]) {
+            const range = XLSX.utils.decode_range(sheet["!ref"]);
+            totalRows += Math.max(0, range.e.r); // 行数 = 最后一行索引（0-based，含表头所以天然-1）
+          }
         }
+        if (totalRows <= 0) totalRows = 1;
       } else {
         totalRows = 10000;
       }
     } catch {
-      totalRows = 10000;
+      totalRows = 1;
     }
 
     const totalBatches = Math.max(1, Math.ceil(totalRows / BATCH_SIZE));

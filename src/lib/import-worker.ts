@@ -110,6 +110,17 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
   }
 
   const startedAt = Date.now();
+
+  // Trace: 批次开始
+  await insertTraceEvent({
+    trace_id,
+    task_id,
+    batch_index,
+    event_name: "ImportBatchStarted",
+    event_status: "OK",
+    message: `批次 ${batch_index} 开始处理 (行 ${start_row + 1}-${end_row})`,
+  });
+
   // 解析阶段：从 DB 读取文件二进制
   const parseStart = Date.now();
   const data = await readExcelFromDB(task_id);
@@ -215,9 +226,19 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
       task_id,
       event_name: finalStatus === "COMPLETED" ? "ImportTaskCompleted" : "ImportTaskPartialSuccess",
       event_status: "OK",
-      message: `任务完成: 成功 ${task.success_rows + (inserted - (task.success_rows || 0))}, 失败 ${task.failed_rows + errorRecs.length}`,
+      message: `任务完成: 成功 ${task.success_rows + inserted}, 失败 ${task.failed_rows + errorRecs.length}`,
     });
   }
+
+  // Trace: 批次成功
+  await insertTraceEvent({
+    trace_id,
+    task_id,
+    batch_index,
+    event_name: "ImportBatchSucceeded",
+    event_status: "OK",
+    message: `批次 ${batch_index} 完成: 成功 ${inserted}, 失败 ${errorRecs.length}, 耗时 ${Date.now() - startedAt}ms`,
+  });
 
   return { success: true, successCount: inserted, errorCount: errorRecs.length };
 }
