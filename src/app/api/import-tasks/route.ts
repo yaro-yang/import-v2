@@ -34,14 +34,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "请指定解析规则" }, { status: 400 });
     }
 
-    // 验证规则存在
-    const rule = await getRuleById(ruleId);
+    // 验证规则存在 与 文件读入内存 并行
+    const rulePromise = getRuleById(ruleId);
+    const bufferPromise = file.arrayBuffer().then((ab) => Buffer.from(ab));
+
+    const [rule, buffer] = await Promise.all([rulePromise, bufferPromise]);
+
     if (!rule) {
       return NextResponse.json({ error: "解析规则不存在" }, { status: 404 });
     }
-
-    // 文件内容读入内存（不写磁盘，Vercel Serverless 兼容）
-    const buffer = Buffer.from(await file.arrayBuffer());
 
     // 快速预扫描获取总行数（仅读 sheet 维度信息，不解析全量数据）
     let totalRows = 0;
