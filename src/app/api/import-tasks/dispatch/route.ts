@@ -6,11 +6,6 @@
  * 2. 调用 Worker 处理对应批次
  * 3. 更新 Outbox 投递状态
  * 4. 失败重试
- *
- * 在 Vercel Serverless 环境下，此接口通过 Vercel Cron Jobs 定时调用
- * 或在前端轮询时触发（每次任务状态查询时顺便触发一次 dispatch）
- *
- * 对于生产环境，建议部署常驻 Worker 到 Railway/Render 等平台
  */
 
 import { NextResponse } from "next/server";
@@ -18,64 +13,95 @@ import {
   fetchPendingOutboxEvents,
   markOutboxSent,
   markOutboxFailed,
+  getBatchById,
+  getImportTask,
 } from "@/lib/db-v4";
 import { processBatch } from "@/lib/import-worker";
 
-const MAX_CONCURRENT = 2; // Vercel Serverless 限制并发数
-const DISPATCH_TIMEOUT = 50000; // 50秒超时（Vercel 免费版 60s 限制）
+const MAX_CONCURRENT = 2;
+const DISPATCH_TIMEOUT = 50000;
 
 export async function POST() {
   const startTime = Date.now();
+  const errors: string[] = [];
   const results: Array<{
     event_id: string;
     batch_index: number;
     success: boolean;
     successCount: number;
     errorCount: number;
+    error?: string;
   }> = [];
 
   try {
-    // 1. 获取待投递事件
     const events = await fetchPendingOutboxEvents(MAX_CONCURRENT);
 
     if (events.length === 0) {
       return NextResponse.json({ dispatched: 0, message: "无待处理事件" });
     }
 
-    // 2. 并发处理
     const promises = events.map(async (event) => {
       try {
         const payload = JSON.parse(event.payload);
+        const taskId = payload.task_id;
+        const batchIndex = payload.batch_index;
 
-        // 投递前检查超时
-        if (Date.now() - startTime > DISPATCH_TIMEOUT) {
-          return null;
-        }
+        if (Date.now() - startTime > DISPATCH_TIMEOUT) return null;
 
-        // 标记为已投递
         await markOutboxSent(event.id);
 
-        // 调用 Worker 处理
-        const result = await processBatch({
-          task_id: payload.task_id,
-          batch_index: payload.batch_index,
-          start_row: payload.start_row,
-          end_row: payload.end_row,
-          rule_id: payload.rule_id,
-          trace_id: payload.trace_id,
-        });
+        let result: { success: boolean; successCount: number; errorCount: number };
+        try {
+          result = await processBatch({
+            task_id: taskId,
+            batch_index: batchIndex,
+            start_row: payload.start_row,
+            end_row: payload.end_row,
+            rule_id: payload.rule_id,
+            trace_id: payload.trace_id,
+          });
+        } catch (workerErr) {
+          const msg = `Worker异常: ${String(workerErr)}`;
+          errors.push(msg);
+          console.error(msg);
+          return {
+            event_id: event.id,
+            batch_index: batchIndex,
+            success: false,
+            successCount: 0,
+            errorCount: 0,
+            error: msg,
+          };
+        }
+
+        if (!result.success) {
+          // 诊断失败原因
+          const batch = await getBatchById(`${taskId}_${batchIndex}`);
+          const task = await getImportTask(taskId);
+          const reason = `批次状态=${batch?.status ?? 'null'}, 任务状态=${task?.status ?? 'null'}`;
+          errors.push(reason);
+          return {
+            event_id: event.id,
+            batch_index: batchIndex,
+            success: false,
+            successCount: 0,
+            errorCount: 0,
+            error: reason,
+          };
+        }
 
         return {
           event_id: event.id,
-          batch_index: payload.batch_index,
-          success: result.success,
+          batch_index: batchIndex,
+          success: true,
           successCount: result.successCount,
           errorCount: result.errorCount,
         };
       } catch (error) {
-        console.error(`[Dispatcher] 处理事件 ${event.id} 失败:`, error);
+        const msg = `Dispatcher异常: ${String(error)}`;
+        errors.push(msg);
+        console.error(msg);
 
-        // 重试次数过多则标记失败
         if (event.retry_count >= 3) {
           await markOutboxFailed(event.id);
         }
@@ -86,11 +112,12 @@ export async function POST() {
           success: false,
           successCount: 0,
           errorCount: 0,
+          error: msg,
         };
       }
     });
 
-    const resolved = (await Promise.all(promises)).filter(Boolean) as NonNullable<typeof results[0]>[];
+    const resolved = (await Promise.all(promises)).filter(Boolean) as NonNullable<(typeof results)[0]>[];
     results.push(...resolved);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -98,6 +125,7 @@ export async function POST() {
       dispatched: results.length,
       elapsed_seconds: parseFloat(elapsed),
       results,
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
     console.error("[Dispatcher] 调度失败:", error);
