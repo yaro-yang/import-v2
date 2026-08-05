@@ -35,7 +35,7 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function randomPick<T>(arr: T[]): T {
+function randomPick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
@@ -154,7 +154,7 @@ async function generateExcelFile() {
   ];
 
   // 生成数据行
-  const rows: Array<Record<string, string>> = [];
+  const rows = [];
   for (let i = 1; i <= TOTAL_ROWS; i++) {
     const isIllegal = i <= 50 && i % 10 === 0; // 前50行中有5个非法SKU
 
