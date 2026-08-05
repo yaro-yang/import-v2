@@ -25,7 +25,7 @@ const sql = neon(DB_URL);
 const TEST_DATA_DIR = path.join(process.cwd(), "test-data");
 const TOTAL_SKUS = 20_000;
 const TOTAL_ROWS = 10_000;
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 5000; // 大批次 UNNEST 插入，20,000 只需 4 轮
 
 // ============================================================
 // 工具函数
@@ -101,15 +101,21 @@ async function seedSkus() {
       });
     }
 
-    // 批量插入
-    for (const item of batch) {
-      await sql`
-        INSERT INTO sku_master (sku_code, sku_name, sku_spec, sku_unit)
-        VALUES (${item.sku_code}, ${item.sku_name}, ${item.sku_spec}, ${item.sku_unit})
-        ON CONFLICT (sku_code) DO UPDATE SET sku_name = EXCLUDED.sku_name, sku_spec = EXCLUDED.sku_spec, sku_unit = EXCLUDED.sku_unit
-      `;
-      count++;
-    }
+    // UNNEST 批量插入（避免逐条 INSERT 导致连接超时）
+    const codes = batch.map((b) => b.sku_code);
+    const names = batch.map((b) => b.sku_name);
+    const specList = batch.map((b) => b.sku_spec);
+    const unitList = batch.map((b) => b.sku_unit);
+
+    await sql`
+      INSERT INTO sku_master (sku_code, sku_name, sku_spec, sku_unit)
+      SELECT * FROM unnest(
+        ${codes}::text[], ${names}::text[], ${specList}::text[], ${unitList}::text[]
+      )
+      ON CONFLICT (sku_code) DO UPDATE
+        SET sku_name = EXCLUDED.sku_name, sku_spec = EXCLUDED.sku_spec, sku_unit = EXCLUDED.sku_unit
+    `;
+    count += batch.length;
 
     if ((i / BATCH_SIZE) % 10 === 0) {
       console.log(`  进度: ${count.toLocaleString()} / ${TOTAL_SKUS.toLocaleString()}`);
