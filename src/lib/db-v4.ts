@@ -174,6 +174,9 @@ export async function initV4Tables(): Promise<void> {
       UNIQUE(task_id, batch_index)
     )
   `;
+  await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0`;
+  await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP WITH TIME ZONE`;
+  await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE`;
 
   // import_task_errors - 行级错误明细
   await db`
@@ -205,6 +208,10 @@ export async function initV4Tables(): Promise<void> {
       sent_at TIMESTAMP WITH TIME ZONE
     )
   `;
+  // 迁移：旧表补缺失列
+  await db`ALTER TABLE event_outbox ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0`;
+  await db`ALTER TABLE event_outbox ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMP WITH TIME ZONE`;
+  await db`ALTER TABLE event_outbox ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE`;
 
   // batch_performance_log - 处理单元性能日志
   await db`
