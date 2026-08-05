@@ -33,31 +33,33 @@ export interface ProcessBatchParams {
   file_url?: string;
 }
 
-// 从数据库或 URL 读取文件（Vercel Serverless 无本地磁盘）
+// 从数据库或 URL 读取文件（首次下载后缓存到 DB，避免重复下载大文件）
 async function readExcelForTask(taskId: string, fileUrl?: string): Promise<(string | number | null)[][]> {
-  let buf: Buffer;
+  const db = getSql();
 
+  // 1. 先尝试从 DB 读（缓存命中，零网络开销）
+  const cached = await db`SELECT file_data FROM import_tasks WHERE id = ${taskId}` as Array<{ file_data: Buffer | null }>;
+  if (cached.length > 0 && cached[0].file_data) {
+    const wb = XLSX.read(Buffer.from(cached[0].file_data), { type: "buffer", cellStyles: false });
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false }) as (string | number | null)[][];
+  }
+
+  // 2. DB 无缓存，从 URL 下载
   if (fileUrl) {
     const res = await fetch(fileUrl);
     if (!res.ok) throw new Error(`下载文件失败: ${res.status}`);
-    buf = Buffer.from(await res.arrayBuffer());
-  } else {
-    const db = getSql();
-    const rows = await db`SELECT file_data FROM import_tasks WHERE id = ${taskId}` as Array<{ file_data: Buffer | null }>;
-    if (!rows.length || !rows[0].file_data) {
-      throw new Error(`任务 ${taskId} 文件数据不存在`);
-    }
-    buf = Buffer.from(rows[0].file_data);
+    const buf = Buffer.from(await res.arrayBuffer());
+
+    // 写回 DB 缓存，后续批次直接命中（8.7MB → 0 下载耗时）
+    try {
+      await db`UPDATE import_tasks SET file_data = ${buf} WHERE id = ${taskId}`;
+    } catch { /* 缓存写入失败不影响处理 */ }
+
+    const wb = XLSX.read(buf, { type: "buffer", cellStyles: false });
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false }) as (string | number | null)[][];
   }
 
-  const wb = XLSX.read(buf, { type: "buffer", cellStyles: false });
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false }) as (
-    | string
-    | number
-    | null
-  )[][];
+  throw new Error(`任务 ${taskId} 文件数据不存在`);
 }
 
 // 考点9：AI 兜底 —— 优先用 AI 生成解析规则(90% 字段直出)，失败时回退到已保存规则引擎(10% 兜底)
