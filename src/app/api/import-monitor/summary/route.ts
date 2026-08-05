@@ -8,12 +8,13 @@ export async function GET() {
   try {
     const summary = await getMonitorSummary();
 
-    return NextResponse.json({
+    const alert = summary.queue_depth.pending_rows > 5000 ? "orange" : "green";
+    const response = NextResponse.json({
       throughput_5min: summary.throughput_5min,
       queue_depth: {
         pending_batches: summary.queue_depth.pending_batches,
         pending_rows: summary.queue_depth.pending_rows,
-        alert: summary.queue_depth.pending_rows > 5000 ? "orange" : "green",
+        alert,
       },
       stage_stats: summary.stage_stats,
       error_distribution: summary.error_distribution,
@@ -27,6 +28,14 @@ export async function GET() {
         created_at: t.created_at,
       })),
     });
+
+    // 告警头：外部监控系统（如 UptimeRobot/Datadog）可检测这些 header
+    if (alert !== "green") {
+      response.headers.set("X-Queue-Alert", alert);
+      response.headers.set("X-Queue-Pending-Rows", String(summary.queue_depth.pending_rows));
+    }
+
+    return response;
   } catch (error) {
     console.error("[import-monitor] 查询失败:", error);
     return NextResponse.json(

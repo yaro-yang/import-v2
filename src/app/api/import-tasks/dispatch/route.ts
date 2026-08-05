@@ -18,8 +18,8 @@ import {
 } from "@/lib/db-v4";
 import { processBatch } from "@/lib/import-worker";
 
-const MAX_CONCURRENT = 2;
-const DISPATCH_TIMEOUT = 50000;
+const MAX_CONCURRENT = 4;
+const DISPATCH_TIMEOUT = 55000;
 
 export async function POST() {
   const startTime = Date.now();

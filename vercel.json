@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/import-tasks/cron-clean",
+      "schedule": "*/1 * * * *"
+    }
+  ]
+}

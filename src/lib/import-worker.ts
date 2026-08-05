@@ -133,7 +133,7 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
     message: `批次 ${batch_index} 开始处理 (行 ${start_row + 1}-${end_row})`,
   });
 
-  // 解析阶段：从 DB 或 URL 读取文件
+  // 解析阶段：从 DB 或 URL 读取文件（首批缓存到 DB 后，后续批次免解析）
   const parseStart = Date.now();
   const data = await readExcelForTask(task_id, file_url);
   const rule = await resolveRule(data, rule_id);
@@ -150,6 +150,14 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
   const sliceEnd = Math.min(orders.length, end_row);
   const batchOrders = orders.slice(sliceStart, sliceEnd);
   const batchErrors = errors.filter((e) => e.row >= sliceStart && e.row < sliceEnd);
+
+  // 首批修正 total_rows（上传时未预扫描，估值 10000）
+  if (batch_index === 0 && orders.length !== end_row) {
+    try {
+      const db2 = getSql();
+      await db2`UPDATE import_tasks SET total_rows = ${orders.length} WHERE id = ${task_id}`;
+    } catch { /* ignore */ }
+  }
 
   // 脱敏 + 组装写入行
   const validateStart = Date.now();

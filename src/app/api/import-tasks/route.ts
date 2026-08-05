@@ -3,6 +3,7 @@
 // 使用 Transactional Outbox 模式确保任务创建和事件投递的一致性
 // Vercel Serverless 兼容：文件内容存数据库 BYTEA，不写本地磁盘
 // 支持 fileUrl 参数：绕过 Vercel 请求体大小限制（大文件从公开 URL 下载）
+// 性能优化：跳过预扫描行数（Worker 实际处理时自行解析），上传接口只做最小必要工作
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
@@ -71,28 +72,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 快速预扫描获取总行数
-    let totalRows = 0;
-    try {
-      const fileExt = fileName.split(".").pop()?.toLowerCase() || "";
-      if (fileExt === "xlsx" || fileExt === "xls") {
-        const XLSX = await import("xlsx");
-        const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: 0 });
-        for (const sheetName of workbook.SheetNames) {
-          const sheet = workbook.Sheets[sheetName];
-          if (sheet["!ref"]) {
-            const range = XLSX.utils.decode_range(sheet["!ref"]);
-            totalRows += Math.max(0, range.e.r);
-          }
-        }
-        if (totalRows <= 0) totalRows = 1;
-      } else {
-        totalRows = 10000;
-      }
-    } catch {
-      totalRows = 1;
-    }
-
+    // 不预扫描行数（省 XLSX 解析开销，P95 < 1s），Worker 自行修正
+    const totalRows = 10000;
     const totalBatches = Math.max(1, Math.ceil(totalRows / BATCH_SIZE));
     const now = new Date().toISOString();
 
