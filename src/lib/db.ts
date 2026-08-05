@@ -185,6 +185,134 @@ export async function initDB() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_outbound_batch_id ON outbound_orders(batch_id)`;
 
+  // 迁移：给已存在的 outbound_orders 添加 extra_data 列（考点10 JSON 透传未识别字段）
+  await sql`
+    ALTER TABLE outbound_orders
+    ADD COLUMN IF NOT EXISTS extra_data JSONB
+  `;
+
+  // ============================================================
+  // V4 异步事件驱动导入系统表结构（与 V2 表共存，互不干扰）
+  // ============================================================
+
+  // 1. 导入任务主表
+  await sql`
+    CREATE TABLE IF NOT EXISTS import_tasks (
+      id TEXT PRIMARY KEY,
+      file_name TEXT NOT NULL,
+      file_path TEXT,
+      rule_id TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      total_rows INTEGER NOT NULL DEFAULT 0,
+      processed_rows INTEGER NOT NULL DEFAULT 0,
+      success_rows INTEGER NOT NULL DEFAULT 0,
+      failed_rows INTEGER NOT NULL DEFAULT 0,
+      total_batches INTEGER NOT NULL DEFAULT 0,
+      completed_batches INTEGER NOT NULL DEFAULT 0,
+      trace_id TEXT,
+      degraded BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_import_tasks_status ON import_tasks(status)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_import_tasks_created_at ON import_tasks(created_at)`;
+
+  // 2. 导入批次表（幂等键 task_id + batch_index）
+  await sql`
+    CREATE TABLE IF NOT EXISTS import_task_batches (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES import_tasks(id) ON DELETE CASCADE,
+      batch_index INTEGER NOT NULL,
+      start_row INTEGER NOT NULL,
+      end_row INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      locked_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (task_id, batch_index)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_batches_task ON import_task_batches(task_id, batch_index)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_batches_status ON import_task_batches(status)`;
+
+  // 3. 导入错误明细表（行级精确错误）
+  await sql`
+    CREATE TABLE IF NOT EXISTS import_task_errors (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES import_tasks(id) ON DELETE CASCADE,
+      batch_index INTEGER NOT NULL,
+      row_number INTEGER NOT NULL,
+      field_name TEXT,
+      raw_value TEXT,
+      error_code TEXT NOT NULL,
+      error_reason TEXT,
+      trace_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_errors_task ON import_task_errors(task_id, batch_index)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_errors_code ON import_task_errors(error_code)`;
+
+  // 4. Transactional Outbox 事件表（悲观锁 FOR UPDATE SKIP LOCKED 依赖 status 索引）
+  await sql`
+    CREATE TABLE IF NOT EXISTS event_outbox (
+      id TEXT PRIMARY KEY,
+      aggregate_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      next_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_outbox_status_retry ON event_outbox(status, next_retry_at)`;
+
+  // 5. 批次性能日志表（各阶段 ms，用于监控 P50/P95/P99）
+  await sql`
+    CREATE TABLE IF NOT EXISTS batch_performance_log (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES import_tasks(id) ON DELETE CASCADE,
+      batch_index INTEGER NOT NULL,
+      parse_duration_ms INTEGER NOT NULL DEFAULT 0,
+      rule_duration_ms INTEGER NOT NULL DEFAULT 0,
+      validate_duration_ms INTEGER NOT NULL DEFAULT 0,
+      insert_duration_ms INTEGER NOT NULL DEFAULT 0,
+      total_duration_ms INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_perf_task ON batch_performance_log(task_id, batch_index)`;
+
+  // 6. 链路追踪事件表
+  await sql`
+    CREATE TABLE IF NOT EXISTS trace_events (
+      id TEXT PRIMARY KEY,
+      trace_id TEXT NOT NULL,
+      task_id TEXT,
+      event_name TEXT NOT NULL,
+      event_status TEXT NOT NULL DEFAULT 'OK',
+      message TEXT,
+      batch_index INTEGER,
+      occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_trace_id ON trace_events(trace_id, occurred_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_trace_task ON trace_events(task_id)`;
+
+  // 7. SKU 主数据表（批量校验用，UNIQUE sku_code 加速 IN 查询）
+  await sql`
+    CREATE TABLE IF NOT EXISTS sku_master (
+      sku_code TEXT PRIMARY KEY,
+      sku_name TEXT NOT NULL,
+      sku_spec TEXT,
+      sku_unit TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS uq_sku_code ON sku_master(sku_code)`;
+
   // 子表：SKU 行
   await sql`
     CREATE TABLE IF NOT EXISTS order_items (

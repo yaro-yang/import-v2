@@ -56,12 +56,11 @@ async function initTables() {
 
   await sql`
     CREATE TABLE IF NOT EXISTS sku_master (
-      id TEXT PRIMARY KEY,
-      sku_code TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL DEFAULT '',
-      spec TEXT NOT NULL DEFAULT '',
-      unit TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      sku_code TEXT PRIMARY KEY,
+      sku_name TEXT NOT NULL,
+      sku_spec TEXT,
+      sku_unit TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 
@@ -90,25 +89,24 @@ async function seedSkus() {
   let count = 0;
   for (let i = 0; i < TOTAL_SKUS; i += BATCH_SIZE) {
     const batchEnd = Math.min(i + BATCH_SIZE, TOTAL_SKUS);
-    const batch: Array<{ id: string; sku_code: string; name: string; spec: string; unit: string }> = [];
+    const batch: Array<{ sku_code: string; sku_name: string; sku_spec: string; sku_unit: string }> = [];
 
     for (let j = i; j < batchEnd; j++) {
       const skuNum = j + 1;
       batch.push({
-        id: uuidv4(),
         sku_code: `SKU_${String(skuNum).padStart(5, "0")}`,
-        name: `${randomPick(namePrefixes)}商品${skuNum}`,
-        spec: randomPick(specs),
-        unit: randomPick(units),
+        sku_name: `${randomPick(namePrefixes)}商品${skuNum}`,
+        sku_spec: randomPick(specs),
+        sku_unit: randomPick(units),
       });
     }
 
     // 批量插入
     for (const item of batch) {
       await sql`
-        INSERT INTO sku_master (id, sku_code, name, spec, unit)
-        VALUES (${item.id}, ${item.sku_code}, ${item.name}, ${item.spec}, ${item.unit})
-        ON CONFLICT (sku_code) DO UPDATE SET name = EXCLUDED.name, spec = EXCLUDED.spec, unit = EXCLUDED.unit
+        INSERT INTO sku_master (sku_code, sku_name, sku_spec, sku_unit)
+        VALUES (${item.sku_code}, ${item.sku_name}, ${item.sku_spec}, ${item.sku_unit})
+        ON CONFLICT (sku_code) DO UPDATE SET sku_name = EXCLUDED.sku_name, sku_spec = EXCLUDED.sku_spec, sku_unit = EXCLUDED.sku_unit
       `;
       count++;
     }

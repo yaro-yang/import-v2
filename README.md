@@ -63,7 +63,10 @@ npm install
 cp .env.example .env
 # 编辑 .env 填入 AI_API_KEY 和 DATABASE_URL
 
-# 3. 初始化数据库（首次运行时执行，会自动建表）
+# 3. 初始化数据库（首次运行时执行，自动建 V2+V4 全部表）
+#    方式一：调用建表接口（推荐，等幂安全）
+curl -X POST http://localhost:3000/api/init
+#    方式二：脚本（仅建 V2 的 orders 表，兼容旧逻辑）
 node scripts/init-db.mjs
 
 # 4. 启动开发服务器
