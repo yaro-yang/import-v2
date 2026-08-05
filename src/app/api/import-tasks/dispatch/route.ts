@@ -42,9 +42,19 @@ export async function POST() {
 
     const promises = events.map(async (event) => {
       try {
-        const payload = JSON.parse(event.payload);
-        const taskId = payload.task_id;
-        const batchIndex = payload.batch_index;
+        // 跳过 payload 不是合法 JSON 的坏事件
+        let payload: Record<string, unknown>;
+        try {
+          payload = JSON.parse(event.payload);
+        } catch {
+          console.warn(`[Dispatcher] 跳过坏事件 ${event.id}，payload 不是合法 JSON`);
+          // 直接标记为 FAILED，不再处理
+          await markOutboxFailed(event.id);
+          return null;
+        }
+
+        const taskId = payload.task_id as string;
+        const batchIndex = payload.batch_index as number;
 
         if (Date.now() - startTime > DISPATCH_TIMEOUT) return null;
 
@@ -55,10 +65,10 @@ export async function POST() {
           result = await processBatch({
             task_id: taskId,
             batch_index: batchIndex,
-            start_row: payload.start_row,
-            end_row: payload.end_row,
-            rule_id: payload.rule_id,
-            trace_id: payload.trace_id,
+            start_row: payload.start_row as number,
+            end_row: payload.end_row as number,
+            rule_id: payload.rule_id as string,
+            trace_id: payload.trace_id as string,
           });
         } catch (workerErr) {
           const msg = `Worker异常: ${String(workerErr)}`;
