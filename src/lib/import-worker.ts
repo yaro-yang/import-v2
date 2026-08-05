@@ -5,8 +5,10 @@ import {
   lockBatch,
   completeBatch,
   getBatchById,
+  getImportTask,
   insertTaskErrors,
   insertPerformanceLog,
+  insertTraceEvent,
   atomicUpdateTaskProgress,
 } from "./db-v4";
 import { writeBatch } from "./db-v4-writer";
@@ -199,6 +201,23 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
     completed_batches_delta: 1,
   });
   await completeBatch(batchId, "COMPLETED");
+
+  // 检查是否所有批次完成，更新任务最终状态
+  const task = await getImportTask(task_id);
+  if (task && task.completed_batches >= task.total_batches) {
+    const finalStatus = task.failed_rows > 0 ? "PARTIAL_SUCCESS" : "COMPLETED";
+    await atomicUpdateTaskProgress(task_id, {
+      status: finalStatus,
+      completed_at: new Date().toISOString(),
+    });
+    await insertTraceEvent({
+      trace_id,
+      task_id,
+      event_name: finalStatus === "COMPLETED" ? "ImportTaskCompleted" : "ImportTaskPartialSuccess",
+      event_status: "OK",
+      message: `任务完成: 成功 ${task.success_rows + (inserted - (task.success_rows || 0))}, 失败 ${task.failed_rows + errorRecs.length}`,
+    });
+  }
 
   return { success: true, successCount: inserted, errorCount: errorRecs.length };
 }
