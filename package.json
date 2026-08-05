@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": "18.x || 20.x || 22.x"
+    "node": "18.x || 20.x || 22.x || 24.x"
   },
   "scripts": {
     "dev": "next dev",
