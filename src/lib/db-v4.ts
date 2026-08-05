@@ -603,10 +603,11 @@ export async function createOutboxEvents(events: Array<{
 }>): Promise<void> {
   const db = getSql();
   for (const e of events) {
-    await db`
-      INSERT INTO event_outbox (id, aggregate_id, event_type, payload, status)
-      VALUES (${uuidv4()}, ${e.aggregate_id}, ${e.event_type}, ${JSON.stringify(e.payload)}, 'PENDING')
-    `;
+    const payloadStr = JSON.stringify(e.payload);
+    await db(
+      `INSERT INTO event_outbox (id, aggregate_id, event_type, payload, status) VALUES ($1, $2, $3, $4, $5)`,
+      [uuidv4(), e.aggregate_id, e.event_type, payloadStr, "PENDING"]
+    );
   }
 }
 

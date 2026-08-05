@@ -92,7 +92,6 @@ export async function POST(request: NextRequest) {
           ON CONFLICT (task_id, batch_index) DO NOTHING
         `;
 
-        // JSON.stringify 预计算为变量，避免 neon 模板字符串吞掉
         const payloadJson = JSON.stringify({
           task_id: taskId,
           batch_index: i,
@@ -103,10 +102,12 @@ export async function POST(request: NextRequest) {
           schema_version: "1.0",
         });
 
-        await db`
-          INSERT INTO event_outbox (id, aggregate_id, event_type, payload, status, created_at)
-          VALUES (${uuidv4()}, ${taskId}, 'ImportBatchCreated', ${payloadJson}, 'PENDING', ${now})
-        `;
+        // neon 模板字符串对 JSON.stringify 结果会二次序列化
+        // 使用原始 SQL 拼接，避免 neon 驱动干扰
+        await db(
+          `INSERT INTO event_outbox (id, aggregate_id, event_type, payload, status, created_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [uuidv4(), taskId, "ImportBatchCreated", payloadJson, "PENDING", now]
+        );
       }
 
       // 3. 记录 Trace 事件
