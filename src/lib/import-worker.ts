@@ -30,16 +30,26 @@ export interface ProcessBatchParams {
   end_row: number;
   rule_id: string;
   trace_id: string;
+  file_url?: string;
 }
 
-// 从数据库 import_tasks.file_data 读取文件二进制内容（Vercel Serverless 无本地磁盘）
-async function readExcelFromDB(taskId: string): Promise<(string | number | null)[][]> {
-  const db = getSql();
-  const rows = await db`SELECT file_data FROM import_tasks WHERE id = ${taskId}` as Array<{ file_data: Buffer | null }>;
-  if (!rows.length || !rows[0].file_data) {
-    throw new Error(`任务 ${taskId} 文件数据不存在`);
+// 从数据库或 URL 读取文件（Vercel Serverless 无本地磁盘）
+async function readExcelForTask(taskId: string, fileUrl?: string): Promise<(string | number | null)[][]> {
+  let buf: Buffer;
+
+  if (fileUrl) {
+    const res = await fetch(fileUrl);
+    if (!res.ok) throw new Error(`下载文件失败: ${res.status}`);
+    buf = Buffer.from(await res.arrayBuffer());
+  } else {
+    const db = getSql();
+    const rows = await db`SELECT file_data FROM import_tasks WHERE id = ${taskId}` as Array<{ file_data: Buffer | null }>;
+    if (!rows.length || !rows[0].file_data) {
+      throw new Error(`任务 ${taskId} 文件数据不存在`);
+    }
+    buf = Buffer.from(rows[0].file_data);
   }
-  const buf = Buffer.from(rows[0].file_data);
+
   const wb = XLSX.read(buf, { type: "buffer", cellStyles: false });
   const sheetName = wb.SheetNames[0];
   const ws = wb.Sheets[sheetName];
@@ -98,7 +108,7 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
   successCount: number;
   errorCount: number;
 }> {
-  const { task_id, batch_index, rule_id, trace_id, start_row, end_row } = params;
+  const { task_id, batch_index, rule_id, trace_id, start_row, end_row, file_url } = params;
   const batchId = `${task_id}_${batch_index}`;
 
   // 考点8：悲观锁防重复消费（幂等）
@@ -121,9 +131,9 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
     message: `批次 ${batch_index} 开始处理 (行 ${start_row + 1}-${end_row})`,
   });
 
-  // 解析阶段：从 DB 读取文件二进制
+  // 解析阶段：从 DB 或 URL 读取文件
   const parseStart = Date.now();
-  const data = await readExcelFromDB(task_id);
+  const data = await readExcelForTask(task_id, file_url);
   const rule = await resolveRule(data, rule_id);
   const rawData = excelToRawData(data, rule);
   const parseMs = Date.now() - parseStart;
@@ -244,5 +254,5 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
 }
 
 // 供脚本 / 测试使用
-export const V4Worker = { processBatch, readExcelFromDB };
+export const V4Worker = { processBatch, readExcelForTask };
 export default V4Worker;

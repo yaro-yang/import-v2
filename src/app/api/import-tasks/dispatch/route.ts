@@ -69,6 +69,7 @@ export async function POST() {
             end_row: payload.end_row as number,
             rule_id: payload.rule_id as string,
             trace_id: payload.trace_id as string,
+            file_url: payload.file_url as string | undefined,
           });
         } catch (workerErr) {
           const msg = `Worker异常: ${String(workerErr)}`;
