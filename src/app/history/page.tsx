@@ -172,8 +172,9 @@ export default function HistoryPage() {
           map.set(ob.transferOrderId, g);
         }
         g.details.push(ob);
-        g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
-        g.totalSku += ob.items.length;
+        const safeItems = Array.isArray(ob.items) ? ob.items : [];
+        g.totalQty += safeItems.reduce((s, i) => s + (Number(i?.skuQuantity) || 0), 0);
+        g.totalSku += safeItems.length;
         if (ob.submittedAt && (!g.submittedAt || ob.submittedAt > g.submittedAt)) {
           g.submittedAt = ob.submittedAt;
         }
@@ -202,8 +203,8 @@ export default function HistoryPage() {
             map.set(batchKey, g);
           }
           g.details.push(ob);
-          g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
-          g.totalSku += ob.items.length;
+          g.totalQty += (Array.isArray(ob.items) ? ob.items : []).reduce((s, i) => s + (Number(i?.skuQuantity) || 0), 0);
+          g.totalSku += (Array.isArray(ob.items) ? ob.items : []).length;
           if (ob.submittedAt && (!g.submittedAt || ob.submittedAt > g.submittedAt)) {
             g.submittedAt = ob.submittedAt;
           }
@@ -225,8 +226,8 @@ export default function HistoryPage() {
             map.set(code, g);
           }
           g.details.push(ob);
-          g.totalQty += ob.items.reduce((s, i) => s + (i.skuQuantity || 0), 0);
-          g.totalSku += ob.items.length;
+          g.totalQty += (Array.isArray(ob.items) ? ob.items : []).reduce((s, i) => s + (Number(i?.skuQuantity) || 0), 0);
+          g.totalSku += (Array.isArray(ob.items) ? ob.items : []).length;
           if (ob.submittedAt && (!g.submittedAt || ob.submittedAt > g.submittedAt)) {
             g.submittedAt = ob.submittedAt;
           }
@@ -241,7 +242,7 @@ export default function HistoryPage() {
     const rows: TableRow[] = [];
     for (const [gIdx, group] of groups.entries()) {
       const totalSkuInGroup = group.details.reduce(
-        (s, d) => s + d.items.length,
+        (s, d) => s + (Array.isArray(d.items) ? d.items : []).length,
         0
       );
 
@@ -263,7 +264,7 @@ export default function HistoryPage() {
 
       for (const [dIdx, detail] of group.details.entries()) {
         // 空门店（极端情况）
-        if (detail.items.length === 0) {
+        if ((Array.isArray(detail.items) ? detail.items : []).length === 0) {
           rows.push({
             kind: "empty-store",
             key: `s-${detail.id}-empty`,
@@ -279,14 +280,14 @@ export default function HistoryPage() {
           continue;
         }
 
-        for (const [sIdx, item] of detail.items.entries()) {
+        for (const [sIdx, item] of (Array.isArray(detail.items) ? detail.items : []).entries()) {
           rows.push({
             kind: "sku",
             key: `k-${item.id}`,
             groupIdx: gIdx,
             groupTotalRows: totalSkuInGroup,
             detailIdx: dIdx,
-            detailSkuCount: detail.items.length,
+            detailSkuCount: (Array.isArray(detail.items) ? detail.items : []).length,
             skuIdx: sIdx,
             group,
             detail,
@@ -428,7 +429,7 @@ export default function HistoryPage() {
       const exportData: Record<string, unknown>[] = [];
       for (const group of groups) {
         for (const detail of group.details) {
-          if (detail.items.length === 0) {
+          if ((Array.isArray(detail.items) ? detail.items : []).length === 0) {
             exportData.push({
               外部编码: group.externalCode,
               收货门店: detail.storeName || "",
@@ -449,7 +450,7 @@ export default function HistoryPage() {
                     : "草稿",
             });
           } else {
-            for (const item of detail.items) {
+            for (const item of (Array.isArray(detail.items) ? detail.items : [])) {
               exportData.push({
                 外部编码: group.externalCode,
                 收货门店: detail.storeName || "",
@@ -494,7 +495,7 @@ export default function HistoryPage() {
       const seen = new Set<string>();
       for (const detail of group.details) {
         const storeKey = detail.storeName || "";
-        for (const item of detail.items) {
+        for (const item of (Array.isArray(detail.items) ? detail.items : [])) {
           const uniqueKey = `${item.skuCode || "无SKU编码"}|${storeKey}`;
           if (seen.has(uniqueKey)) {
             warnings.push(

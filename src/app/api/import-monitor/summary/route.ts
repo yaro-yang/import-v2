@@ -8,7 +8,8 @@ export async function GET() {
   try {
     const summary = await getMonitorSummary();
 
-    const alert = summary.queue_depth.pending_rows > 5000 ? "orange" : "green";
+    const pendingRows = Number(summary.queue_depth.pending_rows);
+    const alert = pendingRows > 10000 ? "red" : pendingRows > 5000 ? "yellow" : "green";
     const response = NextResponse.json({
       throughput_5min: summary.throughput_5min,
       queue_depth: {
