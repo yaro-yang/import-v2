@@ -11,6 +11,7 @@
  */
 
 import * as XLSX from "xlsx";
+import { readFile } from "fs/promises";
 import {
   lockBatch,
   completeBatch,
