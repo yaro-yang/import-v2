@@ -92,17 +92,20 @@ export async function POST(request: NextRequest) {
           ON CONFLICT (task_id, batch_index) DO NOTHING
         `;
 
+        // JSON.stringify 预计算为变量，避免 neon 模板字符串吞掉
+        const payloadJson = JSON.stringify({
+          task_id: taskId,
+          batch_index: i,
+          start_row: startRow,
+          end_row: endRow,
+          rule_id: ruleId,
+          trace_id: traceId,
+          schema_version: "1.0",
+        });
+
         await db`
           INSERT INTO event_outbox (id, aggregate_id, event_type, payload, status, created_at)
-          VALUES (${uuidv4()}, ${taskId}, 'ImportBatchCreated', ${JSON.stringify({
-            task_id: taskId,
-            batch_index: i,
-            start_row: startRow,
-            end_row: endRow,
-            rule_id: ruleId,
-            trace_id: traceId,
-            schema_version: "1.0",
-          })}, 'PENDING', ${now})
+          VALUES (${uuidv4()}, ${taskId}, 'ImportBatchCreated', ${payloadJson}, 'PENDING', ${now})
         `;
       }
 

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // 重置 outbox：SENT → PENDING
     await db`
       UPDATE event_outbox
-      SET status = 'PENDING', sent_at = NULL
+      SET status = 'PENDING'
       WHERE aggregate_id = ${task_id} AND status = 'SENT'
     `;
 
