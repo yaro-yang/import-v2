@@ -551,7 +551,7 @@ AI_MODEL=Qwen/Qwen2.5-72B-Instruct
 
 ## 八、规则引擎设计
 
-### 8.1 规则数据结构
+### 8.1 规则数据结构 
 
 ```ts
 interface ParseRule {
