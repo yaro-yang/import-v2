@@ -49,7 +49,7 @@ export default function HistoryPage() {
   const [searchName, setSearchName] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
-  const pageSize = 20;
+  const pageSize = 50;
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -249,13 +249,13 @@ export default function HistoryPage() {
       {/* 搜索 + 操作栏 */}
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <input type="text" placeholder="搜索外部编码..." value={searchCode} onChange={e => setSearchCode(e.target.value)}
+          <div className="relative"><svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg><input type="text" placeholder="搜索外部编码..." value={searchCode} onChange={e => setSearchCode(e.target.value)}
             onKeyDown={e => e.key === "Enter" && (setPage(1), loadOrders())}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 w-44" />
-          <input type="text" placeholder="搜索收件人..." value={searchName} onChange={e => setSearchName(e.target.value)}
+            className="pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 w-52 placeholder:text-gray-300" /></div>
+          <div className="relative"><svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg><input type="text" placeholder="搜索收件人..." value={searchName} onChange={e => setSearchName(e.target.value)}
             onKeyDown={e => e.key === "Enter" && (setPage(1), loadOrders())}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 w-44" />
-          <button onClick={() => { setPage(1); loadOrders(); }} className="px-4 py-2 text-sm font-medium text-white bg-teal-500 rounded-xl hover:bg-teal-600 transition-colors">查询</button>
+            className="pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 w-52 placeholder:text-gray-300" /></div>
+          <button onClick={() => { setPage(1); loadOrders(); }} className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl hover:from-teal-600 hover:to-cyan-600 transition-all shadow-md shadow-teal-500/25"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>查询</button>
           {selectedGroups.size > 0 && (
             <button onClick={handleBatchDelete} className="ml-auto px-4 py-2 text-sm font-medium text-white bg-rose-500 rounded-xl hover:bg-rose-600 transition-colors">
               删除选中 ({selectedGroups.size})
@@ -283,20 +283,20 @@ export default function HistoryPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="py-3 px-4 w-10">
+                  <th className="py-4 px-5 w-10">
                     <input type="checkbox" checked={groups.length > 0 && selectedGroups.size === groups.length}
                       onChange={selectAll} className="accent-teal-500 w-3.5 h-3.5" />
                   </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">外部编码</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">收货门店</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">收件人</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">电话</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">SKU编码</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">SKU名称</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">数量</th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">状态</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">时间</th>
-                  <th className="text-center py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider w-28">操作</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">外部编码</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">收货门店</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-24">收件人</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">电话</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">SKU编码</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-40">SKU名称</th>
+                  <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-20">数量</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-28">状态</th>
+                  <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">时间</th>
+                  <th className="text-center py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-28">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -318,11 +318,11 @@ export default function HistoryPage() {
                       <tr key={`${group.id}-${idx}`} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
                         {isFirst && (
                           <>
-                            <td rowSpan={showRows.length} className="py-3 px-4 align-top">
+                            <td rowSpan={showRows.length} className="py-4 px-5 align-top">
                               <input type="checkbox" checked={selectedGroups.has(group.id)}
                                 onChange={() => toggleSelect(group.id)} className="accent-teal-500 w-3.5 h-3.5" />
                             </td>
-                            <td rowSpan={showRows.length} className="py-3 px-4 align-top">
+                            <td rowSpan={showRows.length} className="py-4 px-5 align-top">
                               <div className="font-mono text-xs font-semibold text-gray-700">{group.externalCode}</div>
                               {rows.length > 1 && (
                                 <button onClick={() => toggleGroup(group.id)}
@@ -333,22 +333,22 @@ export default function HistoryPage() {
                             </td>
                           </>
                         )}
-                        <td className="py-2.5 px-4 text-gray-600 text-xs truncate max-w-32">{o.storeName || "-"}</td>
-                        <td className="py-2.5 px-4 text-gray-600 text-xs">{o.recipientName || "-"}</td>
-                        <td className="py-2.5 px-4 text-gray-500 text-xs font-mono">{o.recipientPhone || "-"}</td>
-                        <td className="py-2.5 px-4 text-xs font-mono text-gray-600">{item?.skuCode || "-"}</td>
-                        <td className="py-2.5 px-4 text-gray-600 text-xs truncate max-w-32">{item?.skuName || "-"}</td>
-                        <td className="py-2.5 px-4 text-right text-gray-600 text-xs tabular-nums">{item?.skuQuantity ?? "-"}</td>
-                        <td className="py-2.5 px-4">
+                        <td className="py-3 px-5 text-gray-600 text-xs truncate max-w-32">{o.storeName || "-"}</td>
+                        <td className="py-3 px-5 text-gray-600 text-xs">{o.recipientName || "-"}</td>
+                        <td className="py-3 px-5 text-gray-500 text-xs font-mono">{o.recipientPhone || "-"}</td>
+                        <td className="py-3 px-5 text-xs font-mono text-gray-600">{item?.skuCode || "-"}</td>
+                        <td className="py-3 px-5 text-gray-600 text-xs truncate max-w-32">{item?.skuName || "-"}</td>
+                        <td className="py-3 px-5 pr-8 text-right text-gray-600 text-xs tabular-nums w-20">{item?.skuQuantity ?? "-"}</td>
+                        <td className="py-3 px-5">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                             group.status === "imported" || group.status === "submitted" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
                           }`}>{group.status}</span>
                         </td>
-                        <td className="py-2.5 px-4 text-right text-gray-400 text-xs whitespace-nowrap">
+                        <td className="py-3 px-5 text-right text-gray-400 text-xs whitespace-nowrap">
                           {group.createdAt ? new Date(group.createdAt).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"}
                         </td>
                         {isFirst && (
-                          <td rowSpan={showRows.length} className="py-3 px-4 text-center align-top">
+                          <td rowSpan={showRows.length} className="py-4 px-5 text-center align-top">
                             <button onClick={() => handleDelete(group.id)}
                               className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
