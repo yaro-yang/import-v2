@@ -535,7 +535,7 @@ export default function HistoryPage() {
     return v === undefined || v === null ? "" : String(v);
   };
 
-  return (
+  try { return (
     <div className="space-y-4 lg:space-y-5 page-container">
       {/* 吸顶操作区：标题 + 筛选 */}
       <div className="sticky top-[56px] z-30 bg-[#f7f8fa] px-0 pt-2 pb-3.5 space-y-3">
@@ -1390,4 +1390,10 @@ export default function HistoryPage() {
       </Modal>
     </div>
   );
+  } catch (e) {
+    console.error("History page render error:", e);
+    return (
+      <div className="p-10 text-center"><p className="text-gray-500">页面加载出错，请刷新重试</p></div>
+    );
+  }
 }
