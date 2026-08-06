@@ -79,6 +79,7 @@ const COL_SKU_SPEC = { key: "skuSpec", label: "规格型号", width: 130 };
 const COL_ACTION = { width: 150 };
 
 export default function HistoryPage() {
+  const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OutboundOrder[]>([]);
   const [total, setTotal] = useState(0);
   // DB 全量计数（用于"总数"/"调拨单"/"出库单" 角标）
@@ -534,6 +535,16 @@ export default function HistoryPage() {
     const v = (row.sku as unknown as Record<string, unknown>)[key];
     return v === undefined || v === null ? "" : String(v);
   };
+
+  if (error) {
+    return (
+      <div className="p-20 text-center">
+        <p className="text-gray-500 text-lg mb-2">页面加载出错</p>
+        <p className="text-gray-400 text-sm mb-4">{error}</p>
+        <button onClick={() => { setError(null); loadOrders(); }} className="px-4 py-2 bg-teal-500 text-white rounded-lg text-sm">重试</button>
+      </div>
+    );
+  }
 
   try { return (
     <div className="space-y-4 lg:space-y-5 page-container">
