@@ -113,37 +113,54 @@ export async function writeBatch(
     itemSourceRows.push(i);
   }
 
+  // 使用显式位置参数（db(sql, params)）代替模板字面量插值，
+  // 避免 @neondatabase/serverless 旧版本将 ${...} 误解析为 $N_$M 占位符。
+  const obCols =
+    "id, external_code, store_name, recipient_name, recipient_phone, recipient_address, remark, source_file, batch_id, extra_data, status, created_at";
+  const oiCols = "id, outbound_order_id, sku_code, sku_name, sku_quantity, source_row";
+  const obPlaceholders = orderIds
+    .map((_, i) => `($${i * 12 + 1}, $${i * 12 + 2}, $${i * 12 + 3}, $${i * 12 + 4}, $${i * 12 + 5}, $${i * 12 + 6}, $${i * 12 + 7}, $${i * 12 + 8}, $${i * 12 + 9}, $${i * 12 + 10}, 'imported', NOW())`)
+    .join(", ");
+  const obParams: unknown[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    obParams.push(
+      orderIds[i],
+      externalCodes[i],
+      storeNames[i],
+      recipientNames[i],
+      recipientPhones[i],
+      recipientAddresses[i],
+      remarks[i],
+      sourceFile,
+      batchIds[i],
+      (extraDatas[i] ?? null) as unknown,
+    );
+  }
+
   try {
-    await db`
-      INSERT INTO outbound_orders
-        (id, external_code, store_name, recipient_name, recipient_phone, recipient_address, remark, source_file, batch_id, extra_data, status, created_at)
-      SELECT * FROM UNNEST(
-        ${orderIds}::text[],
-        ${externalCodes}::text[],
-        ${storeNames}::text[],
-        ${recipientNames}::text[],
-        ${recipientPhones}::text[],
-        ${recipientAddresses}::text[],
-        ${remarks}::text[],
-        ${sourceFile}::text[],
-        ${batchIds}::text[],
-        ${extraDatas}::jsonb[],
-        ARRAY['imported']::text[],
-        ARRAY[NOW()]::timestamptz[]
-      )
-      ON CONFLICT DO NOTHING
-    `;
+    await db(
+      `INSERT INTO outbound_orders (${obCols}) VALUES ${obPlaceholders} ON CONFLICT DO NOTHING`,
+      obParams,
+    );
   } catch {
     let inserted = 0;
     for (let i = 0; i < rows.length; i++) {
       try {
-        await db`
-          INSERT INTO outbound_orders
-            (id, external_code, store_name, recipient_name, recipient_phone, recipient_address, remark, source_file, batch_id, extra_data, status, created_at)
-          VALUES
-            (${orderIds[i]}, ${externalCodes[i]}, ${storeNames[i]}, ${recipientNames[i]}, ${recipientPhones[i]}, ${recipientAddresses[i]}, ${remarks[i]}, ${sourceFile}, ${batchIds[i]}, ${(extraDatas[i] ?? null) as unknown}, 'imported', NOW())
-          ON CONFLICT DO NOTHING
-        `;
+        await db(
+          `INSERT INTO outbound_orders (${obCols}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'imported',NOW()) ON CONFLICT DO NOTHING`,
+          [
+            orderIds[i],
+            externalCodes[i],
+            storeNames[i],
+            recipientNames[i],
+            recipientPhones[i],
+            recipientAddresses[i],
+            remarks[i],
+            sourceFile,
+            batchIds[i],
+            (extraDatas[i] ?? null) as unknown,
+          ],
+        );
         inserted++;
       } catch {
         /* 跳过冲突 */
@@ -151,11 +168,17 @@ export async function writeBatch(
     }
     for (let i = 0; i < rows.length; i++) {
       try {
-        await db`
-          INSERT INTO order_items (id, outbound_order_id, sku_code, sku_name, sku_quantity, source_row)
-          VALUES (${itemIds[i]}, ${orderIds[i]}, ${itemSkuCodes[i]}, ${itemSkuNames[i]}, ${itemSkuQuantities[i]}, ${itemSourceRows[i]})
-          ON CONFLICT DO NOTHING
-        `;
+        await db(
+          `INSERT INTO order_items (${oiCols}) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+          [
+            itemIds[i],
+            orderIds[i],
+            itemSkuCodes[i],
+            itemSkuNames[i],
+            itemSkuQuantities[i],
+            itemSourceRows[i],
+          ],
+        );
       } catch {
         /* 跳过 */
       }
@@ -163,27 +186,40 @@ export async function writeBatch(
     return { inserted, updated: 0 };
   }
 
+  const oiPlaceholders = itemIds
+    .map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`)
+    .join(", ");
+  const oiParams: unknown[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    oiParams.push(
+      itemIds[i],
+      orderIds[i],
+      itemSkuCodes[i],
+      itemSkuNames[i],
+      itemSkuQuantities[i],
+      itemSourceRows[i],
+    );
+  }
+
   try {
-    await db`
-      INSERT INTO order_items (id, outbound_order_id, sku_code, sku_name, sku_quantity, source_row)
-      SELECT * FROM UNNEST(
-        ${itemIds}::text[],
-        ${orderIds}::text[],
-        ${itemSkuCodes}::text[],
-        ${itemSkuNames}::text[],
-        ${itemSkuQuantities}::int[],
-        ${itemSourceRows}::int[]
-      )
-      ON CONFLICT DO NOTHING
-    `;
+    await db(
+      `INSERT INTO order_items (${oiCols}) VALUES ${oiPlaceholders} ON CONFLICT DO NOTHING`,
+      oiParams,
+    );
   } catch {
     for (let i = 0; i < rows.length; i++) {
       try {
-        await db`
-          INSERT INTO order_items (id, outbound_order_id, sku_code, sku_name, sku_quantity, source_row)
-          VALUES (${itemIds[i]}, ${orderIds[i]}, ${itemSkuCodes[i]}, ${itemSkuNames[i]}, ${itemSkuQuantities[i]}, ${itemSourceRows[i]})
-          ON CONFLICT DO NOTHING
-        `;
+        await db(
+          `INSERT INTO order_items (${oiCols}) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+          [
+            itemIds[i],
+            orderIds[i],
+            itemSkuCodes[i],
+            itemSkuNames[i],
+            itemSkuQuantities[i],
+            itemSourceRows[i],
+          ],
+        );
       } catch {
         /* 跳过 */
       }

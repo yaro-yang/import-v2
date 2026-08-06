@@ -688,7 +688,7 @@ export async function reconcileTaskRows(
     ),
     batch_success AS (
       SELECT COUNT(*) AS c FROM import_task_batches
-      WHERE id = ${taskId}_${batchIndex} AND status = 'COMPLETED'
+      WHERE id = ${(`${taskId}_${batchIndex}`)} AND status = 'COMPLETED'
     )
     UPDATE import_tasks
     SET success_rows = GREATEST(0, (
@@ -714,10 +714,11 @@ export async function upsertBatchResult(
   errorRows: number,
 ): Promise<void> {
   const db = getSql();
+  const batchId = `${taskId}_${batchIndex}`;
   await db`
     UPDATE import_task_batches
     SET success_rows = ${successRows}, error_rows = ${errorRows}, status = 'COMPLETED'
-    WHERE id = ${taskId}_${batchIndex}
+    WHERE id = ${batchId}
   `;
 }
 
