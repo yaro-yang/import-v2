@@ -659,10 +659,10 @@ export default function HomePage() {
   return (
     <div className="space-y-6 lg:space-y-8 page-container">
       {/* 吸顶操作区：标题 + 步骤指示器 一体卡片 */}
-      <div className="sticky top-[56px] z-30 bg-[#f7f8fa] px-0 pt-3 pb-5 space-y-4">
+      <div className="sticky top-[56px] z-30 bg-gray-50 px-0 pt-3 pb-5 space-y-4">
         {/* 标题 + 描述 一体卡片 */}
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] overflow-hidden">
-          <div className="flex items-center gap-4 p-5 lg:p-6">
+        <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 overflow-hidden">
+          <div className="flex items-center gap-4 p-7 lg:p-8">
             <div className="w-11 h-11 lg:w-12 lg:h-12 rounded-lg bg-gradient-to-br from-[#0fc6c2] to-[#0bada9] flex items-center justify-center text-white flex-shrink-0 shadow-[0_3px_10px_rgba(15,198,194,0.25)]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -679,7 +679,7 @@ export default function HomePage() {
           </div>
 
           {/* 步骤指示器 - 中小圆点 + 连线 */}
-          <div className="border-t border-[#e5e6eb] bg-gradient-to-b from-[#fafbfc] to-white px-5 lg:px-7 py-5 lg:py-6">
+          <div className="border-t border-gray-100 bg-gradient-to-b from-[#fafbfc] to-white px-5 lg:px-7 py-5 lg:py-6">
             <div className="flex items-center">
               {[
                 { key: "upload", label: "上传文件" },
@@ -702,7 +702,7 @@ export default function HomePage() {
                             ? "bg-[#0fc6c2] text-white shadow-[0_3px_10px_rgba(15,198,194,0.35)] ring-[3px] ring-[#e8fafa]"
                             : isActive
                               ? "bg-[#0fc6c2] text-white"
-                              : "bg-white text-[#86909c] border-2 border-[#e5e6eb]"
+                              : "bg-white text-[#86909c] border-2 border-gray-100"
                         }`}
                       >
                         {isActive && !isCurrent ? (
@@ -744,7 +744,7 @@ export default function HomePage() {
 
       {/* 步骤 1: 上传文件 */}
       {step === "upload" && (
-        <div key="upload" className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-7 lg:p-10 animate-fade-in card-padding-sm">
+        <div key="upload" className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-7 lg:p-10 animate-fade-in card-padding-sm">
           <FileUploader onFileSelect={handleFileSelect} />
         </div>
       )}
@@ -753,7 +753,7 @@ export default function HomePage() {
       {step === "select-rule" && file && (
         <div className="animate-fade-in space-y-5 lg:space-y-6">
           {/* 文件信息卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6">
+          <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-7 lg:p-8">
             <div className="flex items-center gap-3.5">
               <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-lg bg-[#e8fafa] flex items-center justify-center text-[#0fc6c2] flex-shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -774,7 +774,7 @@ export default function HomePage() {
           </div>
 
           {/* 规则选择卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-7 mt-8 lg:mt-10">
+          <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-5 lg:p-7 mt-8 lg:mt-10">
             <RuleSelector
               rules={rules}
               selectedRuleId={selectedRuleId}
@@ -791,7 +791,7 @@ export default function HomePage() {
 
           {/* 解析失败时的错误展示 + 手动配置入口 */}
           {parseError && (
-            <div className="bg-[#fff1f0] border border-[#ffccc7] rounded-xl p-5 lg:p-6 animate-fade-in">
+            <div className="bg-[#fff1f0] border border-[#ffccc7] rounded-2xl p-7 lg:p-8 animate-fade-in">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#ffccc7] text-[#cf1322] flex items-center justify-center">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -801,7 +801,7 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="text-base font-semibold text-[#cf1322]">
                       {getErrorTitle(parseError.code)}
                     </h3>
@@ -816,7 +816,7 @@ export default function HomePage() {
                   {/* 原始文件信息 */}
                   <div className="mt-3 p-3 bg-white/60 rounded-lg border border-[#ffccc7]/50">
                     <p className="text-xs font-semibold text-[#86909c] mb-1.5">原始文件信息</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-[#4e5969]">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-[#4e5969]">
                       <div>
                         <span className="text-[#86909c]">文件名：</span>
                         <span className="font-mono">{parseError.fileInfo.name || "—"}</span>
@@ -858,7 +858,7 @@ export default function HomePage() {
           )}
 
           {/* 操作栏卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6">
+          <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-7 lg:p-8">
             <div className="flex items-center justify-end gap-3">
               <Button
                 onClick={handleParse}
@@ -890,7 +890,7 @@ export default function HomePage() {
       {step === "preview" && (
         <div className="animate-fade-in space-y-5 lg:space-y-6">
           {/* 统计信息卡片 - StatBlock 风格，与已导入运单页统一 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] px-6 lg:px-7 py-5 lg:py-6 flex flex-wrap items-center gap-5 lg:gap-7">
+          <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 px-6 lg:px-7 py-5 lg:py-6 flex flex-wrap items-center gap-5 lg:gap-7">
             <div className="flex items-center gap-5 lg:gap-7 flex-wrap">
               <StatBlock
                 icon={
@@ -953,12 +953,12 @@ export default function HomePage() {
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2 ml-auto flex-wrap" />
+            <div className="flex items-center gap-3 ml-auto flex-wrap" />
           </div>
 
           {/* 数据预览表格卡片 */}
           {orders.length > 0 ? (
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6">
+            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-7 lg:p-8">
               <DataPreviewTable
                 orders={orders}
                 onUpdateOrder={handleUpdateOrder}
@@ -970,7 +970,7 @@ export default function HomePage() {
               />
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-8 lg:p-14">
+            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-8 lg:p-14">
               <EmptyState
                 title="没有解析到数据"
                 description="请检查解析规则配置是否正确，或尝试调整规则"
@@ -980,7 +980,7 @@ export default function HomePage() {
 
           {/* 提交进度条 */}
           {submitting && (
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6">
+            <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-7 lg:p-8">
               <ProgressBar
                 progress={submitProgress}
                 label={submitMessage}
@@ -991,7 +991,7 @@ export default function HomePage() {
           )}
 
           {/* 操作按钮卡片 */}
-          <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] p-5 lg:p-6 sticky bottom-0 z-20">
+          <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-7 lg:p-8 sticky bottom-0 z-20">
             <div className="flex justify-between items-center flex-wrap gap-3">
               <div className="flex gap-2.5">
                 <Button variant="secondary" size="sm" onClick={handleReset}>
@@ -1015,7 +1015,7 @@ export default function HomePage() {
 
       {/* 步骤 4: 提交完成 */}
       {step === "submitted" && (
-        <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-[#e5e6eb] animate-fade-in overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 animate-fade-in overflow-hidden">
           {/* 顶部带渐变背景的成功区域 */}
           <div className="relative px-6 py-12 lg:py-16 bg-gradient-to-b from-[#f0fcfb] via-[#fafefe] to-white">
             {/* 装饰光晕（绝对定位，居中） */}
@@ -1054,8 +1054,8 @@ export default function HomePage() {
               </h2>
 
               {/* 提交结果汇总 */}
-              <div className="w-full max-w-[360px] mx-auto space-y-3 mb-6">
-                <div className="flex items-center gap-3 px-4 py-3 bg-[#f0fdf6] border border-[#b7eb8f] rounded-lg">
+              <div className="w-full max-w-[360px] mx-auto space-y-4 mb-6">
+                <div className="flex items-center gap-4 px-4 py-3 bg-[#f0fdf6] border border-[#b7eb8f] rounded-lg">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00b42a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
@@ -1073,7 +1073,7 @@ export default function HomePage() {
               </p>
 
               {/* 操作按钮 */}
-              <div className="flex justify-center gap-3 flex-wrap">
+              <div className="flex justify-center gap-4 flex-wrap">
                 <Button onClick={handleReset}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
