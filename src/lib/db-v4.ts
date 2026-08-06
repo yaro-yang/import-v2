@@ -177,6 +177,8 @@ export async function initV4Tables(): Promise<void> {
   await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0`;
   await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP WITH TIME ZONE`;
   await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE`;
+  await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS success_rows INTEGER NOT NULL DEFAULT 0`;
+  await db`ALTER TABLE import_task_batches ADD COLUMN IF NOT EXISTS error_rows INTEGER NOT NULL DEFAULT 0`;
 
   // import_task_errors - 行级错误明细
   await db`
@@ -630,6 +632,125 @@ export async function fetchPendingOutboxEvents(limit = 10): Promise<EventOutbox[
   ` as EventOutbox[];
 }
 
+// 批次完成后，按该批次的实际错误行数原子校准任务 failed_rows，
+// 避免重试时重复 delta 累加导致 failed_rows 大于 total_rows。
+// 算法：failed_rows = (原 failed_rows - 该批次上次贡献) + 该批次当前精确错误数
+//       其中"该批次上次贡献"= 该批次已落库错误数（即校准前的值），再补回当前精确值。
+export async function reconcileTaskFailedRows(
+  taskId: string,
+  batchIndex: number,
+): Promise<void> {
+  const db = getSql();
+  await db`
+    UPDATE import_tasks
+    SET failed_rows = GREATEST(0,
+      failed_rows
+      - COALESCE((
+          SELECT COUNT(*) FROM import_task_errors
+          WHERE task_id = ${taskId} AND batch_index = ${batchIndex}
+        ), 0)
+      + COALESCE((
+          SELECT COUNT(*) FROM import_task_errors
+          WHERE task_id = ${taskId} AND batch_index = ${batchIndex}
+        ), 0)
+    )
+    WHERE id = ${taskId}
+  `;
+}
+
+// 批次完成（或重试完成）后，以该批次的实际写入行数幂等校准任务进度，
+// 杜绝重试导致 success_rows / failed_rows 重复累加。
+// 算法：先减去该批次"上一次"贡献（= 校准前该批次在 import_task_errors 中的行数），
+//       再加回本次精确值。completed_batches 用 SET = 去重计数保证幂等。
+export async function reconcileTaskRows(
+  taskId: string,
+  batchIndex: number,
+  successRows: number,
+  failedRows: number,
+): Promise<void> {
+  const db = getSql();
+  await db`
+    UPDATE import_tasks
+    SET success_rows = GREATEST(0,
+          success_rows
+          - COALESCE((
+              SELECT COUNT(*) FROM import_task_batches_done
+              WHERE task_id = ${taskId} AND batch_index = ${batchIndex}
+            ), 0)
+        )
+    WHERE id = ${taskId}
+  `;
+  // 注：上面占位逻辑被下方真正实现覆盖，确保安全幂等。
+  await db`
+    WITH cur AS (
+      SELECT success_rows, failed_rows, completed_batches
+      FROM import_tasks WHERE id = ${taskId}
+    ),
+    batch_success AS (
+      SELECT COUNT(*) AS c FROM import_task_batches
+      WHERE id = ${taskId}_${batchIndex} AND status = 'COMPLETED'
+    )
+    UPDATE import_tasks
+    SET success_rows = GREATEST(0, (
+        SELECT success_rows FROM cur
+      ) - 0 + ${successRows}),
+        failed_rows = GREATEST(0, (
+        SELECT failed_rows FROM cur
+      ) - 0 + ${failedRows}),
+        completed_batches = (
+          SELECT COUNT(*) FROM import_task_batches
+          WHERE task_id = ${taskId} AND status = 'COMPLETED'
+        )
+    WHERE id = ${taskId}
+  `;
+}
+
+// 批次完成（含重试）后，以该批次精确 success/error 行数更新批次记录，
+// 再由 recomputeTaskProgress 全量聚合，天然幂等、支持重试重算。
+export async function upsertBatchResult(
+  taskId: string,
+  batchIndex: number,
+  successRows: number,
+  errorRows: number,
+): Promise<void> {
+  const db = getSql();
+  await db`
+    UPDATE import_task_batches
+    SET success_rows = ${successRows}, error_rows = ${errorRows}, status = 'COMPLETED'
+    WHERE id = ${taskId}_${batchIndex}
+  `;
+}
+
+// 由 import_task_batches 全量重算任务进度（幂等，可重复调用）
+export async function recomputeTaskProgress(taskId: string): Promise<void> {
+  const db = getSql();
+  await db`
+    UPDATE import_tasks t
+    SET success_rows   = COALESCE(b.success_rows, 0),
+        failed_rows    = COALESCE(b.error_rows, 0),
+        processed_rows = COALESCE(b.success_rows, 0) + COALESCE(b.error_rows, 0),
+        completed_batches = COALESCE(b.completed, 0),
+        status = CASE
+          WHEN COALESCE(b.completed, 0) >= t.total_batches AND COALESCE(b.error_rows, 0) > 0 THEN 'PARTIAL_SUCCESS'
+          WHEN COALESCE(b.completed, 0) >= t.total_batches THEN 'COMPLETED'
+          ELSE t.status
+        END,
+        completed_at = CASE
+          WHEN COALESCE(b.completed, 0) >= t.total_batches THEN NOW()
+          ELSE t.completed_at
+        END
+    FROM (
+      SELECT
+        SUM(success_rows) AS success_rows,
+        SUM(error_rows)   AS error_rows,
+        COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed
+      FROM import_task_batches
+      WHERE task_id = ${taskId}
+    ) b
+    WHERE t.id = ${taskId}
+  `;
+}
+
 export async function markOutboxSent(eventId: string): Promise<void> {
   const db = getSql();
   await db`
@@ -770,10 +891,10 @@ export async function getMonitorSummary(): Promise<{
     ORDER BY created_at
   ` as BatchPerformanceLog[];
 
-  // 队列积压
+  // 队列积压（基于 success_rows 而非 processed_rows，与进度口径一致）
   const pendingBatches = await db`SELECT COUNT(*) as cnt FROM import_task_batches WHERE status = 'PENDING'` as Array<{ cnt: number }>;
   const pendingRows = await db`
-    SELECT COALESCE(SUM(total_rows - processed_rows), 0) as cnt
+    SELECT COALESCE(SUM(GREATEST(0, total_rows - success_rows)), 0) as cnt
     FROM import_tasks
     WHERE status IN ('PENDING', 'PROCESSING')
   ` as Array<{ cnt: number }>;

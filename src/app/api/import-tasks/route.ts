@@ -126,6 +126,11 @@ export async function POST(request: NextRequest) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(3);
     console.log(`[import-tasks] 任务 ${taskId} 创建完成, 耗时 ${elapsed}s`);
 
+    // 触发首次 Dispatcher（fire-and-forget，不阻塞 1 秒返回）
+    // 由 dispatch 自身链式自触发持续消费积压，替代已删除的 Vercel Cron。
+    const dispatchUrl = `${request.nextUrl.origin}/api/import-tasks/dispatch`;
+    fetch(dispatchUrl, { method: "POST" }).catch(() => {});
+
     return NextResponse.json({
       task_id: taskId,
       trace_id: traceId,

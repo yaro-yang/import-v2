@@ -20,8 +20,12 @@ import { processBatch } from "@/lib/import-worker";
 
 const MAX_CONCURRENT = 4;
 const DISPATCH_TIMEOUT = 55000;
+const MAX_CHAIN_DEPTH = 8; // 链式自触发深度上限，防止无限递归
 
-export async function POST() {
+export async function POST(req: Request) {
+  // 支持 ?depth= 链式调用，避免单请求超时导致积压残留
+  const url = new URL(req.url);
+  const depth = Math.min(parseInt(url.searchParams.get("depth") || "0", 10) || 0, MAX_CHAIN_DEPTH);
   const startTime = Date.now();
   const errors: string[] = [];
   const results: Array<{
@@ -132,9 +136,22 @@ export async function POST() {
     results.push(...resolved);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    // 链式自触发：本批处理完若仍有 PENDING 事件且未超深度，继续下一跳，
+    // 避免单请求 55s 超时后积压残留（替代已删除的 Vercel Cron）。
+    if (depth < MAX_CHAIN_DEPTH && Date.now() - startTime < DISPATCH_TIMEOUT) {
+      const remaining = await fetchPendingOutboxEvents(1);
+      if (remaining.length > 0) {
+        const base = `${url.origin}${url.pathname}`;
+        // 不 await，fire-and-forget，由下一跳继续消费
+        fetch(`${base}?depth=${depth + 1}`, { method: "POST" }).catch(() => {});
+      }
+    }
+
     return NextResponse.json({
       dispatched: results.length,
       elapsed_seconds: parseFloat(elapsed),
+      chain_depth: depth,
       results,
       errors: errors.length > 0 ? errors : undefined,
     });

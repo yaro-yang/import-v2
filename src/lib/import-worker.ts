@@ -9,7 +9,8 @@ import {
   insertTaskErrors,
   insertPerformanceLog,
   insertTraceEvent,
-  atomicUpdateTaskProgress,
+  upsertBatchResult,
+  recomputeTaskProgress,
 } from "./db-v4";
 import { writeBatch } from "./db-v4-writer";
 import { excelToRawData, executeRule } from "./rule-engine";
@@ -225,28 +226,22 @@ export async function processBatch(params: ProcessBatchParams): Promise<{
     trace_id,
   });
 
-  // 进度聚合
-  await atomicUpdateTaskProgress(task_id, {
-    success_rows_delta: inserted,
-    failed_rows_delta: errorRecs.length,
-    completed_batches_delta: 1,
-  });
+  // 进度聚合（幂等）：先记录本批次精确结果，再由全量重算任务进度，
+  // 支持重试重算，杜绝 success_rows / failed_rows 重复累加。
+  await upsertBatchResult(task_id, batch_index, inserted, errorRecs.length);
+  await recomputeTaskProgress(task_id);
   await completeBatch(batchId, "COMPLETED");
 
-  // 检查是否所有批次完成，更新任务最终状态
+  // 检查是否所有批次完成，补充最终状态 Trace
   const task = await getImportTask(task_id);
   if (task && task.completed_batches >= task.total_batches) {
     const finalStatus = task.failed_rows > 0 ? "PARTIAL_SUCCESS" : "COMPLETED";
-    await atomicUpdateTaskProgress(task_id, {
-      status: finalStatus,
-      completed_at: new Date().toISOString(),
-    });
     await insertTraceEvent({
       trace_id,
       task_id,
       event_name: finalStatus === "COMPLETED" ? "ImportTaskCompleted" : "ImportTaskPartialSuccess",
       event_status: "OK",
-      message: `任务完成: 成功 ${task.success_rows + inserted}, 失败 ${task.failed_rows + errorRecs.length}`,
+      message: `任务完成: 成功 ${task.success_rows}, 失败 ${task.failed_rows}`,
     });
   }
 
