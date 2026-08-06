@@ -293,7 +293,7 @@ export default function HistoryPage() {
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">电话</th>
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">SKU编码</th>
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-40">SKU名称</th>
-                  <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-20">数量</th>
+                  <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-28">数量</th>
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-28">状态</th>
                   <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">时间</th>
                   <th className="text-center py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-28">操作</th>
@@ -338,7 +338,7 @@ export default function HistoryPage() {
                         <td className="py-3 px-5 text-gray-500 text-xs font-mono">{o.recipientPhone || "-"}</td>
                         <td className="py-3 px-5 text-xs font-mono text-gray-600">{item?.skuCode || "-"}</td>
                         <td className="py-3 px-5 text-gray-600 text-xs truncate max-w-32">{item?.skuName || "-"}</td>
-                        <td className="py-3 px-5 pr-8 text-right text-gray-600 text-xs tabular-nums w-20">{item?.skuQuantity ?? "-"}</td>
+                        <td className="py-3 px-5 pr-8 text-right text-gray-600 text-xs tabular-nums w-28">{item?.skuQuantity ?? "-"}</td>
                         <td className="py-3 px-5">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                             group.status === "imported" || group.status === "submitted" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"

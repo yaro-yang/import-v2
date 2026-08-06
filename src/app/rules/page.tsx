@@ -153,7 +153,7 @@ export default function RulesPage() {
                 管理用于解析不同格式出库单文件的规则配置
               </p>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-4 flex-shrink-0">
               <Button size="sm" onClick={handleCreate}>
                 新建规则
               </Button>
@@ -178,7 +178,7 @@ export default function RulesPage() {
                 <button
                   key={t.key}
                   onClick={() => setFilterType(t.key)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap rounded-md transition-colors cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap rounded-xl transition-colors cursor-pointer ${
                     active
                       ? "bg-[#e8fafa] text-[#0fc6c2]"
                       : "text-[#4e5969] hover:bg-gray-50 hover:text-[#0fc6c2]"

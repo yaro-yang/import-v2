@@ -25,9 +25,9 @@ const variantClasses = {
 };
 
 const sizeClasses = {
-  sm: "!px-[28px] py-2.5 text-sm font-medium rounded-sm gap-1.5",
-  md: "!px-[32px] py-3 text-base font-medium rounded-sm gap-2",
-  lg: "!px-[36px] py-3.5 text-lg font-medium rounded-sm gap-2",
+  sm: "!px-[28px] py-2.5 text-sm font-medium rounded-xl gap-1.5",
+  md: "!px-[32px] py-3 text-base font-medium rounded-xl gap-2",
+  lg: "!px-[36px] py-3.5 text-lg font-medium rounded-xl gap-2",
 };
 
 export function Button({
