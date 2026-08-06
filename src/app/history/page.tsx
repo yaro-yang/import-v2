@@ -255,7 +255,7 @@ export default function HistoryPage() {
               onKeyDown={e => e.key === "Enter" && (setPage(1), loadOrders())}
               className="border-gray-200 rounded-xl border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 w-64 placeholder:text-gray-400" />
           </div>
-          <button onClick={() => { setPage(1); loadOrders(); }} className="inline-flex items-center justify-center gap-2 px-7 py-3.5 text-sm font-medium text-white bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl hover:from-teal-600 hover:to-cyan-600 transition-all shadow-md shadow-teal-500/25">
+          <button onClick={() => { setPage(1); loadOrders(); }} className="inline-flex items-center justify-center gap-2 px-10 py-3.5 text-sm font-medium text-white bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl hover:from-teal-600 hover:to-cyan-600 transition-all shadow-md shadow-teal-500/25 min-w-[88px] whitespace-nowrap">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             查询
           </button>
@@ -296,8 +296,8 @@ export default function HistoryPage() {
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-36">电话</th>
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-36">SKU编码</th>
                   <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-44">SKU名称</th>
-                  <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32 pr-8 border-r border-gray-100">数量</th>
-                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-36 pl-10 border-l border-gray-100">状态</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32 border-r border-gray-100">数量</th>
+                  <th className="text-left py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-36 pl-8">状态</th>
                   <th className="text-right py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-36">时间</th>
                   <th className="text-center py-4 px-5 text-xs font-medium text-gray-400 uppercase tracking-wider w-32">操作</th>
                 </tr>
@@ -341,8 +341,8 @@ export default function HistoryPage() {
                         <td className="py-4 px-5 text-gray-500 text-sm font-mono">{o.recipientPhone || "-"}</td>
                         <td className="py-4 px-5 text-sm font-mono text-gray-600">{item?.skuCode || "-"}</td>
                         <td className="py-4 px-5 text-gray-600 text-sm truncate max-w-44">{item?.skuName || "-"}</td>
-                        <td className="py-4 px-5 pr-8 text-right text-gray-600 text-sm tabular-nums w-32 border-r border-gray-100">{item?.skuQuantity ?? "-"}</td>
-                        <td className="py-4 px-5">
+                        <td className="py-4 px-5 text-left text-gray-600 text-sm tabular-nums w-32 border-r border-gray-100">{item?.skuQuantity ?? "-"}</td>
+                        <td className="py-4 px-5 pl-8">
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600">{group.status}</span>
                         </td>
                         <td className="py-4 px-5 text-right text-gray-400 text-sm whitespace-nowrap">
