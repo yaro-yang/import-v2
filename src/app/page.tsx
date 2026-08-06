@@ -751,7 +751,7 @@ export default function HomePage() {
 
       {/* 步骤 2: 选择规则 */}
       {step === "select-rule" && file && (
-        <div className="animate-fade-in space-y-5 lg:space-y-6">
+        <div className="animate-fade-in space-y-6 lg:space-y-6">
           {/* 文件信息卡片 */}
           <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 p-5 lg:p-6">
             <div className="flex items-center gap-3.5">
@@ -801,7 +801,7 @@ export default function HomePage() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="text-base font-semibold text-[#cf1322]">
                       {getErrorTitle(parseError.code)}
                     </h3>
@@ -816,7 +816,7 @@ export default function HomePage() {
                   {/* 原始文件信息 */}
                   <div className="mt-3 p-3 bg-white/60 rounded-lg border border-[#ffccc7]/50">
                     <p className="text-xs font-semibold text-[#86909c] mb-1.5">原始文件信息</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-[#4e5969]">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-[#4e5969]">
                       <div>
                         <span className="text-[#86909c]">文件名：</span>
                         <span className="font-mono">{parseError.fileInfo.name || "—"}</span>
@@ -888,7 +888,7 @@ export default function HomePage() {
 
       {/* 步骤 3: 预览编辑 */}
       {step === "preview" && (
-        <div className="animate-fade-in space-y-5 lg:space-y-6">
+        <div className="animate-fade-in space-y-6 lg:space-y-6">
           {/* 统计信息卡片 - StatBlock 风格，与已导入运单页统一 */}
           <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_6px_rgba(0,0,0,0.04)] border border-gray-100 px-6 lg:px-7 py-5 lg:py-6 flex flex-wrap items-center gap-5 lg:gap-7">
             <div className="flex items-center gap-5 lg:gap-7 flex-wrap">
@@ -953,7 +953,7 @@ export default function HomePage() {
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2 ml-auto flex-wrap" />
+            <div className="flex items-center gap-3 ml-auto flex-wrap" />
           </div>
 
           {/* 数据预览表格卡片 */}
@@ -1054,8 +1054,8 @@ export default function HomePage() {
               </h2>
 
               {/* 提交结果汇总 */}
-              <div className="w-full max-w-[360px] mx-auto space-y-3 mb-6">
-                <div className="flex items-center gap-4 px-4 py-3 bg-[#f0fdf6] border border-[#b7eb8f] rounded-lg">
+              <div className="w-full max-w-[360px] mx-auto space-y-4 mb-6">
+                <div className="flex items-center gap-4 px-4 py-4 bg-[#f0fdf6] border border-[#b7eb8f] rounded-lg">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00b42a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>

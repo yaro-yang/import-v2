@@ -135,7 +135,7 @@ export default function RulesPage() {
   };
 
   return (
-    <div className="space-y-5 lg:space-y-6 page-container">
+    <div className="space-y-6 lg:space-y-6 page-container">
       {/* 吸顶操作区：标题 + 状态标签 + 操作按钮 */}
       <div className="sticky top-[56px] z-30 bg-gray-50 -mx-5 lg:-mx-8 px-5 lg:px-8 pt-2 pb-3.5 space-y-3">
         {/* 页面标题 + 操作按钮 */}
@@ -178,7 +178,7 @@ export default function RulesPage() {
                 <button
                   key={t.key}
                   onClick={() => setFilterType(t.key)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium whitespace-nowrap rounded-xl transition-colors cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium whitespace-nowrap rounded-xl transition-colors cursor-pointer ${
                     active
                       ? "bg-[#e8fafa] text-[#0fc6c2]"
                       : "text-[#4e5969] hover:bg-gray-50 hover:text-[#0fc6c2]"
@@ -225,7 +225,7 @@ export default function RulesPage() {
                 {Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-[#f2f3f5]">
                     {Array.from({ length: 7 }).map((_, j) => (
-                      <td key={j} className="px-3 lg:px-4 py-3">
+                      <td key={j} className="px-4 lg:px-4 py-3">
                         <div className="skeleton h-4 rounded" style={{ width: `${50 + Math.random() * 40}%` }} />
                       </td>
                     ))}
@@ -282,37 +282,37 @@ export default function RulesPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 lg:px-5 py-3 text-[#4e5969] uppercase text-sm whitespace-nowrap">{rule.fileType}</td>
-                    <td className="px-4 lg:px-5 py-3 text-center text-[#4e5969] text-sm hidden sm:table-cell">
+                    <td className="px-4 lg:px-5 py-4 text-[#4e5969] uppercase text-sm whitespace-nowrap">{rule.fileType}</td>
+                    <td className="px-4 lg:px-5 py-4 text-center text-[#4e5969] text-sm hidden sm:table-cell">
                       {rule.fieldMappings?.length || 0}
                     </td>
-                    <td className="px-4 lg:px-5 py-3 text-[#86909c] text-sm max-w-[150px] lg:max-w-[200px] truncate hidden md:table-cell">
+                    <td className="px-4 lg:px-5 py-4 text-[#86909c] text-sm max-w-[150px] lg:max-w-[200px] truncate hidden md:table-cell">
                       {rule.description || "—"}
                     </td>
-                    <td className="px-4 lg:px-5 py-3 text-[#86909c] text-sm hidden sm:table-cell">
+                    <td className="px-4 lg:px-5 py-4 text-[#86909c] text-sm hidden sm:table-cell">
                       {rule.aiGenerated ? "AI生成" : "手动创建"}
                     </td>
-                    <td className="px-4 lg:px-5 py-3 text-[#86909c] text-sm whitespace-nowrap hidden md:table-cell">
+                    <td className="px-4 lg:px-5 py-4 text-[#86909c] text-sm whitespace-nowrap hidden md:table-cell">
                       {formatDate(rule.updatedAt)}
                     </td>
-                    <td className="px-4 lg:px-5 py-3 text-right sticky-action-col">
+                    <td className="px-4 lg:px-5 py-4 text-right sticky-action-col">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleEdit(rule)}
-                          className="px-2 py-1 text-sm text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap"
+                          className="px-3 py-2 text-sm text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap"
                         >
                           编辑
                         </button>
                         <button
                           onClick={() => handleCopy(rule)}
-                          className="px-2 py-1 text-sm text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap hidden sm:inline"
+                          className="px-3 py-2 text-sm text-[#0fc6c2] hover:text-[#0bada9] hover:bg-[#e8fafa] rounded transition-colors whitespace-nowrap hidden sm:inline"
                         >
                           复制
                         </button>
                         <button
                           onClick={() => handleDelete(rule.id)}
                           disabled={deletingId === rule.id}
-                          className={`px-2 py-1 text-sm text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap ${
+                          className={`px-3 py-2 text-sm text-[#cf1322] hover:bg-[#fff1f0] rounded transition-colors whitespace-nowrap ${
                             deletingId === rule.id ? "opacity-50 cursor-not-allowed" : ""
                           }`}
                         >
@@ -327,7 +327,7 @@ export default function RulesPage() {
           </div>
 
           {/* 底部统计 */}
-          <div className="px-5 py-3 border-t border-gray-100 bg-[#fafbfc] flex items-center text-sm text-[#86909c]">
+          <div className="px-5 py-4 border-t border-gray-100 bg-[#fafbfc] flex items-center text-sm text-[#86909c]">
             <span>
               {filterType === "all" ? `共 ${rules.length} 条规则` : `显示 ${filteredRules.length} / ${rules.length} 条`}
             </span>
@@ -368,13 +368,13 @@ export default function RulesPage() {
             <div className="flex justify-end gap-4 mt-5">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
-                className="px-6 py-3 text-base font-medium rounded-sm border border-gray-100 text-[#4e5969] hover:bg-gray-50 transition-colors"
+                className="px-6 py-4 text-base font-medium rounded-sm border border-gray-100 text-[#4e5969] hover:bg-gray-50 transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-6 py-3 text-base font-medium rounded-sm bg-[#cf1322] text-white hover:bg-[#b0101c] transition-colors shadow-[0_2px_8px_rgba(207,19,34,0.3)]"
+                className="px-6 py-4 text-base font-medium rounded-sm bg-[#cf1322] text-white hover:bg-[#b0101c] transition-colors shadow-[0_2px_8px_rgba(207,19,34,0.3)]"
               >
                 确认删除
               </button>
